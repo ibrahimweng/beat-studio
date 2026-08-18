@@ -23,9 +23,19 @@ After a build, the `dist/` folder contains plain static files. You can host that
 folder on any web server. Paths in the build are relative, so it also works from
 a subfolder.
 
-Every push and pull request that changes this folder runs the type check and the
-build on both versions of Node. The workflow is at
-`.github/workflows/beat-studio.yml`.
+Every push and pull request runs the type check and the build on both versions
+of Node. The workflow is at `.github/workflows/ci.yml`.
+
+## Deploying
+
+The site is static, so any host that serves files will do. The settings for
+Vercel are in `vercel.json`, and there is nothing to configure in the Vercel
+dashboard. Import this repository and Vercel reads the file.
+
+The build produces file names that contain a hash of the contents, so those
+files are set to be cached for a year. The `index.html` file is set never to be
+cached, otherwise a visitor would keep loading an old version after you deploy a
+new one.
 
 ## What you can do
 
