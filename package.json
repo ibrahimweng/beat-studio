@@ -2,8 +2,11 @@
   "name": "beat-studio",
   "version": "1.0.0",
   "private": true,
-  "description": "Toolcraft ST-88 Beat Studio \u2014 a browser music workstation with a synthesised drum kit, 88-key piano, steel guitar, step sequencer and WAV/MP3/MIDI export.",
+  "description": "Toolcraft ST-88 Beat Studio — a browser music workstation with a synthesised drum kit, 88-key piano, steel guitar, step sequencer and WAV/MP3/MIDI export.",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

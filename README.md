@@ -9,7 +9,8 @@ files to download and no server to run.
 
 ## Running it
 
-You need Node.js version 20 or newer.
+You need Node.js version 20.19 or newer, or version 22.12 or newer. That is
+what Vite requires.
 
 ```bash
 npm install
@@ -21,6 +22,10 @@ npm run preview  # serve the built files
 After a build, the `dist/` folder contains plain static files. You can host that
 folder on any web server. Paths in the build are relative, so it also works from
 a subfolder.
+
+Every push and pull request that changes this folder runs the type check and the
+build on both versions of Node. The workflow is at
+`.github/workflows/beat-studio.yml`.
 
 ## What you can do
 
