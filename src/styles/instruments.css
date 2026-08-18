@@ -1,0 +1,359 @@
+/* ---------- drum kit ---------- */
+
+.kit {
+  position: relative;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 16px 20px;
+  /* Size queries let the board scale to the shorter axis of the stage. */
+  container-type: size;
+}
+
+/* Fixed 980x520 drawing surface; pads are positioned as percentages of it. */
+.kit__board {
+  position: relative;
+  width: min(980px, 100%, calc(100cqh * 980 / 520));
+  aspect-ratio: 980 / 520;
+}
+
+.kit__slot {
+  position: absolute;
+  translate: -50% -50%;
+}
+
+.pad {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+  display: block;
+  transition:
+    transform 0.09s ease,
+    filter 0.2s ease;
+}
+
+/* Struck: pressed in and lit, reset by a timer in script. */
+.pad.is-hit {
+  transform: scale(0.955);
+  filter: brightness(1.6) saturate(1.05);
+}
+
+.pad__bell,
+.pad__hole,
+.pad__rim,
+.pad__head,
+.pad__badge {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.pad__bell {
+  inset: 38%;
+}
+
+.pad__hole {
+  inset: 47%;
+}
+
+.pad__rim {
+  inset: var(--rim-inset, 5%);
+  border: var(--rim-width, 4px) solid var(--rim-color, var(--ac));
+  opacity: var(--rim-opacity, 1);
+}
+
+.pad__head {
+  inset: var(--head-inset, 13%);
+}
+
+.pad__badge {
+  inset: 30%;
+  display: grid;
+  place-items: center;
+}
+
+/* Cymbals carry their name around the lower edge, tilted with the crash. */
+.pad__label--edge {
+  position: absolute;
+  left: 50%;
+  bottom: var(--label-bottom, 10%);
+  translate: -50%;
+  rotate: var(--label-rotate, -16deg);
+  font-size: var(--label-size, clamp(7px, 0.85vw, 10px));
+  font-weight: 600;
+  letter-spacing: var(--label-track, 0.16em);
+  color: rgba(20, 14, 8, 0.62);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Drums carry theirs across the head. */
+.pad__label--centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  font-size: var(--label-size, clamp(7px, 0.82vw, 10px));
+  font-weight: 600;
+  letter-spacing: var(--label-track, 0.14em);
+  color: var(--label-color, #7c8189);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---------- 88-key piano ---------- */
+
+.piano {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 20px;
+}
+
+.piano__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-right: var(--readout-clear);
+}
+
+.piano__rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+.piano__scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Without this the max-content keybed reports its full width as the shell's
+     minimum, squeezing the inspector instead of scrolling. */
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+}
+
+.piano__keybed {
+  display: flex;
+  flex: 0 0 auto;
+  height: min(100%, 250px);
+  width: max-content;
+  min-width: 100%;
+  padding: 0 2px;
+  border-radius: 0 0 var(--r-8) var(--r-8);
+  background: color-mix(in oklab, var(--tc-fg) 6%, transparent);
+  border: 1px solid var(--line);
+  border-top: none;
+}
+
+.key-white {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 23px;
+  margin-right: 2px;
+  border: 0;
+  padding: 0 0 9px;
+  border-radius: 0 0 var(--r-4) var(--r-4);
+  cursor: pointer;
+  background: linear-gradient(#f3f5f6, #dfe3e5 82%, #c9ced1);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+}
+
+.key-white:active,
+.key-white.is-down {
+  background: linear-gradient(#dfe4ff, #c3cbfb 82%, #a3adf3);
+}
+
+.key-white__kbd {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5c6169;
+  background: #e6e9eb;
+  border-radius: var(--r-2);
+  padding: 2px 4px;
+}
+
+.key-white__label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #8b9096;
+}
+
+.key-black {
+  position: absolute;
+  top: 0;
+  right: -32%;
+  width: 62%;
+  height: 61%;
+  z-index: 3;
+  border: 0;
+  padding: 0 0 7px;
+  border-radius: 0 0 var(--r-4) var(--r-4);
+  cursor: pointer;
+  background: linear-gradient(#26292d, #101214 76%, #08090a);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.key-black:active,
+.key-black.is-down {
+  background: linear-gradient(#3b45a8, #1c2260 76%, #12163f);
+}
+
+.key-black__kbd {
+  font-size: 9px;
+  font-weight: 500;
+  color: #8d929a;
+}
+
+/* Struck from the computer keyboard rather than a pointer. */
+.key-white.is-flash,
+.key-black.is-flash {
+  filter: brightness(0.88) saturate(1.5);
+}
+
+/* ---------- guitar ---------- */
+
+.guitar {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  gap: 14px;
+}
+
+.guitar__chords {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: var(--readout-clear);
+}
+
+.chord-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--r-8);
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.chord-btn:hover {
+  border-color: var(--ac-line);
+  color: #fff;
+}
+
+.guitar__board {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  border-radius: var(--r-8);
+  overflow: hidden;
+  background: linear-gradient(#2e2118, #211710 55%, #181009);
+  border: 1px solid var(--line);
+}
+
+.guitar__nut {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  background: #b9b3a5;
+  z-index: 4;
+}
+
+.guitar__frets {
+  position: absolute;
+  left: 11px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.fret {
+  position: relative;
+  border-right: 2px solid #6f6a5f;
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+}
+
+.fret__dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #cfc9bb;
+  z-index: 1;
+}
+
+.fret__cell {
+  position: relative;
+  z-index: 3;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.fret__cell:hover {
+  background: var(--ac-soft);
+}
+
+.fret__cell.is-picked {
+  background: color-mix(in oklab, var(--ac) 40%, transparent);
+}
+
+/* Six strings, thin and bright at the top to thick and dull at the bottom. */
+.guitar__string {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.guitar__numbers {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding-left: 11px;
+}
+
+.guitar__numbers span {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-3);
+}

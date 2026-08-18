@@ -1,0 +1,257 @@
+/* Application shell: rail | (topbar / stage / dock / mixer) | inspector */
+
+.app {
+  height: 100vh;
+  display: flex;
+  background: var(--bg);
+  color: var(--txt);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  overflow: hidden;
+}
+
+.main {
+  /* Basis 0 rather than auto: the piano keybed is wider than the viewport by
+     design and scrolls, but an auto basis would let its max-content width
+     drive the shell and steal space from the inspector. */
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- left rail ---------- */
+
+.rail {
+  width: 64px;
+  flex: 0 0 auto;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0 16px;
+  gap: 4px;
+}
+
+.rail__logo {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-8);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+
+.rail__btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r-8);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--txt-2);
+  background: transparent;
+}
+
+.rail__btn:hover {
+  color: var(--txt);
+}
+
+.rail__btn.is-active {
+  color: var(--txt);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+/* Accent tick that marks the selected instrument */
+.rail__btn.is-active[data-marker]::before {
+  content: '';
+  position: absolute;
+  left: -15px;
+  top: 10px;
+  width: 2px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background: var(--ac);
+  pointer-events: none;
+}
+
+.rail__divider {
+  width: 22px;
+  height: 1px;
+  background: var(--line);
+  margin: 9px 0;
+}
+
+.rail__badge {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: var(--r-8);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0b0d10;
+  background: var(--ac);
+}
+
+.rail__spacer {
+  flex: 1 1 auto;
+}
+
+.rail__power {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  background: var(--panel);
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  flex: 0 0 auto;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.topbar__title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.topbar__spacer {
+  flex: 1 1 auto;
+}
+
+.topbar__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+.topbar__transport {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- stage ---------- */
+
+.stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  background: var(--stage);
+  border-bottom: 1px solid var(--line);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+/* ---------- dock ---------- */
+
+.dock {
+  flex: 0 0 auto;
+  height: 218px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.dock__bar {
+  flex: 0 0 auto;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  overflow: hidden;
+}
+
+.dock__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 6px;
+}
+
+.dock__spacer {
+  flex: 1 1 auto;
+}
+
+.dock__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 14px;
+}
+
+/* ---------- mixer strip ---------- */
+
+.mixer {
+  flex: 0 0 auto;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* ---------- inspector ---------- */
+
+.inspector {
+  flex: 0 1 292px;
+  min-width: 238px;
+  background: var(--side);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Narrow windows: the inspector is supporting detail, so it goes first. */
+@media (max-width: 900px) {
+  .inspector {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .rail {
+    width: 52px;
+  }
+}

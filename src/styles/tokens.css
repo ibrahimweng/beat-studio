@@ -1,0 +1,139 @@
+/*
+ * Toolcraft design tokens.
+ *
+ * Values are taken verbatim from the Toolcraft starter token system: pure
+ * black ground, oklch card and border ramps, a #0c8ce9 accent, and the
+ * 11/12/13/14px type scale. --ac, --ac-soft, --ac-line and the three ground
+ * tokens are re-set at runtime by applyTheme() when an accent or finish is
+ * requested; everything else is fixed.
+ */
+:root {
+  /* Toolcraft primitives */
+  --tc-fg: oklch(0.977 0 0);
+  --tc-border: oklch(0.311 0.013 279.19);
+  --tc-card: oklch(0.205 0 0);
+  --tc-link: #70b0fa;
+
+  /* Accent */
+  --ac: #0c8ce9;
+  --ac-soft: color-mix(in oklab, var(--ac) 14%, transparent);
+  --ac-line: color-mix(in oklab, var(--ac) 34%, transparent);
+
+  /* Grounds */
+  --bg: oklch(0 0 0);
+  --side: oklch(0 0 0);
+  --stage: oklch(0 0 0);
+
+  /* Surfaces */
+  --panel: color-mix(in oklab, var(--tc-card) 55%, transparent);
+  --panel-2: color-mix(in oklab, var(--tc-fg) 10%, transparent);
+  --line: color-mix(in oklab, var(--tc-border) 12%, transparent);
+  --line-soft: color-mix(in oklab, var(--tc-border) 8%, transparent);
+
+  /* Text */
+  --txt: var(--tc-fg);
+  --txt-2: color-mix(in oklab, var(--tc-fg) 72%, transparent);
+  --txt-3: color-mix(in oklab, var(--tc-fg) 60%, transparent);
+
+  /* Status */
+  --rec: hsl(0 84% 60%);
+  --ok: #0c8ce9;
+  --attention: #ea733a;
+
+  /* Inert hardware, used for unlit LEDs */
+  --led-off: color-mix(in oklab, var(--tc-fg) 18%, transparent);
+  --led-dead: #3a3d42;
+
+  /* Radii */
+  --r-2: 2px;
+  --r-4: 4px;
+  --r-6: 6px;
+  --r-8: 8px;
+  --r-12: 12px;
+
+  /* Width the recording readout occupies in the stage corner. Stage headers
+     reserve this much so their text is never hidden underneath it. */
+  --readout-clear: 200px;
+
+  /* The sequencer label column plus its gutter, shared by the grid and the
+     playhead so the two can never drift apart. */
+  --lane-label: 76px;
+  --lane-gap: 8px;
+  --lane-offset: calc(var(--lane-label) + var(--lane-gap));
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+body {
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+a {
+  color: var(--tc-link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--ac);
+}
+
+/* 4px pill scrollbars, per the Toolcraft starter */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--tc-fg) 10%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  min-height: 2.75rem;
+  border: 0 solid transparent;
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--tc-fg) 10%, transparent);
+  background-clip: padding-box;
+}
+
+@keyframes rec-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
