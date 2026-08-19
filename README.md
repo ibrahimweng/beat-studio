@@ -66,17 +66,39 @@ it to move it.
 There are four layers. Use them to keep your impacts apart from your movement
 and detail, so you can balance them separately and export them separately.
 
-Twenty two sounds can be placed, in three groups.
+Thirty nine sounds can be placed, in three groups.
 
-- Seven design voices, which are the ones made for this work. There are
-  impacts, whooshes, risers, sub drops, clicks, pops and reverse swells. Each
-  one stretches to whatever length you give it.
-- Thirteen drum voices, when you want something more like a real instrument.
-- Piano and guitar, for texture. A low piano note under an impact gives it
-  weight, and a note pitched down and stretched makes a bed.
+Twenty four design voices, which are the ones made for this work, sorted by
+what they are for.
+
+| Group | Sounds |
+|---|---|
+| Hits | impact, thud, slam, metal, clank |
+| Movement | whoosh, swipe, flutter, wobble |
+| Lead in | riser, swell, reverse |
+| Low end | sub, rumble, drone |
+| Detail | click, tick, pop, beep, chirp |
+| Texture | zap, glitch, shimmer, static |
+
+Then thirteen drum voices, when you want something closer to a real
+instrument, and piano and guitar for texture. A low piano note under an impact
+gives it weight, and a note pitched down and stretched makes a bed.
+
+Each design voice is built from a different method rather than from the same
+one with the numbers changed, so they stay apart from each other however they
+are tuned or stretched. The metal and the clank are made from partials that are
+not whole multiples of each other, which is why they sound like struck objects
+rather than notes. The reverse is a sound written into a buffer and read back
+the other way round, which is a shape no envelope can make. The glitch is
+several very short bursts at uneven spacing, so it never falls into a rhythm.
+
+There is a page for checking this. It renders every voice, reduces each to a
+fingerprint of what it is made of and how it moves, and compares every pair.
+Across all 276 pairs the middle similarity is 0.37, and the closest pair is
+0.84. See `tools/README.md`.
 
 Every one of them can be tuned by two octaves up or down and given any length,
-so the twenty two are starting points rather than the whole set.
+so the thirty nine are starting points rather than the whole set.
 
 There is no limit on how many you can place. A thirty second piece was tested
 with 1372 sounds on it and nothing broke, although writing the file took twenty

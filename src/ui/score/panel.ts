@@ -2,7 +2,7 @@ import { KIT_SOUNDS, NAMES } from '../../constants.ts';
 import type { ScoreSession } from '../../score-session.ts';
 import type { AppState } from '../../store.ts';
 import { timecode } from '../../timeline/project.ts';
-import { DESIGN_NAMES, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
+import { DESIGN_GROUPS, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 
@@ -33,12 +33,24 @@ function noteName(midi: number): string {
  */
 export function createScorePanel(session: ScoreSession): View {
   // ---------- sound picker ----------
-  const designButtons = DESIGN_NAMES.map((name) =>
-    button(
-      { class: 'cell pick', on: { click: () => session.setSource({ kind: 'design', name }) } },
-      [el('span', { text: name })],
-    ),
-  );
+  // Twenty four in one row is a wall. Grouped by what they are for, it reads.
+  const designButtons: HTMLButtonElement[] = [];
+  const designNames: string[] = [];
+  const designSections = DESIGN_GROUPS.map((group) => {
+    const buttons = group.names.map((name) => {
+      const node = button(
+        { class: 'cell pick', on: { click: () => session.setSource({ kind: 'design', name }) } },
+        [el('span', { text: name })],
+      );
+      designButtons.push(node);
+      designNames.push(name);
+      return node;
+    });
+    return el('div', { class: 'pick-group' }, [
+      el('div', { class: 'pick-group__title', text: group.title }),
+      el('div', { class: 'pick-row' }, buttons),
+    ]);
+  });
 
   const kitButtons = KIT_PICKS.map((pick) =>
     button(
@@ -214,7 +226,7 @@ export function createScorePanel(session: ScoreSession): View {
   const root = el('aside', { class: 'inspector' }, [
     el('div', {}, [
       el('div', { class: 'section-title', text: 'Place' }),
-      el('div', { class: 'pick-row' }, designButtons),
+      ...designSections,
       el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'Kit' }),
       el('div', { class: 'pick-row' }, kitButtons),
       el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'Pitched' }),
@@ -236,7 +248,11 @@ export function createScorePanel(session: ScoreSession): View {
       const { project, currentSource, selectedCueId } = state;
 
       designButtons.forEach((node, i) =>
-        toggleClass(node, 'is-on', sameSource(currentSource, { kind: 'design', name: DESIGN_NAMES[i] })),
+        toggleClass(
+          node,
+          'is-on',
+          currentSource.kind === 'design' && currentSource.name === designNames[i],
+        ),
       );
       kitButtons.forEach((node, i) =>
         toggleClass(node, 'is-on', sameSource(currentSource, { kind: 'kit', name: KIT_PICKS[i].name })),
