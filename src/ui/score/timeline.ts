@@ -30,7 +30,23 @@ export function createTimeline(session: ScoreSession): TimelineView {
   let painted: Project | null = null;
   let paintedZoom = -1;
 
-  const cueNodes = new Map<string, HTMLElement>();
+  /**
+   * The parts of a drawn sound are kept alongside it.
+   *
+   * Looking them up again on every redraw meant two DOM queries per sound,
+   * which is thousands of them on a busy timeline every time the zoom moves.
+   */
+  interface DrawnCue {
+    node: HTMLElement;
+    head: HTMLElement;
+    label: HTMLElement;
+    cue: Cue;
+  }
+
+  const cueNodes = new Map<string, DrawnCue>();
+  /** Which sound currently carries the selected mark. */
+  let selectedId: string | null = null;
+  const laneNodes = new Map<string, HTMLElement>();
   const strip = createMotionStrip(session);
 
   const ruler = el('div', { class: 'tl__ruler' });
@@ -129,14 +145,14 @@ export function createTimeline(session: ScoreSession): TimelineView {
   }
 
   function paint(project: Project, force = false): void {
-    const changed =
-      force ||
-      painted === null ||
-      painted.cues !== project.cues ||
-      painted.layers !== project.layers ||
-      painted.duration !== project.duration ||
-      painted.fps !== project.fps;
-    if (!changed && paintedZoom === pxPerSec) return;
+    const first = painted === null;
+    const zoomed = paintedZoom !== pxPerSec;
+    const layersChanged = force || first || painted!.layers !== project.layers;
+    const scaleChanged =
+      force || first || zoomed || painted!.duration !== project.duration || painted!.fps !== project.fps;
+    const cuesChanged = force || first || painted!.cues !== project.cues;
+
+    if (!layersChanged && !scaleChanged && !cuesChanged) return;
 
     painted = project;
     paintedZoom = pxPerSec;
@@ -146,8 +162,12 @@ export function createTimeline(session: ScoreSession): TimelineView {
     beyond.style.left = `${project.duration * pxPerSec}px`;
     beyond.style.display = project.duration > 0 ? '' : 'none';
 
-    paintRuler(project, duration);
-    paintLanes(project);
+    if (scaleChanged) paintRuler(project, duration);
+
+    // Rebuilding the lanes throws away every sound with them, so it also
+    // redraws them. Otherwise only what moved is touched.
+    if (layersChanged) paintLanes(project);
+    else if (cuesChanged || zoomed) syncCues(project, zoomed);
   }
 
   function paintRuler(project: Project, duration: number): void {
@@ -166,11 +186,19 @@ export function createTimeline(session: ScoreSession): TimelineView {
     }
   }
 
+  /**
+   * Rebuild the lanes and the layer names.
+   *
+   * Only the layers, not the sounds on them. Rebuilding a thousand sounds
+   * every time one of them moves is what made editing slow, so the two are
+   * kept apart and the sounds are brought up to date separately.
+   */
   function paintLanes(project: Project): void {
     clear(lanes);
     clear(gutter);
     clear(gutterRows);
     cueNodes.clear();
+    laneNodes.clear();
 
     // Keeps the name column lined up with what sits above the lanes.
     gutter.appendChild(el('div', { class: 'tl__gutter-spacer' }));
@@ -245,15 +273,11 @@ export function createTimeline(session: ScoreSession): TimelineView {
       });
       toggleClass(lane, 'is-muted', layer.muted);
 
-      for (const cue of project.cues) {
-        if (cue.layerId !== layer.id) continue;
-        const node = buildCue(cue);
-        cueNodes.set(cue.id, node);
-        lane.appendChild(node);
-      }
-
+      laneNodes.set(layer.id, lane);
       lanes.appendChild(lane);
     }
+
+    syncCues(project, true);
 
     gutterRows.appendChild(
       el('div', { class: 'tl__gutter-add' }, [
@@ -304,6 +328,68 @@ export function createTimeline(session: ScoreSession): TimelineView {
   }
 
   /**
+   * Bring the drawn sounds in line with the project.
+   *
+   * Only what changed is touched. A new sound adds one element, a moved one
+   * has two styles rewritten, and a deleted one is removed. Everything else
+   * is left alone, which is what keeps editing quick when there are hundreds
+   * of them. Pass `positions` when the zoom changed, since then every one of
+   * them has moved even though none of them were edited.
+   */
+  function syncCues(project: Project, positions = false): void {
+    const present = new Set<string>();
+
+    for (const cue of project.cues) {
+      present.add(cue.id);
+      const existing = cueNodes.get(cue.id);
+
+      if (!existing) {
+        const drawn = buildCue(cue);
+        cueNodes.set(cue.id, drawn);
+        laneNodes.get(cue.layerId)?.appendChild(drawn.node);
+        continue;
+      }
+
+      const edited = existing.cue !== cue;
+      if (!edited && !positions) continue;
+
+      // The zoom moves everything without changing anything, so that case
+      // only writes the two styles that depend on it.
+      placeCue(existing.node, cue);
+      if (!edited) continue;
+
+      if (existing.cue.layerId !== cue.layerId) {
+        laneNodes.get(cue.layerId)?.appendChild(existing.node);
+      }
+      restyleCue(existing, cue);
+      existing.cue = cue;
+    }
+
+    for (const [id, entry] of cueNodes) {
+      if (present.has(id)) continue;
+      entry.node.remove();
+      cueNodes.delete(id);
+    }
+
+    if (selectedId) cueNodes.get(selectedId)?.node.classList.add('is-selected');
+  }
+
+  /** The two styles that depend on the zoom. */
+  function placeCue(node: HTMLElement, cue: Cue): void {
+    node.style.left = `${cueStart(cue) * pxPerSec}px`;
+    node.style.width = `${Math.max(10, cueLength(cue) * pxPerSec)}px`;
+  }
+
+  /** Everything else, only needed when the sound itself changed. */
+  function restyleCue(drawn: DrawnCue, cue: Cue): void {
+    toggleClass(drawn.node, 'is-muted', cue.muted);
+    toggleClass(drawn.node, 'is-tail', cue.anchor === 'end');
+    drawn.head.title = `${cue.source.name} at ${timecode(cue.time, session.project.fps)}`;
+    const name = String(cue.source.name);
+    if (drawn.label.textContent !== name) drawn.label.textContent = name;
+  }
+
+  /**
    * A cue is drawn as a solid head at the moment it is pinned to, with a
    * translucent tail showing how long it sounds for.
    *
@@ -311,10 +397,11 @@ export function createTimeline(session: ScoreSession): TimelineView {
    * senses, so a long sound never stops you placing another one underneath
    * it, which is exactly what you do when a whoosh runs beneath an impact.
    */
-  function buildCue(cue: Cue): HTMLElement {
+  function buildCue(cue: Cue): DrawnCue {
     const start = cueStart(cue);
     const width = Math.max(10, cueLength(cue) * pxPerSec);
     const endAnchored = cue.anchor === 'end';
+    const label = el('span', { class: 'cue__label', text: String(cue.source.name) });
 
     const head = el('div', {
       class: 'cue__head',
@@ -328,7 +415,7 @@ export function createTimeline(session: ScoreSession): TimelineView {
           beginDrag(event, head, cue);
         },
       },
-    }, [el('span', { class: 'cue__label', text: String(cue.source.name) })]);
+    }, [label]);
 
     const node = el('div', {
       class: 'cue',
@@ -338,7 +425,7 @@ export function createTimeline(session: ScoreSession): TimelineView {
 
     toggleClass(node, 'is-muted', cue.muted);
     toggleClass(node, 'is-tail', endAnchored);
-    return node;
+    return { node, head, label, cue };
   }
 
   /** Drag a cue along its lane to retime it. */
@@ -371,8 +458,12 @@ export function createTimeline(session: ScoreSession): TimelineView {
 
     update(state: AppState) {
       paint(state.project);
-      for (const [id, node] of cueNodes) {
-        toggleClass(node, 'is-selected', state.selectedCueId === id);
+      // Only the one losing the mark and the one gaining it, rather than
+      // every sound on the timeline on every change.
+      if (state.selectedCueId !== selectedId) {
+        if (selectedId) cueNodes.get(selectedId)?.node.classList.remove('is-selected');
+        selectedId = state.selectedCueId;
+        if (selectedId) cueNodes.get(selectedId)?.node.classList.add('is-selected');
       }
 
       const { detect } = state;
@@ -411,10 +502,10 @@ export function createTimeline(session: ScoreSession): TimelineView {
     },
 
     flashCue(id: string) {
-      const node = cueNodes.get(id);
-      if (!node) return;
-      node.classList.add('is-firing');
-      window.setTimeout(() => node.classList.remove('is-firing'), 140);
+      const entry = cueNodes.get(id);
+      if (!entry) return;
+      entry.node.classList.add('is-firing');
+      window.setTimeout(() => entry.node.classList.remove('is-firing'), 140);
     },
   };
 }
