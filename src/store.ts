@@ -2,6 +2,7 @@ import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CueSource, Project } from './timeline/types.ts';
+import type { MotionSample, Peak } from './video/analyse.ts';
 import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 
 /**
@@ -58,6 +59,32 @@ export interface AppState {
   armed: boolean;
   /** Progress message while exporting, or null when idle. */
   exporting: string | null;
+  /** Suggested hits read from the video. */
+  detect: Detection;
+}
+
+/**
+ * The state of reading hits out of the video.
+ *
+ * The clip is measured once. After that, moving the sensitivity only decides
+ * how many of the candidates to show, so the control stays instant on a long
+ * piece that took a while to read.
+ */
+export interface Detection {
+  status: 'idle' | 'scanning' | 'pinning' | 'ready';
+  /** 0 to 1 while working. */
+  progress: number;
+  /** Every measurement taken, used for the strip under the ruler. */
+  samples: MotionSample[];
+  /** Every moment found, before the sensitivity is applied. */
+  candidates: Peak[];
+  /** The moments currently shown. */
+  peaks: Peak[];
+  sensitivity: number;
+}
+
+export function emptyDetection(): Detection {
+  return { status: 'idle', progress: 0, samples: [], candidates: [], peaks: [], sensitivity: 0.5 };
 }
 
 export function initialState(): AppState {
@@ -88,6 +115,7 @@ export function initialState(): AppState {
     activeLayerId: 'impacts',
     armed: false,
     exporting: null,
+    detect: emptyDetection(),
   };
 }
 

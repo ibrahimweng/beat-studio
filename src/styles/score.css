@@ -5,6 +5,7 @@
      the two columns cannot slide out of line. */
   --tl-row: 30px;
   --tl-ruler: 26px;
+  --tl-strip: 34px;
   --tl-gutter: 140px;
 }
 
@@ -374,4 +375,107 @@
   );
   pointer-events: none;
   z-index: 3;
+}
+
+/* ---------- finding hits ---------- */
+
+.tl__detect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+/* The sensitivity only means something once the video has been read. */
+.tl__detect .strip__sensitivity,
+.tl__detect .hint,
+.tl__detect .chip:nth-child(4),
+.tl__detect .chip:nth-child(5) {
+  display: none;
+}
+
+.tl__detect.is-ready .strip__sensitivity,
+.tl__detect.is-ready .hint,
+.tl__detect.is-ready .chip:nth-child(4),
+.tl__detect.is-ready .chip:nth-child(5) {
+  display: revert;
+}
+
+.strip__sensitivity {
+  width: 90px;
+}
+
+.chip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* How much the picture changes, drawn along the timeline. */
+.strip {
+  position: relative;
+  height: var(--tl-strip);
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
+}
+
+.strip__canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.strip__marks {
+  position: absolute;
+  inset: 0;
+}
+
+/* One suggested moment. Click it to place the chosen sound there. */
+.strip__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.strip__mark::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ac);
+  opacity: 0.75;
+}
+
+.strip__mark::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 0 0 2px 0;
+  background: var(--ac);
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.strip__mark:hover::before,
+.strip__mark:hover::after {
+  opacity: 1;
+  filter: brightness(1.3);
+}
+
+.strip__label {
+  height: var(--tl-strip);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-soft);
 }

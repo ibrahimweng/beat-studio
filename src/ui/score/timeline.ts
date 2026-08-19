@@ -2,8 +2,9 @@ import type { ScoreSession } from '../../score-session.ts';
 import type { AppState } from '../../store.ts';
 import { cueLength, cueStart, timecode } from '../../timeline/project.ts';
 import type { Cue, Project } from '../../timeline/types.ts';
-import { button, clear, el, toggleClass } from '../dom.ts';
+import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
+import { createMotionStrip } from './motion-strip.ts';
 
 const MIN_PX_PER_SEC = 8;
 const MAX_PX_PER_SEC = 600;
@@ -28,6 +29,7 @@ export function createTimeline(session: ScoreSession): TimelineView {
   let paintedZoom = -1;
 
   const cueNodes = new Map<string, HTMLElement>();
+  const strip = createMotionStrip(session);
 
   const ruler = el('div', { class: 'tl__ruler' });
   const lanes = el('div', { class: 'tl__lanes' });
@@ -36,8 +38,45 @@ export function createTimeline(session: ScoreSession): TimelineView {
   const playhead = el('div', { class: 'tl__playhead' });
   const gutter = el('div', { class: 'tl__gutter' });
 
-  const content = el('div', { class: 'tl__content' }, [ruler, lanes, beyond, playhead]);
+  const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, playhead]);
   const viewport = el('div', { class: 'tl__viewport' }, [content]);
+
+  // ---------- finding hits ----------
+  const findButton = button(
+    {
+      class: 'chip chip--sm',
+      title: 'Read the video and suggest where sounds belong',
+      on: { click: () => void session.findHits() },
+    },
+    ['Find hits'],
+  );
+
+  const sensitivity = el('input', {
+    class: 'range strip__sensitivity',
+    type: 'range',
+    title: 'How much has to change before a moment counts',
+    attrs: { min: '0', max: '1', step: '0.01', value: '0.5' },
+    on: {
+      input: (event) => session.setSensitivity(Number((event.currentTarget as HTMLInputElement).value)),
+    },
+  }) as HTMLInputElement;
+
+  const placeAll = button(
+    {
+      class: 'chip chip--sm',
+      title: 'Place the chosen sound on every suggestion',
+      on: { click: () => session.placeAllHits() },
+    },
+    ['Place all'],
+  );
+
+  const clearHits = button(
+    { class: 'chip chip--sm', title: 'Forget the suggestions', on: { click: () => session.clearHits() } },
+    ['Clear'],
+  );
+
+  const found = el('div', { class: 'hint', style: { whiteSpace: 'nowrap' } });
+  const detectGroup = el('div', { class: 'tl__detect' }, [findButton, sensitivity, found, placeAll, clearHits]);
 
   const zoomOut = button({ class: 'chip chip--sm', title: 'Zoom out', on: { click: () => setZoom(pxPerSec / 1.6) } }, ['−']);
   const zoomIn = button({ class: 'chip chip--sm', title: 'Zoom in', on: { click: () => setZoom(pxPerSec * 1.6) } }, ['+']);
@@ -46,6 +85,7 @@ export function createTimeline(session: ScoreSession): TimelineView {
   const root = el('section', { class: 'tl' }, [
     el('div', { class: 'tl__bar' }, [
       el('div', { class: 'micro-label', text: 'Timeline' }),
+      detectGroup,
       el('div', { class: 'dock__spacer' }),
       zoomOut,
       zoomFit,
@@ -57,6 +97,7 @@ export function createTimeline(session: ScoreSession): TimelineView {
   function setZoom(value: number): void {
     pxPerSec = Math.max(MIN_PX_PER_SEC, Math.min(MAX_PX_PER_SEC, value));
     paint(session.project, true);
+    strip.draw(session.store.state, pxPerSec);
   }
 
   function fit(): void {
@@ -118,8 +159,9 @@ export function createTimeline(session: ScoreSession): TimelineView {
     clear(gutter);
     cueNodes.clear();
 
-    // Keeps the name column lined up with the ruler above the lanes.
+    // Keeps the name column lined up with what sits above the lanes.
     gutter.appendChild(el('div', { class: 'tl__gutter-spacer' }));
+    gutter.appendChild(strip.label);
 
     for (const layer of project.layers) {
       const name = el('div', { class: 'tl__layer-name', text: layer.name });
@@ -244,6 +286,23 @@ export function createTimeline(session: ScoreSession): TimelineView {
       for (const [id, node] of cueNodes) {
         toggleClass(node, 'is-selected', state.selectedCueId === id);
       }
+
+      const { detect } = state;
+      const working = detect.status === 'scanning' || detect.status === 'pinning';
+      findButton.disabled = working || !state.videoReady;
+      setText(
+        findButton,
+        working
+          ? `${detect.status === 'scanning' ? 'Reading' : 'Pinning'} ${Math.round(detect.progress * 100)}%`
+          : 'Find hits',
+      );
+
+      const ready = detect.status === 'ready';
+      detectGroup.classList.toggle('is-ready', ready);
+      sensitivity.value = String(detect.sensitivity);
+      setText(found, ready ? `${detect.peaks.length} hits` : '');
+
+      strip.draw(state, pxPerSec);
     },
 
     setTime(time: number) {

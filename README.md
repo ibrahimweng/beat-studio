@@ -75,6 +75,31 @@ Three kinds of sound can be placed.
 - Piano and guitar notes, for texture. A low piano note under an impact gives
   it weight, and a note pitched down and stretched makes a bed.
 
+### Let it find the hits for you
+
+Click "Find hits" and Beat Studio reads the video and suggests where sounds
+belong. Every cut, snap and fast move shows up, because it measures how much
+the picture changes from frame to frame. The result is drawn as a strip under
+the ruler, which is the same idea as a waveform but for the picture.
+
+Click any suggestion to place the chosen sound there, or use "Place all" to put
+it on every one of them.
+
+The sensitivity slider decides how much has to change before a moment counts.
+Turned down it keeps only the obvious cuts. Turned up it reaches the smaller
+moves. The video is only read once, so moving the slider is instant even on a
+long clip.
+
+Reading takes about as long as half the clip, so a minute of video takes around
+forty seconds. Most of that is the first pass, which plays the video quickly and
+measures it. The second pass steps through each moment it found one frame at a
+time, to pin it to the frame the change actually landed on.
+
+On a thirty second test clip with forty hits in it, this found thirty nine of
+them, and the ones it found were within one frame. Playing the video twice as
+fast would halve the wait but only find eighteen, which is why it is not done
+that way.
+
 ### Getting the timing right
 
 Each sound has a setting for how it lands. "Starts on it" begins the sound on
@@ -251,7 +276,7 @@ src/
     transport.ts   the step clock
     recorder.ts    capturing takes
   timeline/        the cue list, layers and timing
-  video/           loading a video and following its clock
+  video/           loading a video, following its clock, and reading its hits
   export/
     wav.ts         WAV encoder
     mp3.ts         MP3 encoder, loaded only when you export

@@ -15,11 +15,23 @@ import {
   frameDuration,
 } from './timeline/project.ts';
 import type { Cue, CueSource, Layer, Project } from './timeline/types.ts';
+import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
-import type { Store } from './store.ts';
+import { emptyDetection, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
+
+/** Two suggestions closer than this are treated as one moment. */
+const MIN_GAP = 0.08;
+/** Candidates are gathered generously, then narrowed by the sensitivity. */
+const WIDE_SENSITIVITY = 0.92;
+/** An upper bound, so a noisy clip cannot start thousands of seeks. */
+const MAX_CANDIDATES = 160;
+/** Always look back at least this many frames when pinning a moment. */
+const MIN_REFINE_FRAMES = 3;
+/** And never more than this, so a slow machine cannot cause a long wait. */
+const MAX_REFINE_FRAMES = 12;
 
 /** Visual feedback the timeline asks for. */
 export interface ScoreEffects {
@@ -52,6 +64,11 @@ export class ScoreSession {
   constructor(engine: AudioEngine, store: Store) {
     this.#engine = engine;
     this.#store = store;
+  }
+
+  /** Read-only access for views that redraw outside a state change. */
+  get store(): Store {
+    return this.#store;
   }
 
   get project(): Project {
@@ -102,6 +119,8 @@ export class ScoreSession {
     }
 
     this.#objectUrl = loaded.url;
+    // Anything found for the previous clip no longer applies.
+    this.#store.set({ detect: emptyDetection() });
     this.#setProject({
       ...this.project,
       duration: loaded.duration,
@@ -259,6 +278,122 @@ export class ScoreSession {
   previewInContext(cue: Cue, lead = 1): void {
     this.seek(Math.max(0, cueStart(cue) - lead));
     void this.#clock?.play();
+  }
+
+  // ---------- finding hits ----------
+
+  /**
+   * Read the video and suggest where sounds belong.
+   *
+   * Two passes. The first plays the clip quickly and measures how much the
+   * picture changes, which finds roughly where things happen. The second
+   * steps through each of those moments one frame at a time to pin it to the
+   * frame the change actually landed on, because near enough is not much use
+   * when the whole job is landing on the frame.
+   */
+  async findHits(): Promise<void> {
+    const url = this.#objectUrl;
+    if (!url) {
+      this.#store.set({ status: 'load a video first' });
+      return;
+    }
+    if (this.#store.state.detect.status !== 'idle' && this.#store.state.detect.status !== 'ready') {
+      return;
+    }
+
+    this.pause();
+    const project = this.project;
+    const frame = frameDuration(project);
+    this.#store.set({
+      detect: { ...emptyDetection(), status: 'scanning', sensitivity: this.#store.state.detect.sensitivity },
+      status: 'reading the video…',
+    });
+
+    let samples;
+    try {
+      samples = await analyseMotion(url, {
+        fps: project.fps,
+        onProgress: (fraction) => this.#progress('scanning', fraction),
+      });
+    } catch (error) {
+      this.#store.set({
+        detect: emptyDetection(),
+        status: error instanceof Error ? error.message : 'could not read the video',
+      });
+      return;
+    }
+
+    if (!samples.length) {
+      this.#store.set({ detect: emptyDetection(), status: 'nothing found in that video' });
+      return;
+    }
+
+    // Cast wide here. Narrowing afterwards costs nothing, but a moment that
+    // was never a candidate can never be recovered without reading again.
+    const wide = pickPeaks(samples, WIDE_SENSITIVITY, MIN_GAP).slice(0, MAX_CANDIDATES);
+    this.#store.set({ detect: { ...this.#store.state.detect, status: 'pinning', progress: 0 } });
+
+    // Look back over the gap the fast pass actually left, since that is the
+    // window the change could have happened in.
+    const window = Math.max(
+      MIN_REFINE_FRAMES,
+      Math.min(MAX_REFINE_FRAMES, Math.ceil(medianGap(samples) / frame) + 1),
+    );
+
+    let candidates;
+    try {
+      candidates = await refinePeaks(url, wide, frame, window, (fraction) =>
+        this.#progress('pinning', fraction),
+      );
+    } catch {
+      candidates = wide;
+    }
+
+    const sensitivity = this.#store.state.detect.sensitivity;
+    const peaks = filterPeaks(candidates, samples, sensitivity, MIN_GAP);
+    this.#store.set({
+      detect: { status: 'ready', progress: 1, samples, candidates, peaks, sensitivity },
+      status: `${peaks.length} hits found`,
+    });
+  }
+
+  #progress(status: 'scanning' | 'pinning', progress: number): void {
+    const detect = this.#store.state.detect;
+    if (detect.status !== status) return;
+    this.#store.set({ detect: { ...detect, progress } });
+  }
+
+  /** Show more or fewer of what was already found. Does not read the video. */
+  setSensitivity(sensitivity: number): void {
+    const detect = this.#store.state.detect;
+    const value = Math.max(0, Math.min(1, sensitivity));
+    if (detect.status !== 'ready') {
+      this.#store.set({ detect: { ...detect, sensitivity: value } });
+      return;
+    }
+    const peaks = filterPeaks(detect.candidates, detect.samples, value, MIN_GAP);
+    this.#store.set({ detect: { ...detect, sensitivity: value, peaks } });
+  }
+
+  /** Put the current sound on every suggested moment. */
+  placeAllHits(): void {
+    const { peaks } = this.#store.state.detect;
+    if (!peaks.length) return;
+    const state = this.#store.state;
+    const cues = peaks.map((peak) =>
+      makeCue(snapTime(this.project, this.#insideVideo(peak.t)), state.activeLayerId, state.currentSource),
+    );
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] });
+    this.#store.set({ status: `${cues.length} sounds placed` });
+  }
+
+  /** Put the current sound on one suggested moment. */
+  placeHit(time: number): void {
+    this.addCue(time);
+  }
+
+  clearHits(): void {
+    this.#store.set({ detect: emptyDetection(), status: 'suggestions cleared' });
   }
 
   // ---------- export ----------
