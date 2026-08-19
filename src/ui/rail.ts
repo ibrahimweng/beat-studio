@@ -5,6 +5,7 @@ import {
   drumsIcon,
   guitarIcon,
   keysIcon,
+  scoreIcon,
   sequencerIcon,
   takesIcon,
   waveMark,
@@ -36,6 +37,7 @@ export function createRail(session: Session): View {
       [icon],
     );
 
+  const score = railButton('Score to picture', scoreIcon(), () => session.setMode('score'), true);
   const drums = railButton('Drums', drumsIcon(), () => session.setView('drums'), true);
   const keys = railButton('Keys', keysIcon(), () => session.setView('keys'), true);
   const guitar = railButton('Guitar', guitarIcon(), () => session.setView('guitar'), true);
@@ -55,6 +57,8 @@ export function createRail(session: Session): View {
 
   const root = el('nav', { class: 'rail', attrs: { 'aria-label': 'Views' } }, [
     el('div', { class: 'rail__logo' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
+    score,
+    el('div', { class: 'rail__divider' }),
     drums,
     keys,
     guitar,
@@ -68,11 +72,13 @@ export function createRail(session: Session): View {
   return {
     el: root,
     update(state: AppState) {
-      toggleClass(drums, 'is-active', state.view === 'drums');
-      toggleClass(keys, 'is-active', state.view === 'keys');
-      toggleClass(guitar, 'is-active', state.view === 'guitar');
-      toggleClass(seq, 'is-active', state.dock === 'seq');
-      toggleClass(takes, 'is-active', state.dock === 'takes');
+      const play = state.mode === 'play';
+      toggleClass(score, 'is-active', state.mode === 'score');
+      toggleClass(drums, 'is-active', play && state.view === 'drums');
+      toggleClass(keys, 'is-active', play && state.view === 'keys');
+      toggleClass(guitar, 'is-active', play && state.view === 'guitar');
+      toggleClass(seq, 'is-active', play && state.dock === 'seq');
+      toggleClass(takes, 'is-active', play && state.dock === 'takes');
 
       badge.style.display = state.takes.length ? '' : 'none';
       setText(badge, String(state.takes.length));

@@ -2,11 +2,13 @@ import type { PadName, Voice } from '../types.ts';
 
 /**
  * Voice synthesis. Every function here is pure in the sense that matters: it
- * takes an AudioContext and a destination, schedules nodes, and touches
+ * takes an audio context and a destination, schedules nodes, and touches
  * nothing else. No DOM, no app state.
  *
- * All timings are absolute AudioContext times so the transport can schedule
- * ahead of the clock.
+ * All timings are absolute context times so the transport can schedule ahead
+ * of the clock. The context is a BaseAudioContext rather than an
+ * AudioContext, so the same voices render live and offline. Offline rendering
+ * is how a cue lands exactly on the frame it was placed on.
  */
 
 /** Convert a MIDI note number to Hz. */
@@ -19,7 +21,7 @@ export function midiToFreq(midi: number): number {
  * exponential gain decay. This is the backbone of the hats, snare and cymbals.
  */
 export function noise(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   t: number,
   dur: number,
@@ -58,7 +60,7 @@ export function noise(
  * "thump then tail" shape rather than a flat tone.
  */
 export function boom(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   t: number,
   f0: number,
@@ -83,7 +85,7 @@ export function boom(
 
 /** Fire one drum voice at an absolute context time. */
 export function drum(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   pad: PadName,
   t: number,
@@ -145,7 +147,7 @@ export function drum(
  * Returns the voice so a key-up can release it early.
  */
 export function pianoSynth(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   midi: number,
   t: number,
@@ -190,7 +192,7 @@ export function pianoSynth(
  * decays, which is what makes it read as a pluck rather than a held pad.
  */
 export function pluck(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   midi: number,
   t: number,
@@ -232,7 +234,7 @@ export function pluck(
 }
 
 /** Metronome click. Routed to the monitor bus so it stays out of recordings. */
-export function click(ctx: AudioContext, dest: AudioNode, t: number, strong: boolean): void {
+export function click(ctx: BaseAudioContext, dest: AudioNode, t: number, strong: boolean): void {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'square';
@@ -250,7 +252,7 @@ export function click(ctx: AudioContext, dest: AudioNode, t: number, strong: boo
  * Build a synthetic impulse response: exponentially decaying noise. Cheaper
  * and smaller than shipping a real IR file, and the convolver does not care.
  */
-export function makeImpulseResponse(ctx: AudioContext, dur: number, decay: number): AudioBuffer {
+export function makeImpulseResponse(ctx: BaseAudioContext, dur: number, decay: number): AudioBuffer {
   const len = Math.floor(ctx.sampleRate * dur);
   const buffer = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let c = 0; c < 2; c++) {

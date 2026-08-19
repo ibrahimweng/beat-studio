@@ -113,7 +113,12 @@ export class Session {
   }
 
   setView(view: 'drums' | 'keys' | 'guitar'): void {
-    this.store.set({ view });
+    this.store.set({ view, mode: 'play' });
+  }
+
+  setMode(mode: 'play' | 'score'): void {
+    if (mode === 'score') this.stopAll();
+    this.store.set({ mode });
   }
 
   setDock(dock: 'seq' | 'takes'): void {

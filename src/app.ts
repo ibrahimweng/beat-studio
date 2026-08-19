@@ -1,5 +1,6 @@
 import type { AudioEngineOptions } from './audio/engine.ts';
 import { KEY_ROWS, PAD_KEYS } from './constants.ts';
+import { ScoreSession } from './score-session.ts';
 import { Session } from './session.ts';
 import type { AppState } from './store.ts';
 import { createDock } from './ui/dock.ts';
@@ -7,19 +8,26 @@ import { el } from './ui/dom.ts';
 import { createInspector } from './ui/inspector.ts';
 import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
+import { createScoreBar } from './ui/score/bar.ts';
+import { createScorePanel } from './ui/score/panel.ts';
+import { createVideoStage } from './ui/score/stage.ts';
+import { createTimeline } from './ui/score/timeline.ts';
 import { createStage } from './ui/stage.ts';
 import { createTopbar } from './ui/topbar.ts';
 import type { View } from './ui/view.ts';
 
 /**
- * Build the instrument and attach it to `root`.
+ * Build the app and attach it to `root`.
  *
- * Views are created once and updated from the store; nothing here re-creates
- * DOM in response to state. Returns a teardown function.
+ * There are two halves. The instrument half is for working out sounds, and
+ * the score half is for placing them against a video. They share one audio
+ * engine and nothing else. Returns a teardown function.
  */
 export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): () => void {
   const session = new Session(options);
+  const score = new ScoreSession(session.engine, session.store);
 
+  // Instrument half.
   const rail = createRail(session);
   const topbar = createTopbar(session);
   const stage = createStage(session);
@@ -27,17 +35,51 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const mixer = createMixer(session);
   const inspector = createInspector(session);
 
-  const views: View[] = [rail, topbar, stage, dock, mixer, inspector];
+  // Score half.
+  const scoreBar = createScoreBar(score);
+  const videoStage = createVideoStage(score);
+  const timeline = createTimeline(score);
+  const scorePanel = createScorePanel(score);
 
-  root.appendChild(
-    el('div', { class: 'app' }, [
-      rail.el,
-      el('div', { class: 'main' }, [topbar.el, stage.el, dock.el, mixer.el]),
-      inspector.el,
-    ]),
-  );
+  score.attachVideo(videoStage.video);
 
-  // Visual feedback the session asks for while playing or sequencing.
+  const views: View[] = [
+    rail, topbar, stage, dock, mixer, inspector,
+    scoreBar, videoStage, timeline, scorePanel,
+  ];
+
+  const main = el('div', { class: 'main' });
+  const shell = el('div', { class: 'app' }, [rail.el, main]);
+  root.appendChild(shell);
+
+  let mounted: 'play' | 'score' | null = null;
+  let aside: HTMLElement | null = null;
+
+  /** Swap the whole middle column and the right panel when the mode changes. */
+  const mount = (mode: 'play' | 'score'): void => {
+    if (mounted === mode) return;
+    mounted = mode;
+
+    main.replaceChildren(
+      ...(mode === 'play'
+        ? [topbar.el, stage.el, dock.el, mixer.el]
+        : [scoreBar.el, videoStage.el, timeline.el]),
+    );
+
+    const next = mode === 'play' ? inspector.el : scorePanel.el;
+    if (aside) shell.replaceChild(next, aside);
+    else shell.appendChild(next);
+    aside = next;
+  };
+
+  score.effects = {
+    onTime: (time) => {
+      timeline.setTime(time);
+      scoreBar.setTime(time);
+    },
+    flashCue: (id) => timeline.flashCue(id),
+  };
+
   session.effects = {
     flashPad: (pad) => stage.flashPad(pad),
     flashKey: (midi) => stage.flashKey(midi),
@@ -48,30 +90,36 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   };
 
   const render = (state: AppState, previous: AppState | null): void => {
+    mount(state.mode);
     for (const view of views) view.update(state, previous);
   };
 
   const unsubscribe = session.store.subscribe((state, previous) => render(state, previous));
   render(session.state, null);
 
-  const detachKeyboard = attachKeyboard(session);
+  const detachKeyboard = attachKeyboard(session, score);
   const stopMeters = startMeterLoop(session, stage, mixer);
 
   return () => {
     detachKeyboard();
     stopMeters();
     unsubscribe();
+    score.dispose();
     session.dispose();
   };
 }
 
-/**
- * Computer-keyboard control: space for transport, R to record, the pad row for
- * drums, and two chromatic rows for pitched instruments.
- */
-function attachKeyboard(session: Session): () => void {
-  const onKeyDown = (event: KeyboardEvent): void => handleKey(session, event, true);
-  const onKeyUp = (event: KeyboardEvent): void => handleKey(session, event, false);
+/** Keyboard control, which differs between the two halves of the app. */
+function attachKeyboard(session: Session, score: ScoreSession): () => void {
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (ignore(event)) return;
+    if (session.state.mode === 'score') scoreKey(session, score, event);
+    else handleKey(session, event, true);
+  };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (ignore(event)) return;
+    if (session.state.mode !== 'score') handleKey(session, event, false);
+  };
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
@@ -82,12 +130,59 @@ function attachKeyboard(session: Session): () => void {
   };
 }
 
-function handleKey(session: Session, event: KeyboardEvent, down: boolean): void {
+function ignore(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  if (target && /input|textarea|select/i.test(target.tagName)) return;
-  // Leave browser and OS shortcuts alone.
-  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (target && /input|textarea|select/i.test(target.tagName)) return true;
+  // Leave browser and system shortcuts alone.
+  return event.metaKey || event.ctrlKey || event.altKey;
+}
 
+/**
+ * Score mode keys.
+ *
+ * Arrows move the playhead a frame at a time, which is most of the work.
+ * Holding shift moves the selected sound instead, so a hit that feels late
+ * can be pulled back without losing your place.
+ */
+function scoreKey(session: Session, score: ScoreSession, event: KeyboardEvent): void {
+  const key = event.key;
+  const selected = session.state.selectedCueId;
+
+  if (key === ' ') {
+    event.preventDefault();
+    score.togglePlay();
+    return;
+  }
+
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    event.preventDefault();
+    const direction = key === 'ArrowLeft' ? -1 : 1;
+    if (event.shiftKey && selected) score.nudgeCue(selected, direction);
+    else score.stepFrames(direction);
+    return;
+  }
+
+  if ((key === 'Delete' || key === 'Backspace') && selected) {
+    event.preventDefault();
+    score.removeCue(selected);
+    return;
+  }
+
+  if (key === 'Escape') {
+    score.select(null);
+    return;
+  }
+
+  // Tapping a pad key drops that sound at the playhead, so a pass can be
+  // played in by hand and tidied up afterwards.
+  const pad = PAD_KEYS[key.toLowerCase()];
+  if (pad && !event.repeat) {
+    event.preventDefault();
+    score.addCueAtPlayhead({ kind: 'kit', name: pad });
+  }
+}
+
+function handleKey(session: Session, event: KeyboardEvent, down: boolean): void {
   const key = event.key.toLowerCase();
   const { view, octave } = session.state;
 

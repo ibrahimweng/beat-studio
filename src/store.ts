@@ -1,8 +1,19 @@
 import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
+import { emptyProject } from './timeline/project.ts';
+import type { CueSource, Project } from './timeline/types.ts';
 import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 
+/**
+ * Which half of the app is showing.
+ *
+ * "play" is the instrument, for working out ideas. "score" is the timeline,
+ * for placing those ideas against a video.
+ */
+export type Mode = 'play' | 'score';
+
 export interface AppState {
+  mode: Mode;
   /** Instrument shown on the main stage. */
   view: View;
   /** Panel shown in the bottom dock. */
@@ -31,6 +42,22 @@ export interface AppState {
   status: string | null;
   /** Label for the engine row in the inspector. */
   engineName: string;
+
+  // ---------- scoring to picture ----------
+  /** The cue list, layers and timing settings for the loaded video. */
+  project: Project;
+  /** A video file has been loaded and can be played. */
+  videoReady: boolean;
+  /** The cue being edited in the inspector. */
+  selectedCueId: string | null;
+  /** The sound that clicking the timeline will place. */
+  currentSource: CueSource;
+  /** The layer new cues are placed on. */
+  activeLayerId: string;
+  /** Playing an instrument drops a cue at the playhead. */
+  armed: boolean;
+  /** Progress message while exporting, or null when idle. */
+  exporting: string | null;
 }
 
 export function initialState(): AppState {
@@ -52,6 +79,15 @@ export function initialState(): AppState {
     takes: [],
     status: null,
     engineName: 'standby',
+
+    mode: 'play',
+    project: emptyProject(),
+    videoReady: false,
+    selectedCueId: null,
+    currentSource: { kind: 'design', name: 'impact' },
+    activeLayerId: 'impacts',
+    armed: false,
+    exporting: null,
   };
 }
 

@@ -1,5 +1,6 @@
 import type { KnobName, NoteKind, PadName, SliderName, Voice } from '../types.ts';
-import { click, drum, makeImpulseResponse, pianoSynth, pluck } from './voices.ts';
+import { applySettings, buildChain, type Chain, type ChainSettings } from './chain.ts';
+import { click, drum, pianoSynth, pluck } from './voices.ts';
 
 /** Sample set requested from smplr, and how it is shown in the inspector. */
 const SOUNDFONT_KIT = 'FluidR3_GM';
@@ -36,12 +37,8 @@ export class AudioEngine {
 
   /** Instrument bus — everything audible and recordable enters here. */
   #inst!: GainNode;
-  #eqLow!: BiquadFilterNode;
-  #eqMid!: BiquadFilterNode;
-  #eqHigh!: BiquadFilterNode;
   #mix!: GainNode;
-  #reverb!: ConvolverNode;
-  #reverbSend!: GainNode;
+  #chain: Chain | null = null;
   #master!: GainNode;
   #analyser!: AnalyserNode;
   #streamDest!: MediaStreamAudioDestinationNode;
@@ -105,44 +102,21 @@ export class AudioEngine {
     const ctx = new Ctor();
     this.#ctx = ctx;
 
-    this.#inst = ctx.createGain();
+    // The same construction the offline renderer uses, so what is heard here
+    // and what lands in an exported file cannot drift apart.
+    const chain = buildChain(ctx, this.chainSettings());
+    this.#chain = chain;
+    this.#inst = chain.input;
+    this.#mix = chain.mix;
+    this.#master = chain.master;
 
-    const shelf = (type: BiquadFilterType, freq: number, q?: number): BiquadFilterNode => {
-      const f = ctx.createBiquadFilter();
-      f.type = type;
-      f.frequency.value = freq;
-      if (q) f.Q.value = q;
-      f.gain.value = 0;
-      return f;
-    };
-    this.#eqLow = shelf('lowshelf', 220);
-    this.#eqMid = shelf('peaking', 1100, 1);
-    this.#eqHigh = shelf('highshelf', 4200);
-
-    this.#mix = ctx.createGain();
-    this.#reverb = ctx.createConvolver();
-    this.#reverb.buffer = makeImpulseResponse(ctx, 2.4, 2.8);
-    this.#reverbSend = ctx.createGain();
-    this.#reverbSend.gain.value = this.knobs.reverb * 0.9;
-    this.#master = ctx.createGain();
-    this.#master.gain.value = this.sliders.vol;
     this.#analyser = ctx.createAnalyser();
     this.#analyser.fftSize = 1024;
     this.#streamDest = ctx.createMediaStreamDestination();
     this.#monitor = ctx.createGain();
     this.#monitor.gain.value = 0.5;
 
-    // instruments -> EQ -> mix, with a parallel reverb send
-    this.#inst.connect(this.#eqLow);
-    this.#eqLow.connect(this.#eqMid);
-    this.#eqMid.connect(this.#eqHigh);
-    this.#eqHigh.connect(this.#mix);
-    this.#eqHigh.connect(this.#reverbSend);
-    this.#reverbSend.connect(this.#reverb);
-    this.#reverb.connect(this.#mix);
-
-    // mix -> master -> (speakers via analyser) and (recorder)
-    this.#mix.connect(this.#master);
+    // master -> (speakers via analyser) and (recorder)
     this.#master.connect(this.#analyser);
     this.#analyser.connect(ctx.destination);
     this.#master.connect(this.#streamDest);
@@ -151,7 +125,6 @@ export class AudioEngine {
     this.#monitor.connect(ctx.destination);
 
     this.#meterBuffer = new Uint8Array(new ArrayBuffer(this.#analyser.fftSize));
-    this.applyTilt();
     if (this.#useSamples) void this.#loadSoundfonts();
     else this.#setEngineName('built‑in voices');
     return ctx;
@@ -169,34 +142,38 @@ export class AudioEngine {
     return this.#mix;
   }
 
+  /** Where timeline cues are played, so they run through the whole chain. */
+  get cueDestination(): AudioNode {
+    return this.#inst;
+  }
+
+  /** The mixer positions, in the shape the offline renderer wants. */
+  chainSettings(): ChainSettings {
+    return {
+      reverb: this.knobs.reverb,
+      tone: this.knobs.tone,
+      vol: this.sliders.vol,
+      low: this.sliders.low,
+      mid: this.sliders.mid,
+      high: this.sliders.high,
+    };
+  }
+
   // ---------- mixer ----------
 
   setKnob(name: KnobName, value: number): void {
-    const v = Math.max(0, Math.min(1, value));
-    this.knobs[name] = v;
-    if (!this.#ctx) return;
-    if (name === 'reverb') this.#reverbSend.gain.value = v * 0.9;
-    else this.applyTilt();
+    this.knobs[name] = Math.max(0, Math.min(1, value));
+    this.applyTilt();
   }
 
   setSlider(name: SliderName, value: number): void {
-    const v = Math.max(0, Math.min(1, value));
-    this.sliders[name] = v;
-    if (!this.#ctx) return;
-    if (name === 'vol') this.#master.gain.value = v;
-    else this.applyTilt();
+    this.sliders[name] = Math.max(0, Math.min(1, value));
+    this.applyTilt();
   }
 
-  /**
-   * Push the three EQ bands, plus the tilt knob which trades low against high
-   * around the centre — one control that darkens or brightens the whole mix.
-   */
+  /** Push the current mixer positions onto the live chain. */
   applyTilt(): void {
-    if (!this.#ctx) return;
-    const tilt = (this.knobs.tone - 0.5) * 2;
-    this.#eqLow.gain.value = (this.sliders.low - 0.5) * 24 - tilt * 5;
-    this.#eqMid.gain.value = (this.sliders.mid - 0.5) * 24;
-    this.#eqHigh.gain.value = (this.sliders.high - 0.5) * 24 + tilt * 5;
+    if (this.#chain) applySettings(this.#chain, this.chainSettings());
   }
 
   /** Peak level of the master bus, 0..1. Returns 0 before the engine starts. */

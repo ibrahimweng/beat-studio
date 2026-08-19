@@ -138,3 +138,34 @@ export function takesIcon(): HTMLElement {
     ),
   );
 }
+
+/** A frame with a mark under it, for scoring to picture. */
+export function scoreIcon(): HTMLElement {
+  return el(
+    'span',
+    { style: { display: 'flex', flexDirection: 'column', gap: '3px', width: '18px' } },
+    [
+      el('i', {
+        style: {
+          height: '11px',
+          border: '1.4px solid currentColor',
+          borderRadius: '2px',
+        },
+      }),
+      el(
+        'span',
+        { style: { display: 'flex', alignItems: 'flex-end', gap: '2px', height: '5px' } },
+        [3, 5, 2].map((h, i) =>
+          el('i', {
+            style: {
+              width: '2px',
+              height: `${h}px`,
+              borderRadius: '1px',
+              background: i === 1 ? 'var(--ac)' : 'currentColor',
+            },
+          }),
+        ),
+      ),
+    ],
+  );
+}

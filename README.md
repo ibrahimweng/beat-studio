@@ -1,8 +1,13 @@
 # Beat Studio
 
-Beat Studio is a music workstation that runs in a web browser. There are three
-instruments you can play. You can program a drum pattern in the step sequencer.
-You can record what you play and save it as an audio file or a MIDI file.
+Beat Studio is a music workstation that runs in a web browser. It does two
+things.
+
+- You can play three instruments, program a drum pattern, record what you play,
+  and save it as an audio file or a MIDI file.
+- You can load a video and build sound design against it, placing each sound on
+  the exact frame it belongs on, then export a file that lines up when you drop
+  it back into your editing software.
 
 All the sound is made in the browser using the Web Audio API. There are no audio
 files to download and no server to run.
@@ -36,6 +41,79 @@ The build produces file names that contain a hash of the contents, so those
 files are set to be cached for a year. The `index.html` file is set never to be
 cached, otherwise a visitor would keep loading an old version after you deploy a
 new one.
+
+## Scoring to picture
+
+This is the part for sound design over motion graphics. Click the first button
+in the bar on the left to open it.
+
+### Load a video
+
+Drag a video onto the page, or choose a file. The file is read straight from
+your disk. Nothing is uploaded and the video never leaves your machine.
+
+The frame rate is measured from the file and shown in the bar at the top. You
+can change it there if the measurement is wrong. The video's own sound is muted
+to start with. Turn on "Ref audio" to hear it, for example when you are working
+around a music track. It is never included in anything you export.
+
+### Place sounds
+
+The timeline below the video is measured in time, not in bars. Pick a sound on
+the right, then click a lane to place it. Click a sound to select it, and drag
+it to move it.
+
+There are four layers. Use them to keep your impacts apart from your movement
+and detail, so you can balance them separately and export them separately.
+
+Three kinds of sound can be placed.
+
+- Design voices, which are the ones made for this work. There are impacts,
+  whooshes, risers, sub drops, clicks, pops and reverse swells. Each one
+  stretches to whatever length you give it.
+- The drum kit, when you want something more like a real instrument.
+- Piano and guitar notes, for texture. A low piano note under an impact gives
+  it weight, and a note pitched down and stretched makes a bed.
+
+### Getting the timing right
+
+Each sound has a setting for how it lands. "Starts on it" begins the sound on
+the marker. "Ends on it" finishes the sound on the marker, which is what a
+riser or a reverse swell needs, because the moment that matters is where it
+arrives rather than where it began.
+
+Snapping holds sounds to whole frames. If the piece was animated to music, you
+can snap to the beat instead, or turn snapping off.
+
+These keys help.
+
+| Key | What it does |
+|---|---|
+| Space | Play or pause |
+| Left and right arrows | Move one frame |
+| Shift and an arrow | Move the selected sound one frame |
+| Delete | Remove the selected sound |
+| Escape | Deselect |
+| Pad keys | Drop that drum sound at the playhead |
+
+"In context" plays from a second before the selected sound, so you hear it in
+place rather than on its own. "Mute" silences a sound without deleting it, for
+comparing.
+
+### Export
+
+The file is worked out rather than performed, so every sound lands on the exact
+moment you placed it and the file always starts at zero. Drop it at the head of
+your composition and it lines up.
+
+You can write one mixed file, or one file per layer. Files per layer are all
+the same length and all start at zero, so they sit on separate tracks and stay
+in sync. "Cut to video length" makes the file exactly as long as the video.
+Leave it off and any sound still ringing at the end is allowed to finish.
+
+"Save session" writes your sounds and settings to a small file you can reopen
+later. The video is not stored in it, so you point at the video again when you
+come back.
 
 ## What you can do
 
@@ -162,11 +240,18 @@ src/
   pattern.ts       creating and editing patterns
   persist.ts       reading and writing saved state
   types.ts         shared types
+  score-session.ts every action the scoring half can perform
   audio/
     engine.ts      the audio graph, the mixer and the meters
+    chain.ts       the signal chain, shared by playback and export
     voices.ts      the synthesis for each instrument
+    design-voices.ts impacts, whooshes, risers and the rest
+    sources.ts     turning a placed sound into a played sound
+    render.ts      writing the file, faster than real time
     transport.ts   the step clock
     recorder.ts    capturing takes
+  timeline/        the cue list, layers and timing
+  video/           loading a video and following its clock
   export/
     wav.ts         WAV encoder
     mp3.ts         MP3 encoder, loaded only when you export
@@ -183,6 +268,10 @@ only place where state, sound and timing meet.
 
 The MP3 encoder and the sample library are loaded only when they are needed, so
 neither is part of the first download.
+
+Exported files are rendered offline rather than recorded in real time. The same
+signal chain is used for both, so what you hear while working is what lands in
+the file.
 
 ## Browser support
 

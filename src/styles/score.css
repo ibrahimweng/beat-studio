@@ -1,0 +1,377 @@
+/* Scoring to picture: the video, the timeline and the sound picker. */
+
+:root {
+  /* Row heights are shared by the layer names and the lanes beside them, so
+     the two columns cannot slide out of line. */
+  --tl-row: 30px;
+  --tl-ruler: 26px;
+  --tl-gutter: 140px;
+}
+
+/* ---------- the video ---------- */
+
+.vstage {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--stage);
+  border-bottom: 1px solid var(--line);
+  padding: 14px;
+}
+
+.vstage.is-over {
+  outline: 1px solid var(--ac-line);
+  outline-offset: -6px;
+  background: var(--ac-soft);
+}
+
+.vstage__video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--r-8);
+  background: #000;
+  border: 1px solid var(--line);
+}
+
+.vstage__drop {
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  border-radius: var(--r-12);
+  border: 1px dashed var(--line);
+  background: var(--panel);
+}
+
+.vstage__drop-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.vstage__drop-hint {
+  font-size: 12px;
+  color: var(--txt-3);
+  margin-top: 4px;
+  max-width: 42ch;
+}
+
+.vstage__pick {
+  margin: 14px auto 0;
+}
+
+.vstage__file {
+  display: none;
+}
+
+/* ---------- transport bar ---------- */
+
+.score-bar__time {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.score-bar__clock {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ac);
+  min-width: 74px;
+}
+
+.score-bar__sep,
+.score-bar__total {
+  font-size: 12px;
+  color: var(--txt-3);
+}
+
+.score-bar__select {
+  height: 26px;
+  border-radius: var(--r-6);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--txt);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+/* ---------- timeline ---------- */
+
+.tl {
+  flex: 0 0 auto;
+  height: 268px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.tl__bar {
+  flex: 0 0 auto;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+}
+
+.tl__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--tl-gutter) minmax(0, 1fr);
+}
+
+.tl__gutter {
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.tl__gutter-spacer {
+  height: var(--tl-ruler);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tl__gutter-row {
+  height: var(--tl-row);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tl__layer-name {
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl__layer-btn {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-4);
+  background: var(--panel);
+  color: var(--txt-3);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.tl__layer-btn.is-on {
+  background: var(--ac-soft);
+  border-color: var(--ac-line);
+  color: var(--txt);
+}
+
+.tl__viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+
+.tl__content {
+  position: relative;
+  min-width: 100%;
+  height: 100%;
+}
+
+.tl__ruler {
+  position: relative;
+  height: var(--tl-ruler);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tl__tick {
+  position: absolute;
+  top: 0;
+  height: var(--tl-ruler);
+  border-left: 1px solid var(--line);
+  padding-left: 4px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tl__lanes {
+  position: relative;
+}
+
+.tl__lane {
+  position: relative;
+  height: var(--tl-row);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: copy;
+}
+
+.tl__lane.is-muted {
+  opacity: 0.45;
+}
+
+.tl__lane:hover {
+  background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
+}
+
+.tl__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--ac);
+  pointer-events: none;
+  z-index: 4;
+  will-change: transform;
+}
+
+/* ---------- cues ---------- */
+
+.cue {
+  position: absolute;
+  top: 4px;
+  height: calc(var(--tl-row) - 9px);
+  /* The block itself is only a frame of reference; the head inside it takes
+     the clicks, so a long tail never blocks placing another sound under it. */
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* How long the sound lasts. */
+.cue__tail {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-4);
+  background: var(--ac-soft);
+  border: 1px solid var(--ac-line);
+  border-left-width: 0;
+  border-right-width: 0;
+}
+
+/* The moment the sound is pinned to. */
+.cue__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 10px;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  border-radius: var(--r-4);
+  background: color-mix(in oklab, var(--ac) 34%, transparent);
+  border: 1px solid var(--ac-line);
+  border-left: 2px solid var(--ac);
+  overflow: hidden;
+  cursor: grab;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+/* A sound that leads into a moment is pinned by its end, so its head sits at
+   the right and the tail reaches back towards where it began. */
+.cue.is-tail .cue__head {
+  left: auto;
+  right: 0;
+  border-left: 1px solid var(--ac-line);
+  border-right: 2px solid var(--ac);
+}
+
+.cue__head:active {
+  cursor: grabbing;
+}
+
+.cue.is-selected .cue__head {
+  background: color-mix(in oklab, var(--ac) 55%, transparent);
+  border-color: var(--ac);
+}
+
+.cue.is-firing .cue__head {
+  background: var(--ac);
+}
+
+.cue.is-muted {
+  opacity: 0.35;
+}
+
+.cue__label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* ---------- picker and fields ---------- */
+
+.pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cell.pick {
+  min-width: 0;
+  width: auto;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 46px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--ac);
+  background: transparent;
+}
+
+.range__value {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-2);
+  text-align: right;
+}
+
+/* Everything to the right of this is past the end of the video. */
+.tl__beyond {
+  position: absolute;
+  top: var(--tl-ruler);
+  bottom: 0;
+  right: 0;
+  left: 0;
+  border-left: 1px solid var(--line);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklab, var(--tc-fg) 4%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+  pointer-events: none;
+  z-index: 3;
+}
