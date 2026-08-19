@@ -16,7 +16,7 @@ import type { View } from './view.ts';
  * The left rail: instrument selection on top, dock selection below the rule,
  * and the audio-engine light at the bottom.
  */
-export function createRail(session: Session): View {
+export function createRail(session: Session, options: { onHelp: () => void } = { onHelp: () => {} }): View {
   const badge = el('span', { class: 'rail__badge', text: '0' });
   const engineLed = el('i', { class: 'led led--lg' });
 
@@ -55,6 +55,16 @@ export function createRail(session: Session): View {
     [engineLed],
   );
 
+  const help = button(
+    {
+      class: 'rail__btn rail__help',
+      title: 'How this works',
+      attrs: { 'aria-label': 'Help' },
+      on: { click: () => options.onHelp() },
+    },
+    ['?'],
+  );
+
   const root = el('nav', { class: 'rail', attrs: { 'aria-label': 'Views' } }, [
     el('div', { class: 'rail__logo' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
     score,
@@ -66,6 +76,7 @@ export function createRail(session: Session): View {
     seq,
     takes,
     el('div', { class: 'rail__spacer' }),
+    help,
     power,
   ]);
 

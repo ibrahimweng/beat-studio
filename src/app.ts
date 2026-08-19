@@ -9,6 +9,9 @@ import { createInspector } from './ui/inspector.ts';
 import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
 import { createScoreBar } from './ui/score/bar.ts';
+import { createDivider } from './ui/score/divider.ts';
+import { createHelp } from './ui/score/help.ts';
+import { createTour } from './ui/score/tour.ts';
 import { createScorePanel } from './ui/score/panel.ts';
 import { createVideoStage } from './ui/score/stage.ts';
 import { createTimeline } from './ui/score/timeline.ts';
@@ -27,8 +30,11 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const session = new Session(options);
   const score = new ScoreSession(session.engine, session.store);
 
+  const tour = createTour();
+  const help = createHelp({ onReplayTour: () => tour.start() });
+
   // Instrument half.
-  const rail = createRail(session);
+  const rail = createRail(session, { onHelp: () => help.toggle() });
   const topbar = createTopbar(session);
   const stage = createStage(session);
   const dock = createDock(session);
@@ -40,6 +46,11 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const videoStage = createVideoStage(score);
   const timeline = createTimeline(score);
   const scorePanel = createScorePanel(score);
+  const divider = createDivider({
+    container: () => main,
+    timeline: () => timeline.el,
+    onResize: () => timeline.relayout(),
+  });
 
   score.attachVideo(videoStage.video);
 
@@ -63,13 +74,18 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     main.replaceChildren(
       ...(mode === 'play'
         ? [topbar.el, stage.el, dock.el, mixer.el]
-        : [scoreBar.el, videoStage.el, timeline.el]),
+        : [scoreBar.el, videoStage.el, divider.el, timeline.el]),
     );
+    if (mode === 'score') divider.refresh();
 
     const next = mode === 'play' ? inspector.el : scorePanel.el;
     if (aside) shell.replaceChild(next, aside);
     else shell.appendChild(next);
     aside = next;
+
+    // The walkthrough points at parts of the scoring view, so it waits until
+    // that view is actually on screen.
+    if (mode === 'score') requestAnimationFrame(() => tour.maybeStart());
   };
 
   score.effects = {
@@ -104,6 +120,8 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     detachKeyboard();
     stopMeters();
     unsubscribe();
+    tour.close();
+    help.close();
     score.dispose();
     session.dispose();
   };

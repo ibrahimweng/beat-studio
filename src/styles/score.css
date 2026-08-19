@@ -13,12 +13,15 @@
 
 .vstage {
   flex: 1 1 auto;
+  /* Both of these matter. Without them the row is sized by the video rather
+     than by the space available, and a large clip pushes down over the
+     timeline instead of scaling to fit. */
   min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
   position: relative;
   display: grid;
   place-items: center;
   background: var(--stage);
-  border-bottom: 1px solid var(--line);
   padding: 14px;
 }
 
@@ -29,11 +32,15 @@
 }
 
 .vstage__video {
-  max-width: 100%;
-  max-height: 100%;
+  /* Filling the box and letterboxing inside it means the layout decides the
+     size, not the clip. A 4K file and a phone clip both behave the same. */
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
   border-radius: var(--r-8);
   background: #000;
-  border: 1px solid var(--line);
 }
 
 .vstage__drop {
@@ -101,13 +108,57 @@
 
 /* ---------- timeline ---------- */
 
+/* Height is set by dragging the divider above it, and remembered. */
 .tl {
   flex: 0 0 auto;
-  height: 268px;
+  height: var(--tl-height, 268px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
+}
+
+/* Drag this to give the timeline more room. The video scales to what is left. */
+.split {
+  flex: 0 0 auto;
+  height: 7px;
+  cursor: row-resize;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+}
+
+.split::after {
+  content: '';
+  width: 38px;
+  height: 1px;
+  background: color-mix(in oklab, var(--tc-fg) 22%, transparent);
+}
+
+.split:hover,
+.split.is-dragging {
+  background: var(--panel-2);
+}
+
+.split:hover::after,
+.split.is-dragging::after {
+  background: var(--ac);
+}
+
+/* Everything stops responding to the pointer while a drag is in progress,
+   otherwise the video swallows the moves as soon as the pointer crosses it. */
+.app.is-resizing {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.app.is-resizing .vstage,
+.app.is-resizing .tl__body {
+  pointer-events: none;
 }
 
 .tl__bar {
@@ -129,6 +180,17 @@
 .tl__gutter {
   border-right: 1px solid var(--line);
   overflow: hidden;
+  position: relative;
+}
+
+/* Moved by script to follow the lanes when they scroll. */
+.tl__gutter-rows {
+  will-change: transform;
+}
+
+.tl__gutter-add {
+  display: flex;
+  padding: 6px 8px;
 }
 
 .tl__gutter-spacer {
@@ -147,12 +209,14 @@
 
 .tl__layer-name {
   flex: 1 1 auto;
+  min-width: 0;
   font-size: 11px;
   font-weight: 500;
   color: var(--txt-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: text;
 }
 
 .tl__layer-btn {
@@ -177,9 +241,32 @@
   color: var(--txt);
 }
 
+.tl__layer-btn--remove {
+  font-size: 12px;
+}
+
+.tl__layer-btn--remove:hover {
+  color: var(--rec);
+  border-color: var(--rec);
+}
+
+/* A layer name being renamed. */
+.tl__layer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 20px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--r-4);
+  background: var(--panel-2);
+  color: var(--txt);
+  font: inherit;
+  font-size: 11px;
+  padding: 0 5px;
+}
+
 .tl__viewport {
-  overflow-x: auto;
-  overflow-y: hidden;
+  /* Scrolls both ways now, because there can be more layers than fit. */
+  overflow: auto;
   position: relative;
 }
 
@@ -189,10 +276,14 @@
   height: 100%;
 }
 
+/* Pinned, so the times stay readable while the lanes scroll under them. */
 .tl__ruler {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 5;
   height: var(--tl-ruler);
   border-bottom: 1px solid var(--line-soft);
+  background: var(--bg);
 }
 
 .tl__tick {
@@ -363,7 +454,7 @@
 /* Everything to the right of this is past the end of the video. */
 .tl__beyond {
   position: absolute;
-  top: var(--tl-ruler);
+  top: calc(var(--tl-ruler) + var(--tl-strip));
   bottom: 0;
   right: 0;
   left: 0;
@@ -412,10 +503,12 @@
 
 /* How much the picture changes, drawn along the timeline. */
 .strip {
-  position: relative;
+  position: sticky;
+  top: var(--tl-ruler);
+  z-index: 4;
   height: var(--tl-strip);
   border-bottom: 1px solid var(--line-soft);
-  background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
+  background: color-mix(in oklab, var(--bg) 92%, var(--tc-fg));
 }
 
 .strip__canvas {
@@ -478,4 +571,147 @@
   align-items: center;
   padding: 0 10px;
   border-bottom: 1px solid var(--line-soft);
+}
+
+/* ---------- help and the walkthrough ---------- */
+
+.rail__help {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.help {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 9, 10, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.help__panel {
+  width: min(680px, calc(100vw - 48px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-12);
+  background: var(--tc-card);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px -24px #000;
+}
+
+.help__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.help__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.help__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.help__section + .help__section {
+  margin-top: 18px;
+}
+
+.help__row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 5px 0;
+  align-items: baseline;
+}
+
+.help__key {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.help__what {
+  font-size: 12px;
+  color: var(--txt-3);
+  line-height: 1.45;
+}
+
+.help__foot {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* The walkthrough dims the page and lifts one part out of it. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  pointer-events: none;
+}
+
+/* An enormous shadow around the highlight is what dims everything else. */
+.tour__spot {
+  position: fixed;
+  border-radius: var(--r-8);
+  box-shadow: 0 0 0 9999px rgba(8, 9, 10, 0.72);
+  border: 1px solid var(--ac);
+  pointer-events: none;
+  transition:
+    left 0.18s ease,
+    top 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+
+.tour__card {
+  position: fixed;
+  width: 320px;
+  padding: 14px 15px 12px;
+  border-radius: var(--r-12);
+  background: var(--tc-card);
+  border: 1px solid var(--ac-line);
+  box-shadow: 0 18px 44px -18px #000;
+  pointer-events: auto;
+}
+
+.tour__title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.tour__body {
+  font-size: 12px;
+  color: var(--txt-3);
+  line-height: 1.5;
+  margin-top: 5px;
+}
+
+.tour__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.tour__count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-3);
+}
+
+.tour__spacer {
+  flex: 1 1 auto;
 }

@@ -100,6 +100,18 @@ them, and the ones it found were within one frame. Playing the video twice as
 fast would halve the wait but only find eighteen, which is why it is not done
 that way.
 
+### Room to work
+
+The line between the video and the timeline can be dragged. The timeline takes
+the space and the video scales down to fit whatever is left, so you can give
+most of the screen to the timeline once there are more layers than fit. Double
+click the line to put it back where it started. The size is remembered.
+
+Layers can be added, renamed and removed. Use "+ Layer" at the bottom of the
+layer names, double click a name to change it, and the small cross removes a
+layer. Removing one that still has sounds on it asks first. There is always at
+least one layer.
+
 ### Getting the timing right
 
 Each sound has a setting for how it lands. "Starts on it" begins the sound on
@@ -209,6 +221,15 @@ There are three export formats.
 
 R plays a note on the piano, so it only starts recording when the piano is not
 showing.
+
+## Help
+
+The question mark at the bottom of the bar on the left opens a panel listing
+what everything does and every keyboard shortcut.
+
+The first time you open the scoring view, a short walkthrough points at each
+part of the screen in turn. You can leave it at any step and it does not come
+back on its own. The help panel can start it again.
 
 ## Options
 

@@ -13,6 +13,8 @@ export interface TimelineView extends View {
   /** Move the playhead. Called many times a second, so it avoids the store. */
   setTime(time: number): void;
   flashCue(id: string): void;
+  /** Re-measure after the panel has been resized. */
+  relayout(): void;
 }
 
 /**
@@ -36,10 +38,20 @@ export function createTimeline(session: ScoreSession): TimelineView {
   // Marks where the video stops, so the empty space beyond it reads as empty.
   const beyond = el('div', { class: 'tl__beyond' });
   const playhead = el('div', { class: 'tl__playhead' });
+  const gutterRows = el('div', { class: 'tl__gutter-rows' });
   const gutter = el('div', { class: 'tl__gutter' });
 
   const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, playhead]);
-  const viewport = el('div', { class: 'tl__viewport' }, [content]);
+  const viewport = el('div', {
+    class: 'tl__viewport',
+    on: {
+      // The ruler stays put by being sticky; the layer names are a separate
+      // column, so they are moved by hand to match.
+      scroll: () => {
+        gutterRows.style.transform = `translateY(${-viewport.scrollTop}px)`;
+      },
+    },
+  }, [content]);
 
   // ---------- finding hits ----------
   const findButton = button(
@@ -157,14 +169,24 @@ export function createTimeline(session: ScoreSession): TimelineView {
   function paintLanes(project: Project): void {
     clear(lanes);
     clear(gutter);
+    clear(gutterRows);
     cueNodes.clear();
 
     // Keeps the name column lined up with what sits above the lanes.
     gutter.appendChild(el('div', { class: 'tl__gutter-spacer' }));
     gutter.appendChild(strip.label);
+    gutter.appendChild(gutterRows);
 
     for (const layer of project.layers) {
-      const name = el('div', { class: 'tl__layer-name', text: layer.name });
+      // Double click to rename, which is where people already try first.
+      const name = el('div', {
+        class: 'tl__layer-name',
+        title: `${layer.name} — double click to rename`,
+        text: layer.name,
+        on: {
+          dblclick: () => startRename(name, layer.id, layer.name),
+        },
+      });
       const mute = button(
         {
           class: 'tl__layer-btn',
@@ -185,8 +207,27 @@ export function createTimeline(session: ScoreSession): TimelineView {
       );
       toggleClass(solo, 'is-on', layer.solo);
 
-      gutter.appendChild(
-        el('div', { class: 'tl__gutter-row' }, [name, mute, solo]),
+      const remove = button(
+        {
+          class: 'tl__layer-btn tl__layer-btn--remove',
+          title: `Remove ${layer.name}`,
+          on: {
+            click: () => {
+              const count = session.countOnLayer(layer.id);
+              // Only interrupt when something would actually be lost.
+              if (count > 0) {
+                const word = count === 1 ? 'sound' : 'sounds';
+                if (!window.confirm(`Remove ${layer.name} and its ${count} ${word}?`)) return;
+              }
+              session.removeLayer(layer.id);
+            },
+          },
+        },
+        ['×'],
+      );
+
+      gutterRows.appendChild(
+        el('div', { class: 'tl__gutter-row' }, [name, mute, solo, remove]),
       );
 
       const lane = el('div', {
@@ -213,6 +254,53 @@ export function createTimeline(session: ScoreSession): TimelineView {
 
       lanes.appendChild(lane);
     }
+
+    gutterRows.appendChild(
+      el('div', { class: 'tl__gutter-add' }, [
+        button(
+          {
+            class: 'chip chip--sm',
+            title: 'Add another layer',
+            on: { click: () => session.addLayer() },
+          },
+          ['+ Layer'],
+        ),
+      ]),
+    );
+  }
+
+  /** Turn a layer name into a field, and put it back when it is done. */
+  function startRename(node: HTMLElement, id: string, current: string): void {
+    const input = el('input', {
+      class: 'tl__layer-input',
+      type: 'text',
+      attrs: { value: current, maxlength: '40' },
+    }) as HTMLInputElement;
+
+    // Putting the label back removes focus from the field, which fires blur
+    // while this is still running. A flag set before any of the work is the
+    // only guard that holds, because the field is still connected at that
+    // instant.
+    let done = false;
+    const finish = (save: boolean): void => {
+      if (done) return;
+      done = true;
+      const value = input.value;
+      if (input.isConnected) input.replaceWith(node);
+      if (save) session.renameLayer(id, value);
+    };
+
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') finish(true);
+      if (event.key === 'Escape') finish(false);
+      // The timeline shortcuts must not fire while a name is being typed.
+      event.stopPropagation();
+    });
+
+    node.replaceWith(input);
+    input.focus();
+    input.select();
   }
 
   /**
@@ -303,6 +391,12 @@ export function createTimeline(session: ScoreSession): TimelineView {
       setText(found, ready ? `${detect.peaks.length} hits` : '');
 
       strip.draw(state, pxPerSec);
+    },
+
+    relayout() {
+      // A shorter panel may have scrolled the lanes out of reach.
+      viewport.scrollTop = Math.min(viewport.scrollTop, viewport.scrollHeight);
+      gutterRows.style.transform = `translateY(${-viewport.scrollTop}px)`;
     },
 
     setTime(time: number) {

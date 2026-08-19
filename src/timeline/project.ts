@@ -144,6 +144,38 @@ export function removeCue(project: Project, id: string): Project {
   return { ...project, cues: project.cues.filter((c) => c.id !== id) };
 }
 
+/** Add a layer at the bottom of the list. */
+export function addLayer(project: Project, name?: string): Project {
+  const layer: Layer = {
+    id: newId('l'),
+    name: name?.trim() || `Layer ${project.layers.length + 1}`,
+    muted: false,
+    solo: false,
+    gain: 1,
+  };
+  return { ...project, layers: [...project.layers, layer] };
+}
+
+/**
+ * Remove a layer and everything on it.
+ *
+ * The last layer is kept, because a project with nowhere to put a sound is
+ * not a state worth being able to reach.
+ */
+export function removeLayer(project: Project, id: string): Project {
+  if (project.layers.length <= 1) return project;
+  return {
+    ...project,
+    layers: project.layers.filter((l) => l.id !== id),
+    cues: project.cues.filter((c) => c.layerId !== id),
+  };
+}
+
+/** How many sounds are on a layer, for warning before it is removed. */
+export function cuesOnLayer(project: Project, id: string): number {
+  return project.cues.filter((c) => c.layerId === id).length;
+}
+
 export function updateLayer(project: Project, id: string, patch: Partial<Layer>): Project {
   return {
     ...project,

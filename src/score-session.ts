@@ -4,10 +4,13 @@ import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { encodeWav } from './export/wav.ts';
 import {
+  addLayer,
   cueStart,
+  cuesOnLayer,
   fromSession,
   makeCue,
   removeCue,
+  removeLayer,
   snapTime,
   toSession,
   updateCue,
@@ -267,6 +270,47 @@ export class ScoreSession {
 
   updateLayer(id: string, patch: Partial<Layer>): void {
     this.#setProject(updateLayer(this.project, id, patch));
+  }
+
+  /** Add a layer and make it the one new sounds go on. */
+  addLayer(): void {
+    const next = addLayer(this.project);
+    const added = next.layers[next.layers.length - 1];
+    this.#setProject(next);
+    this.#store.set({ activeLayerId: added.id, status: `${added.name} added` });
+  }
+
+  renameLayer(id: string, name: string): void {
+    const clean = name.trim();
+    if (!clean) return;
+    this.updateLayer(id, { name: clean.slice(0, 40) });
+  }
+
+  /** How many sounds a layer holds, so the interface can warn before removing. */
+  countOnLayer(id: string): number {
+    return cuesOnLayer(this.project, id);
+  }
+
+  /** Remove a layer and everything on it. The last layer is kept. */
+  removeLayer(id: string): void {
+    const project = this.project;
+    if (project.layers.length <= 1) {
+      this.#store.set({ status: 'there has to be at least one layer' });
+      return;
+    }
+    const layer = project.layers.find((l) => l.id === id);
+    const lost = cuesOnLayer(project, id);
+    const next = removeLayer(project, id);
+    this.#setProject(next);
+
+    const active = this.#store.state.activeLayerId === id ? next.layers[0].id : this.#store.state.activeLayerId;
+    this.#store.set({
+      activeLayerId: active,
+      selectedCueId: null,
+      status: lost
+        ? `${layer?.name ?? 'layer'} removed with ${lost} sound${lost === 1 ? '' : 's'}`
+        : `${layer?.name ?? 'layer'} removed`,
+    });
   }
 
   /** Hear one cue on its own. */
