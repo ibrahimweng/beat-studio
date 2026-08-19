@@ -66,14 +66,23 @@ it to move it.
 There are four layers. Use them to keep your impacts apart from your movement
 and detail, so you can balance them separately and export them separately.
 
-Three kinds of sound can be placed.
+Twenty two sounds can be placed, in three groups.
 
-- Design voices, which are the ones made for this work. There are impacts,
-  whooshes, risers, sub drops, clicks, pops and reverse swells. Each one
-  stretches to whatever length you give it.
-- The drum kit, when you want something more like a real instrument.
-- Piano and guitar notes, for texture. A low piano note under an impact gives
-  it weight, and a note pitched down and stretched makes a bed.
+- Seven design voices, which are the ones made for this work. There are
+  impacts, whooshes, risers, sub drops, clicks, pops and reverse swells. Each
+  one stretches to whatever length you give it.
+- Thirteen drum voices, when you want something more like a real instrument.
+- Piano and guitar, for texture. A low piano note under an impact gives it
+  weight, and a note pitched down and stretched makes a bed.
+
+Every one of them can be tuned by two octaves up or down and given any length,
+so the twenty two are starting points rather than the whole set.
+
+There is no limit on how many you can place. A thirty second piece was tested
+with 1372 sounds on it and nothing broke, although writing the file took twenty
+seconds at that density. Around fifty sounds, which is a lot for half a minute
+of picture, everything is immediate and the file writes in about five
+seconds.
 
 ### Let it find the hits for you
 

@@ -1,4 +1,4 @@
-import { LANES, NAMES } from '../../constants.ts';
+import { KIT_SOUNDS, NAMES } from '../../constants.ts';
 import type { ScoreSession } from '../../score-session.ts';
 import type { AppState } from '../../store.ts';
 import { timecode } from '../../timeline/project.ts';
@@ -6,8 +6,8 @@ import { DESIGN_NAMES, type Anchor, type Cue, type CueSource } from '../../timel
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 
-/** Kit voices that earn a place next to the design sounds. */
-const KIT_PICKS = LANES.map((lane) => ({ name: lane.pad, label: lane.label }));
+/** Every drum voice the engine has, not just the eight the sequencer drives. */
+const KIT_PICKS = KIT_SOUNDS.map((sound) => ({ name: sound.pad, label: sound.label }));
 
 const PITCHED: readonly { name: 'piano' | 'guitar'; label: string }[] = [
   { name: 'piano', label: 'Piano' },
