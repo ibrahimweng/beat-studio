@@ -1,4 +1,4 @@
-import type { ScoreSession } from '../../score-session.ts';
+import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { button, el } from '../dom.ts';
 import type { View } from '../view.ts';
@@ -8,13 +8,13 @@ export interface VideoStageView extends View {
 }
 
 /**
- * The video being scored.
+ * The video the sound is being made for.
  *
  * The file is read straight off disk, so nothing is uploaded and the clip
  * never leaves the machine. Its own audio is muted by default and is never
  * part of an export, because the deliverable is the sound you are making.
  */
-export function createVideoStage(session: ScoreSession): VideoStageView {
+export function createVideoStage(session: SoundDesignSession): VideoStageView {
   const video = el('video', {
     class: 'vstage__video',
     attrs: { playsinline: '', preload: 'metadata' },

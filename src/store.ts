@@ -8,11 +8,11 @@ import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 /**
  * Which half of the app is showing.
  *
- * "score" is the Sound design screen: the timeline, for placing sounds
- * against a video. It is where the app opens. "play" is the instrument, for
- * working out ideas before they go on the timeline.
+ * "sound-design" is the timeline, for placing sounds against a video. It is
+ * where the app opens. "play" is the instrument, for working out ideas before
+ * they go on the timeline.
  */
-export type Mode = 'play' | 'score';
+export type Mode = 'play' | 'sound-design';
 
 export interface AppState {
   mode: Mode;
@@ -108,9 +108,10 @@ export function initialState(): AppState {
     status: null,
     engineName: 'standby',
 
-    // The app opens on Sound design, because scoring a video is what most
-    // people come here to do. The instruments are one click away on the rail.
-    mode: 'score',
+    // The app opens on Sound design, because putting sound to a video is what
+    // most people come here to do. The instruments are one click away on the
+    // rail.
+    mode: 'sound-design',
     project: emptyProject(),
     videoReady: false,
     selectedCueId: null,

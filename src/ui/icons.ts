@@ -140,7 +140,7 @@ export function takesIcon(): HTMLElement {
 }
 
 /** A frame with a mark under it, for the sound design screen. */
-export function scoreIcon(): HTMLElement {
+export function soundDesignIcon(): HTMLElement {
   return el(
     'span',
     { style: { display: 'flex', flexDirection: 'column', gap: '3px', width: '18px' } },

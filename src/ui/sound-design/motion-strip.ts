@@ -1,4 +1,4 @@
-import type { ScoreSession } from '../../score-session.ts';
+import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { clear, el } from '../dom.ts';
 
@@ -20,7 +20,7 @@ export interface MotionStrip {
  * up as a spike, and the marks above it are the moments being suggested.
  * Click a mark to place the current sound there.
  */
-export function createMotionStrip(session: ScoreSession): MotionStrip {
+export function createMotionStrip(session: SoundDesignSession): MotionStrip {
   const canvas = el('canvas', { class: 'strip__canvas' }) as HTMLCanvasElement;
   const marks = el('div', { class: 'strip__marks' });
   const root = el('div', { class: 'strip' }, [canvas, marks]);
@@ -101,7 +101,7 @@ function drawMarks(
   container: HTMLElement,
   peaks: AppState['detect']['peaks'],
   pxPerSec: number,
-  session: ScoreSession,
+  session: SoundDesignSession,
 ): void {
   clear(container);
   for (const peak of peaks) {

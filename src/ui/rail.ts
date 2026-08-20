@@ -5,8 +5,8 @@ import {
   drumsIcon,
   guitarIcon,
   keysIcon,
-  scoreIcon,
   sequencerIcon,
+  soundDesignIcon,
   takesIcon,
   waveMark,
 } from './icons.ts';
@@ -37,7 +37,7 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
       [icon],
     );
 
-  const score = railButton('Sound design', scoreIcon(), () => session.setMode('score'), true);
+  const soundDesign = railButton('Sound design', soundDesignIcon(), () => session.setMode('sound-design'), true);
   const drums = railButton('Drums', drumsIcon(), () => session.setView('drums'), true);
   const keys = railButton('Keys', keysIcon(), () => session.setView('keys'), true);
   const guitar = railButton('Guitar', guitarIcon(), () => session.setView('guitar'), true);
@@ -67,7 +67,7 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
 
   const root = el('nav', { class: 'rail', attrs: { 'aria-label': 'Views' } }, [
     el('div', { class: 'rail__logo' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
-    score,
+    soundDesign,
     el('div', { class: 'rail__divider' }),
     drums,
     keys,
@@ -84,7 +84,7 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
     el: root,
     update(state: AppState) {
       const play = state.mode === 'play';
-      toggleClass(score, 'is-active', state.mode === 'score');
+      toggleClass(soundDesign, 'is-active', state.mode === 'sound-design');
       toggleClass(drums, 'is-active', play && state.view === 'drums');
       toggleClass(keys, 'is-active', play && state.view === 'keys');
       toggleClass(guitar, 'is-active', play && state.view === 'guitar');

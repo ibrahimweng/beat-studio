@@ -1,4 +1,4 @@
-import type { ScoreSession } from '../../score-session.ts';
+import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { cueLength, cueStart, timecode } from '../../timeline/project.ts';
 import type { Cue, Project } from '../../timeline/types.ts';
@@ -25,7 +25,7 @@ export interface TimelineView extends View {
  * to the moment it stops, so a riser anchored to its end visibly reaches back
  * from the hit it leads into.
  */
-export function createTimeline(session: ScoreSession): TimelineView {
+export function createTimeline(session: SoundDesignSession): TimelineView {
   let pxPerSec = 60;
   let painted: Project | null = null;
   let paintedZoom = -1;

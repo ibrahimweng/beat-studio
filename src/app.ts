@@ -1,20 +1,20 @@
 import type { AudioEngineOptions } from './audio/engine.ts';
 import { KEY_ROWS, PAD_KEYS } from './constants.ts';
-import { ScoreSession } from './score-session.ts';
 import { Session } from './session.ts';
+import { SoundDesignSession } from './sound-design-session.ts';
 import type { AppState } from './store.ts';
 import { createDock } from './ui/dock.ts';
 import { el } from './ui/dom.ts';
 import { createInspector } from './ui/inspector.ts';
 import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
-import { createScoreBar } from './ui/score/bar.ts';
-import { createDivider } from './ui/score/divider.ts';
-import { createHelp } from './ui/score/help.ts';
-import { createTour } from './ui/score/tour.ts';
-import { createScorePanel } from './ui/score/panel.ts';
-import { createVideoStage } from './ui/score/stage.ts';
-import { createTimeline } from './ui/score/timeline.ts';
+import { createSoundDesignBar } from './ui/sound-design/bar.ts';
+import { createDivider } from './ui/sound-design/divider.ts';
+import { createHelp } from './ui/sound-design/help.ts';
+import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
+import { createVideoStage } from './ui/sound-design/stage.ts';
+import { createTimeline } from './ui/sound-design/timeline.ts';
+import { createTour } from './ui/sound-design/tour.ts';
 import { createStage } from './ui/stage.ts';
 import { createTopbar } from './ui/topbar.ts';
 import type { View } from './ui/view.ts';
@@ -28,7 +28,7 @@ import type { View } from './ui/view.ts';
  */
 export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): () => void {
   const session = new Session(options);
-  const score = new ScoreSession(session.engine, session.store);
+  const soundDesign = new SoundDesignSession(session.engine, session.store);
 
   const tour = createTour();
   const help = createHelp({ onReplayTour: () => tour.start() });
@@ -42,56 +42,56 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const inspector = createInspector(session);
 
   // Sound design half.
-  const scoreBar = createScoreBar(score);
-  const videoStage = createVideoStage(score);
-  const timeline = createTimeline(score);
-  const scorePanel = createScorePanel(score);
+  const soundDesignBar = createSoundDesignBar(soundDesign);
+  const videoStage = createVideoStage(soundDesign);
+  const timeline = createTimeline(soundDesign);
+  const soundDesignPanel = createSoundDesignPanel(soundDesign);
   const divider = createDivider({
     container: () => main,
     timeline: () => timeline.el,
     onResize: () => timeline.relayout(),
   });
 
-  score.attachVideo(videoStage.video);
+  soundDesign.attachVideo(videoStage.video);
 
   const views: View[] = [
     rail, topbar, stage, dock, mixer, inspector,
-    scoreBar, videoStage, timeline, scorePanel,
+    soundDesignBar, videoStage, timeline, soundDesignPanel,
   ];
 
   const main = el('div', { class: 'main' });
   const shell = el('div', { class: 'app' }, [rail.el, main]);
   root.appendChild(shell);
 
-  let mounted: 'play' | 'score' | null = null;
+  let mounted: 'play' | 'sound-design' | null = null;
   let aside: HTMLElement | null = null;
 
   /** Swap the whole middle column and the right panel when the mode changes. */
-  const mount = (mode: 'play' | 'score'): void => {
+  const mount = (mode: 'play' | 'sound-design'): void => {
     if (mounted === mode) return;
     mounted = mode;
 
     main.replaceChildren(
       ...(mode === 'play'
         ? [topbar.el, stage.el, dock.el, mixer.el]
-        : [scoreBar.el, videoStage.el, divider.el, timeline.el]),
+        : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
     );
-    if (mode === 'score') divider.refresh();
+    if (mode === 'sound-design') divider.refresh();
 
-    const next = mode === 'play' ? inspector.el : scorePanel.el;
+    const next = mode === 'play' ? inspector.el : soundDesignPanel.el;
     if (aside) shell.replaceChild(next, aside);
     else shell.appendChild(next);
     aside = next;
 
     // The walkthrough points at parts of the sound design screen, so it waits
     // until that screen is actually on show.
-    if (mode === 'score') requestAnimationFrame(() => tour.maybeStart());
+    if (mode === 'sound-design') requestAnimationFrame(() => tour.maybeStart());
   };
 
-  score.effects = {
+  soundDesign.effects = {
     onTime: (time) => {
       timeline.setTime(time);
-      scoreBar.setTime(time);
+      soundDesignBar.setTime(time);
     },
     flashCue: (id) => timeline.flashCue(id),
   };
@@ -113,7 +113,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const unsubscribe = session.store.subscribe((state, previous) => render(state, previous));
   render(session.state, null);
 
-  const detachKeyboard = attachKeyboard(session, score);
+  const detachKeyboard = attachKeyboard(session, soundDesign);
   const stopMeters = startMeterLoop(session, stage, mixer);
 
   return () => {
@@ -122,21 +122,21 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     unsubscribe();
     tour.close();
     help.close();
-    score.dispose();
+    soundDesign.dispose();
     session.dispose();
   };
 }
 
 /** Keyboard control, which differs between the two halves of the app. */
-function attachKeyboard(session: Session, score: ScoreSession): () => void {
+function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
     if (ignore(event)) return;
-    if (session.state.mode === 'score') scoreKey(session, score, event);
+    if (session.state.mode === 'sound-design') soundDesignKey(session, soundDesign, event);
     else handleKey(session, event, true);
   };
   const onKeyUp = (event: KeyboardEvent): void => {
     if (ignore(event)) return;
-    if (session.state.mode !== 'score') handleKey(session, event, false);
+    if (session.state.mode !== 'sound-design') handleKey(session, event, false);
   };
 
   window.addEventListener('keydown', onKeyDown);
@@ -162,32 +162,32 @@ function ignore(event: KeyboardEvent): boolean {
  * Holding shift moves the selected sound instead, so a hit that feels late
  * can be pulled back without losing your place.
  */
-function scoreKey(session: Session, score: ScoreSession, event: KeyboardEvent): void {
+function soundDesignKey(session: Session, soundDesign: SoundDesignSession, event: KeyboardEvent): void {
   const key = event.key;
   const selected = session.state.selectedCueId;
 
   if (key === ' ') {
     event.preventDefault();
-    score.togglePlay();
+    soundDesign.togglePlay();
     return;
   }
 
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     event.preventDefault();
     const direction = key === 'ArrowLeft' ? -1 : 1;
-    if (event.shiftKey && selected) score.nudgeCue(selected, direction);
-    else score.stepFrames(direction);
+    if (event.shiftKey && selected) soundDesign.nudgeCue(selected, direction);
+    else soundDesign.stepFrames(direction);
     return;
   }
 
   if ((key === 'Delete' || key === 'Backspace') && selected) {
     event.preventDefault();
-    score.removeCue(selected);
+    soundDesign.removeCue(selected);
     return;
   }
 
   if (key === 'Escape') {
-    score.select(null);
+    soundDesign.select(null);
     return;
   }
 
@@ -196,7 +196,7 @@ function scoreKey(session: Session, score: ScoreSession, event: KeyboardEvent): 
   const pad = PAD_KEYS[key.toLowerCase()];
   if (pad && !event.repeat) {
     event.preventDefault();
-    score.addCueAtPlayhead({ kind: 'kit', name: pad });
+    soundDesign.addCueAtPlayhead({ kind: 'kit', name: pad });
   }
 }
 
