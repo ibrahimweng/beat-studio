@@ -116,8 +116,8 @@ export class Session {
     this.store.set({ view, mode: 'play' });
   }
 
-  setMode(mode: 'play' | 'score'): void {
-    if (mode === 'score') this.stopAll();
+  setMode(mode: 'play' | 'sound-design'): void {
+    if (mode === 'sound-design') this.stopAll();
     this.store.set({ mode });
   }
 

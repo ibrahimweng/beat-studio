@@ -4,7 +4,7 @@ import './styles/layout.css';
 import './styles/controls.css';
 import './styles/instruments.css';
 import './styles/dock.css';
-import './styles/score.css';
+import './styles/sound-design.css';
 
 import { mountApp } from './app.ts';
 import { applyTheme, themeFromUrl } from './ui/theme.ts';

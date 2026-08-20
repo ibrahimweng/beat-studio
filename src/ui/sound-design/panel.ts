@@ -1,5 +1,5 @@
 import { KIT_SOUNDS, NAMES } from '../../constants.ts';
-import type { ScoreSession } from '../../score-session.ts';
+import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { timecode } from '../../timeline/project.ts';
 import { DESIGN_GROUPS, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
@@ -31,7 +31,7 @@ function noteName(midi: number): string {
  * The top half chooses what a click on the timeline will place. The bottom
  * half edits whichever cue is selected, and writes the files.
  */
-export function createScorePanel(session: ScoreSession): View {
+export function createSoundDesignPanel(session: SoundDesignSession): View {
   // ---------- sound picker ----------
   // Twenty four in one row is a wall. Grouped by what they are for, it reads.
   const designButtons: HTMLButtonElement[] = [];

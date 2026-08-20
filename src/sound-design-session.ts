@@ -37,14 +37,14 @@ const MIN_REFINE_FRAMES = 3;
 const MAX_REFINE_FRAMES = 12;
 
 /** Visual feedback the timeline asks for. */
-export interface ScoreEffects {
+export interface SoundDesignEffects {
   /** Move the playhead to a video time. */
   onTime(time: number): void;
   /** Light a cue as it sounds. */
   flashCue(id: string): void;
 }
 
-const NO_EFFECTS: ScoreEffects = { onTime: () => {}, flashCue: () => {} };
+const NO_EFFECTS: SoundDesignEffects = { onTime: () => {}, flashCue: () => {} };
 
 /**
  * The sound design screen.
@@ -53,14 +53,14 @@ const NO_EFFECTS: ScoreEffects = { onTime: () => {}, flashCue: () => {} };
  * The instrument half of the app is untouched by this; the two only share the
  * audio engine.
  */
-export class ScoreSession {
+export class SoundDesignSession {
   #engine: AudioEngine;
   #store: Store;
   #video: HTMLVideoElement | null = null;
   #clock: VideoClock | null = null;
   #objectUrl: string | null = null;
 
-  effects: ScoreEffects = NO_EFFECTS;
+  effects: SoundDesignEffects = NO_EFFECTS;
   /** Called once a video is ready, so the timeline can frame the whole clip. */
   onVideoLoaded: (() => void) | null = null;
 
@@ -452,7 +452,7 @@ export class ScoreSession {
 
     const settings = this.#engine.chainSettings();
     const buffer = await renderProject(this.project, { settings, trimToDuration });
-    const stem = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'score');
+    const stem = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
     await this.#write(buffer, stem, format);
     this.#store.set({ exporting: null });
   }
@@ -468,7 +468,7 @@ export class ScoreSession {
 
     const settings = this.#engine.chainSettings();
     const stems = await renderStems(this.project, { settings, trimToDuration });
-    const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'score');
+    const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
 
     for (let i = 0; i < stems.length; i++) {
       const s = stems[i];
@@ -501,7 +501,7 @@ export class ScoreSession {
     const blob = new Blob([JSON.stringify(toSession(this.project), null, 2)], {
       type: 'application/json',
     });
-    const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'score');
+    const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
     saveBlob(blob, `${base}.beatstudio.json`);
     this.#store.set({ status: 'session saved' });
   }

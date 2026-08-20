@@ -321,7 +321,7 @@ src/
   pattern.ts       creating and editing patterns
   persist.ts       reading and writing saved state
   types.ts         shared types
-  score-session.ts every action the sound design screen can perform
+  sound-design-session.ts every action the sound design screen can perform
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
@@ -339,6 +339,7 @@ src/
     midi.ts        MIDI file writer
     save.ts        handing a file to the browser
   ui/              one file per part of the interface
+    sound-design/  the video, the timeline, the sound picker and the walkthrough
   styles/          design tokens and stylesheets
 public/            files copied to the site root, which is where the icons live
 ```

@@ -1,4 +1,4 @@
-import type { ScoreSession } from '../../score-session.ts';
+import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { COMMON_FPS, timecode } from '../../timeline/project.ts';
 import type { SnapMode } from '../../timeline/types.ts';
@@ -11,14 +11,14 @@ const SNAP_MODES: readonly { value: SnapMode; label: string; title: string }[] =
   { value: 'off', label: 'Free', title: 'No snapping' },
 ];
 
-export interface ScoreBarView extends View {
+export interface SoundDesignBarView extends View {
   setTime(time: number): void;
 }
 
 /** Transport, timecode and the settings that decide where a sound can land. */
-export function createScoreBar(session: ScoreSession): ScoreBarView {
-  const clock = el('div', { class: 'score-bar__clock', text: '0:00:00' });
-  const total = el('div', { class: 'score-bar__total', text: '0:00:00' });
+export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBarView {
+  const clock = el('div', { class: 'sound-design-bar__clock', text: '0:00:00' });
+  const total = el('div', { class: 'sound-design-bar__total', text: '0:00:00' });
 
   const play = button(
     { class: 'play-btn', title: 'Play or pause (Space)', on: { click: () => session.togglePlay() } },
@@ -38,7 +38,7 @@ export function createScoreBar(session: ScoreSession): ScoreBarView {
     [el('span', { style: { fontSize: '12px', color: 'var(--txt-2)' }, text: '⏮' })],
   );
 
-  const fps = el('select', { class: 'score-bar__select', title: 'Frame rate' }) as HTMLSelectElement;
+  const fps = el('select', { class: 'sound-design-bar__select', title: 'Frame rate' }) as HTMLSelectElement;
   for (const rate of COMMON_FPS) {
     fps.appendChild(el('option', { text: String(rate), attrs: { value: String(rate) } }));
   }
@@ -65,7 +65,7 @@ export function createScoreBar(session: ScoreSession): ScoreBarView {
     ['Ref audio'],
   );
 
-  const root = el('header', { class: 'topbar score-bar' }, [
+  const root = el('header', { class: 'topbar sound-design-bar' }, [
     // The screen is named here as well as on the rail, because this is the
     // first thing the app opens on and it should say what it is.
     el('div', { class: 'topbar__title', text: 'Sound design' }),
@@ -74,7 +74,11 @@ export function createScoreBar(session: ScoreSession): ScoreBarView {
     back,
     play,
     forward,
-    el('div', { class: 'score-bar__time' }, [clock, el('div', { class: 'score-bar__sep', text: '/' }), total]),
+    el('div', { class: 'sound-design-bar__time' }, [
+      clock,
+      el('div', { class: 'sound-design-bar__sep', text: '/' }),
+      total,
+    ]),
     el('div', { class: 'topbar__divider' }),
     el('div', { class: 'micro-label', text: 'FPS' }),
     fps,
