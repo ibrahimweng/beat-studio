@@ -1,7 +1,7 @@
 # Tools
 
-Small pages used while working on the project. They are not part of the built
-site and are only served by the development server.
+Small pages and scripts used while working on the project. None of them are
+part of the built site.
 
 ## voice-check.html
 
@@ -23,3 +23,20 @@ its own so the comparison is about shape rather than loudness. Measuring each
 sound over its own length matters. An earlier version used a fixed three second
 window, which made every short sound look alike because most of both was
 silence.
+
+## make-icons.mjs
+
+Draws the site icons.
+
+`public/favicon.svg` is the master. This script holds the same geometry and
+writes the raster versions that some browsers and phones want:
+`public/favicon.ico` at 16, 32 and 48 pixels, `public/favicon-96.png`, and
+`public/apple-touch-icon.png` for a home screen.
+
+```bash
+node tools/make-icons.mjs
+```
+
+Run it after changing the icon, and change the SVG to match. Nothing is
+installed to do this. The picture is five rounded rectangles, so the script
+draws them itself and writes the PNG files with the zlib that comes with Node.
