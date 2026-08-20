@@ -1,7 +1,7 @@
 import type { DesignName } from '../timeline/types.ts';
 
 /**
- * Sound design voices for scoring picture.
+ * Sound design voices, for placing against picture.
  *
  * These are not drums. They are the sounds motion graphics actually needs:
  * something to land a hit, something to carry a move, something to lead into a

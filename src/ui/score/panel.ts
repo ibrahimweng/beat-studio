@@ -26,7 +26,7 @@ function noteName(midi: number): string {
 }
 
 /**
- * The right hand panel in score mode.
+ * The right hand panel on the sound design screen.
  *
  * The top half chooses what a click on the timeline will place. The bottom
  * half edits whichever cue is selected, and writes the files.
