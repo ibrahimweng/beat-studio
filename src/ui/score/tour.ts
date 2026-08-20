@@ -65,7 +65,7 @@ export interface Tour {
 }
 
 /**
- * The walkthrough shown the first time someone opens the scoring view.
+ * The walkthrough shown the first time someone opens the sound design screen.
  *
  * It can be left at any point, and it does not come back on its own once it
  * has been finished or skipped. The help button brings it back.

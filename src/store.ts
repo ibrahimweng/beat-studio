@@ -8,8 +8,9 @@ import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 /**
  * Which half of the app is showing.
  *
- * "play" is the instrument, for working out ideas. "score" is the timeline,
- * for placing those ideas against a video.
+ * "score" is the Sound design screen: the timeline, for placing sounds
+ * against a video. It is where the app opens. "play" is the instrument, for
+ * working out ideas before they go on the timeline.
  */
 export type Mode = 'play' | 'score';
 
@@ -44,7 +45,7 @@ export interface AppState {
   /** Label for the engine row in the inspector. */
   engineName: string;
 
-  // ---------- scoring to picture ----------
+  // ---------- sound design ----------
   /** The cue list, layers and timing settings for the loaded video. */
   project: Project;
   /** A video file has been loaded and can be played. */
@@ -107,7 +108,9 @@ export function initialState(): AppState {
     status: null,
     engineName: 'standby',
 
-    mode: 'play',
+    // The app opens on Sound design, because scoring a video is what most
+    // people come here to do. The instruments are one click away on the rail.
+    mode: 'score',
     project: emptyProject(),
     videoReady: false,
     selectedCueId: null,

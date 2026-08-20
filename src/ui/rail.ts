@@ -37,7 +37,7 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
       [icon],
     );
 
-  const score = railButton('Score to picture', scoreIcon(), () => session.setMode('score'), true);
+  const score = railButton('Sound design', scoreIcon(), () => session.setMode('score'), true);
   const drums = railButton('Drums', drumsIcon(), () => session.setView('drums'), true);
   const keys = railButton('Keys', keysIcon(), () => session.setView('keys'), true);
   const guitar = railButton('Guitar', guitarIcon(), () => session.setView('guitar'), true);

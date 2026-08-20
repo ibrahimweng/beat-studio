@@ -66,6 +66,10 @@ export function createScoreBar(session: ScoreSession): ScoreBarView {
   );
 
   const root = el('header', { class: 'topbar score-bar' }, [
+    // The screen is named here as well as on the rail, because this is the
+    // first thing the app opens on and it should say what it is.
+    el('div', { class: 'topbar__title', text: 'Sound design' }),
+    el('div', { class: 'topbar__divider' }),
     toStart,
     back,
     play,

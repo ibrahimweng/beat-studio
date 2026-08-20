@@ -139,7 +139,7 @@ export function takesIcon(): HTMLElement {
   );
 }
 
-/** A frame with a mark under it, for scoring to picture. */
+/** A frame with a mark under it, for the sound design screen. */
 export function scoreIcon(): HTMLElement {
   return el(
     'span',

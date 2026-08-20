@@ -47,7 +47,7 @@ export interface ScoreEffects {
 const NO_EFFECTS: ScoreEffects = { onTime: () => {}, flashCue: () => {} };
 
 /**
- * Scoring to picture.
+ * The sound design screen.
  *
  * Owns the loaded video, the cue list and the clock that ties them together.
  * The instrument half of the app is untouched by this; the two only share the

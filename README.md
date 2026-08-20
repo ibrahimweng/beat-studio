@@ -3,11 +3,14 @@
 Beat Studio is a music workstation that runs in a web browser. It does two
 things.
 
-- You can play three instruments, program a drum pattern, record what you play,
-  and save it as an audio file or a MIDI file.
 - You can load a video and build sound design against it, placing each sound on
   the exact frame it belongs on, then export a file that lines up when you drop
   it back into your editing software.
+- You can play three instruments, program a drum pattern, record what you play,
+  and save it as an audio file or a MIDI file.
+
+The app opens on the Sound design screen. The instruments are on the bar down
+the left.
 
 All the sound is made in the browser using the Web Audio API. There are no audio
 files to download and no server to run.
@@ -42,10 +45,11 @@ files are set to be cached for a year. The `index.html` file is set never to be
 cached, otherwise a visitor would keep loading an old version after you deploy a
 new one.
 
-## Scoring to picture
+## Sound design
 
-This is the part for sound design over motion graphics. Click the first button
-in the bar on the left to open it.
+This is the part for sound design over motion graphics, and it is the screen
+the app opens on. If you have gone off to an instrument, the first button in
+the bar on the left brings you back.
 
 ### Load a video
 
@@ -258,8 +262,8 @@ showing.
 The question mark at the bottom of the bar on the left opens a panel listing
 what everything does and every keyboard shortcut.
 
-The first time you open the scoring view, a short walkthrough points at each
-part of the screen in turn. You can leave it at any step and it does not come
+The first time you open the app, a short walkthrough points at each part of
+the Sound design screen in turn. You can leave it at any step and it does not come
 back on its own. The help panel can start it again.
 
 ## Options
@@ -317,7 +321,7 @@ src/
   pattern.ts       creating and editing patterns
   persist.ts       reading and writing saved state
   types.ts         shared types
-  score-session.ts every action the scoring half can perform
+  score-session.ts every action the sound design screen can perform
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
@@ -336,6 +340,7 @@ src/
     save.ts        handing a file to the browser
   ui/              one file per part of the interface
   styles/          design tokens and stylesheets
+public/            files copied to the site root, which is where the icons live
 ```
 
 There are two rules that keep the parts separate. Nothing in `audio/` touches

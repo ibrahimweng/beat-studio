@@ -23,8 +23,8 @@ import type { View } from './ui/view.ts';
  * Build the app and attach it to `root`.
  *
  * There are two halves. The instrument half is for working out sounds, and
- * the score half is for placing them against a video. They share one audio
- * engine and nothing else. Returns a teardown function.
+ * the sound design half is for placing them against a video. They share one
+ * audio engine and nothing else. Returns a teardown function.
  */
 export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): () => void {
   const session = new Session(options);
@@ -41,7 +41,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const mixer = createMixer(session);
   const inspector = createInspector(session);
 
-  // Score half.
+  // Sound design half.
   const scoreBar = createScoreBar(score);
   const videoStage = createVideoStage(score);
   const timeline = createTimeline(score);
@@ -83,8 +83,8 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     else shell.appendChild(next);
     aside = next;
 
-    // The walkthrough points at parts of the scoring view, so it waits until
-    // that view is actually on screen.
+    // The walkthrough points at parts of the sound design screen, so it waits
+    // until that screen is actually on show.
     if (mode === 'score') requestAnimationFrame(() => tour.maybeStart());
   };
 
@@ -156,7 +156,7 @@ function ignore(event: KeyboardEvent): boolean {
 }
 
 /**
- * Score mode keys.
+ * Sound design keys.
  *
  * Arrows move the playhead a frame at a time, which is most of the work.
  * Holding shift moves the selected sound instead, so a hit that feels late
