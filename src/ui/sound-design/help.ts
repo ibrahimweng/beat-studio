@@ -56,6 +56,8 @@ const SECTIONS: readonly Section[] = [
   {
     title: 'Layout and export',
     rows: [
+      ['Video, on the instruments bar', 'Floats the clip over the drums, keys or guitar so you can play to it.'],
+      ['That window', 'Drag its strip to move it, its corner to resize it. It stays where you put it.'],
       ['Drag the line above the timeline', 'Make the timeline bigger. The video scales down.'],
       ['Double click that line', 'Put it back to where it started'],
       ['+ Layer', 'Add another layer. Double click a name to rename it.'],

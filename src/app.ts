@@ -13,6 +13,7 @@ import { createDivider } from './ui/sound-design/divider.ts';
 import { createHelp } from './ui/sound-design/help.ts';
 import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
 import { createVideoStage } from './ui/sound-design/stage.ts';
+import { createVideoWindow } from './ui/video-window.ts';
 import { createTimeline } from './ui/sound-design/timeline.ts';
 import { createTour } from './ui/sound-design/tour.ts';
 import { createStage } from './ui/stage.ts';
@@ -35,7 +36,10 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 
   // Instrument half.
   const rail = createRail(session, { onHelp: () => help.toggle() });
-  const topbar = createTopbar(session);
+  const topbar = createTopbar(session, {
+    onToggleVideo: () => videoWindow.toggle(),
+    hasVideo: () => soundDesign.store.state.videoReady,
+  });
   const stage = createStage(session);
   const dock = createDock(session);
   const mixer = createMixer(session);
@@ -44,6 +48,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   // Sound design half.
   const soundDesignBar = createSoundDesignBar(soundDesign);
   const videoStage = createVideoStage(soundDesign);
+  // The instruments screen borrows the same video element rather than making
+  // a second one, so there is only ever one clip at one moment.
+  const videoWindow = createVideoWindow({
+    video: videoStage.video,
+    home: () => videoStage.el,
+  });
   const timeline = createTimeline(soundDesign);
   const soundDesignPanel = createSoundDesignPanel(soundDesign);
   const divider = createDivider({
@@ -60,7 +70,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   ];
 
   const main = el('div', { class: 'main' });
-  const shell = el('div', { class: 'app' }, [rail.el, main]);
+  const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
   root.appendChild(shell);
 
   let mounted: 'play' | 'sound-design' | null = null;
@@ -76,6 +86,15 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     // has been taken out of the page, but the scheduler behind it would carry
     // on running and the transport would still read as playing.
     if (mode === 'play') soundDesign.pause();
+
+    // The video is one element shared by both screens, so leaving the sound
+    // design screen hands it to the floating window and coming back takes it
+    // home again. It is only worth showing once a clip has been loaded.
+    if (mode === 'play') {
+      if (soundDesign.store.state.videoReady && videoWindow.wanted) videoWindow.open();
+    } else {
+      videoWindow.stow();
+    }
 
     main.replaceChildren(
       ...(mode === 'play'
@@ -113,6 +132,13 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 
   const render = (state: AppState, previous: AppState | null): void => {
     mount(state.mode);
+    // A clip loaded while the instruments are already on screen should bring
+    // the window with it, rather than waiting for the next time the screens
+    // are swapped.
+    const ready = soundDesign.store.state.videoReady;
+    if (state.mode === 'play' && ready && videoWindow.wanted && !videoWindow.showing) {
+      videoWindow.open();
+    }
     for (const view of views) view.update(state, previous);
   };
 
