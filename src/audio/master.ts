@@ -218,47 +218,80 @@ export interface Master {
  */
 export function planMaster(mix: AudioBuffer, options: MasterOptions): Master {
   const before = measureLoudness(mix);
+  const peak = peakOf(mix);
 
-  let gain = 1;
-  let gainDb = 0;
-  if (options.target !== null && Number.isFinite(before)) {
-    gainDb = options.target - before;
-    gain = Math.pow(10, gainDb / 20);
-  }
+  const first = plan(mix, options, options.target === null ? 0 : options.target - before);
 
-  let peak = 0;
-  const channels = Math.min(2, mix.numberOfChannels);
-  for (let c = 0; c < channels; c++) {
-    const data = mix.getChannelData(c);
-    for (let i = 0; i < data.length; i++) {
-      const value = Math.abs(data[i]);
-      if (value > peak) peak = value;
-    }
-  }
-  const wouldHaveClipped = peak * gain > 1;
+  /*
+   * Holding the peaks back takes a little loudness with it, so a piece that
+   * needed a lot of holding lands under what it was asked for. How much is not
+   * knowable in advance, since it depends on the piece, but it is measurable
+   * afterwards, and putting the difference back and working it out again
+   * lands within a tenth of a decibel. Once is enough: the second pass moves
+   * the answer by far less than the first, so a third would not be worth the
+   * time it costs.
+   */
+  const settled =
+    options.target !== null && Number.isFinite(first.after) && Math.abs(options.target - first.after) > 0.1
+      ? plan(mix, options, first.gainDb + (options.target - first.after))
+      : first;
+
+  return {
+    gain: settled.gain,
+    envelope: settled.envelope,
+    report: {
+      before,
+      after: settled.after,
+      gainDb: settled.gainDb,
+      reductionDb: settled.reductionDb,
+      wouldHaveClipped: peak * settled.gain > 1,
+    },
+  };
+}
+
+/** Work out one attempt at a level change, and see where it lands. */
+function plan(
+  mix: AudioBuffer,
+  options: MasterOptions,
+  gainDb: number,
+): {
+  gain: number;
+  gainDb: number;
+  envelope: Float32Array | null;
+  after: number;
+  reductionDb: number;
+} {
+  const gain = Math.pow(10, gainDb / 20);
 
   let envelope: Float32Array | null = null;
   let reductionDb = 0;
   if (options.limit) {
-    const lifted = gain === 1 ? mix : scaled(mix, gain);
-    envelope = limiterEnvelope(lifted);
+    envelope = limiterEnvelope(gain === 1 ? mix : scaled(mix, gain));
     let lowest = 1;
     for (let i = 0; i < envelope.length; i++) if (envelope[i] < lowest) lowest = envelope[i];
     reductionDb = lowest < 1 ? -20 * Math.log10(lowest) : 0;
   }
 
-  const after = applyMaster(mix, { gain, envelope });
   return {
     gain,
+    gainDb,
     envelope,
-    report: {
-      before,
-      after: measureLoudness(after),
-      gainDb,
-      reductionDb,
-      wouldHaveClipped,
-    },
+    reductionDb,
+    after: measureLoudness(applyMaster(mix, { gain, envelope })),
   };
+}
+
+function peakOf(buffer: AudioBuffer): number {
+  let peak = 0;
+  const channels = Math.min(2, buffer.numberOfChannels);
+  for (let c = 0; c < channels; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < data.length; i++) {
+      const value = Math.abs(data[i]);
+      if (value > peak) peak = value;
+    }
+  }
+  return peak;
 }
 
 /** Apply a plan to a buffer. Used for the mix and for each stem alike. */
