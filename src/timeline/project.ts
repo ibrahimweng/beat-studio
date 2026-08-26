@@ -1,6 +1,9 @@
+import { PAD_MIDI } from '../constants.ts';
+import type { PadName } from '../types.ts';
 import {
   DESIGN_DEFAULT_ANCHOR,
   DESIGN_DEFAULT_LENGTH,
+  DESIGN_NAMES,
   type Cue,
   type CueSource,
   type DesignName,
@@ -35,11 +38,30 @@ export function emptyProject(): Project {
 }
 
 let counter = 0;
+/** Every id handed out or read from a file, so none of them is used twice. */
+const usedIds = new Set<string>();
 
 /** Ids only need to be unique within a session. */
 export function newId(prefix: string): string {
-  counter += 1;
-  return `${prefix}${counter.toString(36)}`;
+  let id: string;
+  do {
+    counter += 1;
+    id = `${prefix}${counter.toString(36)}`;
+  } while (usedIds.has(id));
+  usedIds.add(id);
+  return id;
+}
+
+/**
+ * Remember ids that came out of a session file.
+ *
+ * A file brings its own ids with it, and the counter behind {@link newId}
+ * knows nothing about them. Without this, the next sound placed after opening
+ * a session could be handed an id the file had already used, and the two
+ * would be treated as one.
+ */
+function reserveIds(ids: Iterable<string>): void {
+  for (const id of ids) usedIds.add(id);
 }
 
 export function makeCue(time: number, layerId: string, source: CueSource): Cue {
@@ -195,6 +217,141 @@ export function toSession(project: Project): SessionFile {
 }
 
 /**
+ * The widest values the controls offer.
+ *
+ * A file is held to these, so a number nothing in the app could have set
+ * cannot reach the audio graph or ask the renderer for an hour of silence.
+ */
+const MAX_GAIN = 1.5;
+const MAX_TUNE = 24;
+const MIN_LENGTH = 0.02;
+const MAX_LENGTH = 4;
+
+/** A number out of a file, with a default and the range it has to sit in. */
+function readNumber(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Read the layers out of a session file.
+ *
+ * Every field is checked and filled in, because the file came off disk and
+ * may have been written by an older version or edited by hand. Two layers
+ * sharing an id would both answer to the same sounds, so the second is
+ * dropped. A file with nothing usable in it falls back to the starter layers,
+ * since a project with nowhere to put a sound is not a state worth reaching.
+ */
+function readLayers(raw: unknown, fallback: readonly Layer[]): Layer[] {
+  if (!Array.isArray(raw)) return [...fallback];
+
+  const layers: Layer[] = [];
+  const seen = new Set<string>();
+
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const layer = item as Partial<Layer>;
+    if (typeof layer.id !== 'string' || !layer.id || seen.has(layer.id)) continue;
+    seen.add(layer.id);
+
+    const name = typeof layer.name === 'string' ? layer.name.trim().slice(0, 40) : '';
+    layers.push({
+      id: layer.id,
+      name: name || `Layer ${layers.length + 1}`,
+      muted: layer.muted === true,
+      solo: layer.solo === true,
+      gain: readNumber(layer.gain, 1, 0, MAX_GAIN),
+    });
+  }
+
+  return layers.length ? layers : [...fallback];
+}
+
+/**
+ * Read what a sound points at.
+ *
+ * A name no voice answers to is not worth keeping: it would draw a sound on
+ * the timeline that plays nothing at all.
+ */
+function readSource(raw: unknown): CueSource | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as Partial<CueSource>;
+  if (typeof source.name !== 'string') return null;
+
+  if (source.kind === 'design') {
+    return DESIGN_NAMES.includes(source.name as DesignName)
+      ? { kind: 'design', name: source.name as DesignName }
+      : null;
+  }
+  if (source.kind === 'kit') {
+    return source.name in PAD_MIDI ? { kind: 'kit', name: source.name as PadName } : null;
+  }
+  if (source.kind === 'pitched' && (source.name === 'piano' || source.name === 'guitar')) {
+    return {
+      kind: 'pitched',
+      name: source.name,
+      midi: Math.round(readNumber(source.midi, 60, 0, 127)),
+    };
+  }
+  return null;
+}
+
+/**
+ * Read the sounds out of a session file.
+ *
+ * A sound on a layer the file does not contain is dropped, because there
+ * would be nowhere to draw it and nothing to play it. Everything else is
+ * filled in from the defaults for that voice, since a length or a level that
+ * is not a number would reach the audio graph and stop the project sounding
+ * at all.
+ */
+function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
+  if (!Array.isArray(raw)) return [];
+
+  const cues: Cue[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const cue = item as Partial<Cue>;
+    if (typeof cue.time !== 'number' || !Number.isFinite(cue.time)) continue;
+    if (typeof cue.layerId !== 'string' || !known.has(cue.layerId)) continue;
+
+    const source = readSource(cue.source);
+    if (!source) continue;
+
+    const design = source.kind === 'design' ? (source.name as DesignName) : null;
+    // A file that repeats an id, or shares one with a session opened earlier,
+    // is given a fresh one rather than two sounds that move together.
+    const id =
+      typeof cue.id === 'string' && cue.id && !usedIds.has(cue.id) ? cue.id : newId('c');
+    usedIds.add(id);
+
+    cues.push({
+      id,
+      time: Math.max(0, cue.time),
+      layerId: cue.layerId,
+      source,
+      gain: readNumber(cue.gain, 1, 0, MAX_GAIN),
+      tune: Math.round(readNumber(cue.tune, 0, -MAX_TUNE, MAX_TUNE)),
+      length: readNumber(
+        cue.length,
+        design ? DESIGN_DEFAULT_LENGTH[design] : 0.4,
+        MIN_LENGTH,
+        MAX_LENGTH,
+      ),
+      anchor:
+        cue.anchor === 'end' || cue.anchor === 'start'
+          ? cue.anchor
+          : design
+            ? DESIGN_DEFAULT_ANCHOR[design]
+            : 'start',
+      muted: cue.muted === true,
+    });
+  }
+
+  return cues;
+}
+
+/**
  * Read a session file. Everything is checked, because the file came off disk
  * and may be from an older version. Returns null if it is not usable.
  */
@@ -206,20 +363,10 @@ export function fromSession(raw: unknown): Project | null {
   const base = emptyProject();
   const p = file.project as Partial<Project>;
 
-  const layers = Array.isArray(p.layers) && p.layers.length ? p.layers : base.layers;
-  const known = new Set(layers.map((l) => l.id));
-
-  const cues = Array.isArray(p.cues)
-    ? p.cues.filter(
-        (c): c is Cue =>
-          !!c &&
-          typeof c.time === 'number' &&
-          Number.isFinite(c.time) &&
-          typeof c.layerId === 'string' &&
-          known.has(c.layerId) &&
-          !!c.source,
-      )
-    : [];
+  // Layers first: a sound can only be kept if the layer it names survived.
+  const layers = readLayers(p.layers, base.layers);
+  reserveIds(layers.map((l) => l.id));
+  const cues = readCues(p.cues, new Set(layers.map((l) => l.id)));
 
   return {
     ...base,

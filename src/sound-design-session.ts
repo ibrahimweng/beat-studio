@@ -537,7 +537,12 @@ export class SoundDesignSession {
       duration: current.duration || project.duration,
       videoName: current.videoName ?? project.videoName,
     });
+    // The layer sounds were being placed on may not exist in the file that
+    // was just opened. Left pointing at a layer that is gone, everything
+    // dropped at the playhead would land somewhere nothing draws or plays.
+    const active = this.#store.state.activeLayerId;
     this.#store.set({
+      activeLayerId: project.layers.some((l) => l.id === active) ? active : project.layers[0].id,
       selectedCueId: null,
       status: `session loaded, ${project.cues.length} sounds`,
     });
