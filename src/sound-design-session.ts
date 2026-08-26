@@ -1,6 +1,8 @@
 import type { AudioEngine } from './audio/engine.ts';
 import { renderPerSound, renderProject, renderStems, type Rendered } from './audio/render.ts';
 import type { MasterReport } from './audio/master.ts';
+import { readPack, registerPack, unregisterPack, type Pack } from './audio/pack.ts';
+import { loadPacks, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { markerCsv } from './export/markers.ts';
@@ -8,6 +10,7 @@ import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
   addLayer,
+  newId,
   cueStart,
   cuesOnLayer,
   fromSession,
@@ -97,6 +100,84 @@ export class SoundDesignSession {
   constructor(engine: AudioEngine, store: Store) {
     this.#engine = engine;
     this.#store = store;
+    this.#restorePacks();
+  }
+
+  // ---------- sound packs ----------
+
+  /**
+   * Take on a pack that was loaded last time.
+   *
+   * Packs are kept as the files they arrived as, so what comes back is what
+   * was loaded rather than anything derived from it. A file that no longer
+   * reads is dropped without comment: there is nothing useful to say about it
+   * at the moment the app opens.
+   */
+  #restorePacks(): void {
+    const packs: Pack[] = [];
+    for (const file of loadPacks()) {
+      const pack = readPack(file, newId('p'));
+      if (pack) {
+        registerPack(pack);
+        packs.push(pack);
+      }
+    }
+    if (packs.length) this.#store.set({ packs });
+  }
+
+  /**
+   * Read a sound pack and add everything in it to the palette.
+   *
+   * A pack is a small text file describing how to make its sounds, not the
+   * sounds themselves, so nothing is fetched or decoded and it works with no
+   * network at all. Loading one whose name is already here replaces it,
+   * because two packs of the same name are almost always the same pack.
+   */
+  async loadPack(file: File): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      this.#store.set({ status: `${file.name} is not a sound pack` });
+      return;
+    }
+    this.#addPack(parsed, `${file.name} is not a sound pack`);
+  }
+
+  #addPack(parsed: unknown, complaint: string): Pack | null {
+    const pack = readPack(parsed, newId('p'));
+    if (!pack) {
+      this.#store.set({ status: complaint });
+      return null;
+    }
+
+    const existing = this.#store.state.packs.find((p) => p.name === pack.name);
+    if (existing) unregisterPack(existing.id);
+    registerPack(pack);
+
+    const packs = existing
+      ? this.#store.state.packs.map((p) => (p.id === existing.id ? pack : p))
+      : [...this.#store.state.packs, pack];
+
+    this.#store.set({ packs, status: this.#packStatus(pack, existing !== undefined) });
+    savePacks(packs.map((p) => p.file));
+    return pack;
+  }
+
+  #packStatus(pack: Pack, replaced: boolean): string {
+    const count = `${pack.sounds.length} sound${pack.sounds.length === 1 ? '' : 's'}`;
+    const left = pack.skipped.length ? `, ${pack.skipped.length} left out` : '';
+    return `${pack.name}: ${count}${left}${replaced ? ', replacing the one before' : ''}`;
+  }
+
+  /** Take a pack back out of the palette. Sounds already placed stay put. */
+  removePack(id: string): void {
+    const pack = this.#store.state.packs.find((p) => p.id === id);
+    if (!pack) return;
+    unregisterPack(id);
+    const packs = this.#store.state.packs.filter((p) => p.id !== id);
+    this.#store.set({ packs, status: `${pack.name} removed` });
+    savePacks(packs.map((p) => p.file));
   }
 
   /** Read-only access for views that redraw outside a state change. */
@@ -617,7 +698,9 @@ export class SoundDesignSession {
   // ---------- session file ----------
 
   saveSession(): void {
-    const blob = new Blob([JSON.stringify(toSession(this.project), null, 2)], {
+    // The packs go in the file too, so it opens complete somewhere else.
+    const packs = this.#store.state.packs.map((pack) => pack.file);
+    const blob = new Blob([JSON.stringify(toSession(this.project, packs), null, 2)], {
       type: 'application/json',
     });
     const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
@@ -633,11 +716,16 @@ export class SoundDesignSession {
       this.#store.set({ status: 'that file is not a session' });
       return;
     }
-    const project = fromSession(parsed);
-    if (!project) {
+    const read = fromSession(parsed);
+    if (!read) {
       this.#store.set({ status: 'that file is not a session' });
       return;
     }
+    const { project } = read;
+
+    // Packs first, so the sounds on the timeline have something to play with
+    // by the time anything looks at them.
+    for (const file of read.packs) this.#addPack(file, 'a pack in that session could not be read');
     // The video itself is not stored, so keep whichever one is loaded.
     const current = this.project;
     this.#setProject({

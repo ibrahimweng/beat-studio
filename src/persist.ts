@@ -1,4 +1,4 @@
-import { BANK_KEYS, BPM_MAX, BPM_MIN, LANES, MAX_STEPS, STORAGE_KEY } from './constants.ts';
+import { BANK_KEYS, BPM_MAX, BPM_MIN, LANES, MAX_STEPS, PACKS_KEY, STORAGE_KEY } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import type { BankKey, Banks, SavedState } from './types.ts';
 
@@ -57,5 +57,32 @@ export function saveState(state: SavedState): void {
   } catch {
     // Storage full or unavailable — the session still works, it just will not
     // survive a reload.
+  }
+}
+
+/**
+ * The sound packs that were loaded, as the files they came from.
+ *
+ * Stored as the original files rather than as anything this app derived from
+ * them, so a pack read back is the pack that was loaded and nothing else.
+ * Failures are ignored: a palette that has to be loaded again is a small cost
+ * next to interrupting someone over it.
+ */
+export function savePacks(files: unknown[]): void {
+  try {
+    localStorage.setItem(PACKS_KEY, JSON.stringify(files));
+  } catch {
+    // Storage full or unavailable.
+  }
+}
+
+export function loadPacks(): unknown[] {
+  try {
+    const raw = localStorage.getItem(PACKS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }

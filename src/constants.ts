@@ -129,3 +129,4 @@ export const BPM_MIN = 40;
 export const BPM_MAX = 220;
 
 export const STORAGE_KEY = 'toolcraft.st88.v2';
+export const PACKS_KEY = 'toolcraft.st88.packs';

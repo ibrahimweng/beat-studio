@@ -38,44 +38,141 @@ function noteName(midi: number): string {
  */
 export function createSoundDesignPanel(session: SoundDesignSession): View {
   // ---------- sound picker ----------
-  // Twenty four in one row is a wall. Grouped by what they are for, it reads.
-  const designButtons: HTMLButtonElement[] = [];
-  const designNames: string[] = [];
-  const designSections = DESIGN_GROUPS.map((group) => {
-    const buttons = group.names.map((name) => {
-      const node = button(
-        { class: 'cell pick', on: { click: () => session.setSource({ kind: 'design', name }) } },
-        [el('span', { text: name })],
-      );
-      designButtons.push(node);
-      designNames.push(name);
-      return node;
-    });
-    return el('div', { class: 'pick-group' }, [
-      el('div', { class: 'pick-group__title', text: group.title }),
-      el('div', { class: 'pick-row' }, buttons),
-    ]);
+
+  /**
+   * Every sound that can be placed, whether it is built in or came from a
+   * pack. Held in one list so the filter and the highlight can work the same
+   * way across all of them.
+   */
+  interface Pick {
+    node: HTMLButtonElement;
+    /** What the filter matches against. */
+    label: string;
+    /** Whether this is the sound a click on the timeline would place. */
+    chosen: (source: CueSource) => boolean;
+  }
+
+  /** A titled row of sounds, which hides itself when the filter empties it. */
+  interface Section {
+    node: HTMLElement;
+    picks: Pick[];
+  }
+
+  /**
+   * Every section, built in ones first and packs after.
+   *
+   * Packs are always appended, so forgetting them again is a matter of
+   * cutting the list back to the number that were there before any were
+   * loaded. That is what `builtIn` records.
+   */
+  const sections: Section[] = [];
+  let builtIn = 0;
+
+  const pickButton = (
+    label: string,
+    source: CueSource,
+    chosen: (current: CueSource) => boolean,
+  ): Pick => ({
+    node: button(
+      { class: 'cell pick', on: { click: () => session.setSource(source) } },
+      [el('span', { text: label })],
+    ),
+    label,
+    chosen,
   });
 
-  const kitButtons = KIT_PICKS.map((pick) =>
-    button(
-      { class: 'cell pick', on: { click: () => session.setSource({ kind: 'kit', name: pick.name }) } },
-      [el('span', { text: pick.label })],
+  /** A titled row of sounds, which disappears when the filter empties it. */
+  const pickGroup = (title: string, group: Pick[], extra?: HTMLElement): HTMLElement => {
+    const node = el('div', { class: 'pick-group' }, [
+      el('div', { class: 'pick-group__title' }, [el('span', { text: title }), ...(extra ? [extra] : [])]),
+      el('div', { class: 'pick-row' }, group.map((p) => p.node)),
+    ]);
+    sections.push({ node, picks: group });
+    return node;
+  };
+
+  // Twenty four in one row is a wall. Grouped by what they are for, it reads.
+  const designSections = DESIGN_GROUPS.map((group) =>
+    pickGroup(
+      group.title,
+      group.names.map((name) =>
+        pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
+      ),
     ),
   );
 
-  const pitchedButtons = PITCHED.map((pick) =>
-    button(
-      {
-        class: 'cell pick',
-        on: {
-          click: () =>
-            session.setSource({ kind: 'pitched', name: pick.name, midi: DEFAULT_MIDI }),
-        },
-      },
-      [el('span', { text: pick.label })],
+  const kitSection = pickGroup(
+    'Kit',
+    KIT_PICKS.map((pick) =>
+      pickButton(pick.label, { kind: 'kit', name: pick.name }, (c) =>
+        sameSource(c, { kind: 'kit', name: pick.name }),
+      ),
     ),
   );
+
+  const pitchedSection = pickGroup(
+    'Pitched',
+    PITCHED.map((pick) =>
+      pickButton(
+        pick.label,
+        { kind: 'pitched', name: pick.name, midi: DEFAULT_MIDI },
+        (c) => sameSource(c, { kind: 'pitched', name: pick.name }),
+      ),
+    ),
+  );
+
+  /* ---------- packs ---------- */
+
+  const packSections = el('div', {});
+  const packInput = el('input', {
+    type: 'file',
+    style: { display: 'none' },
+    attrs: { accept: 'application/json,.json', multiple: '' },
+    on: {
+      change: (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        for (const file of Array.from(input.files ?? [])) void session.loadPack(file);
+        input.value = '';
+      },
+    },
+  }) as HTMLInputElement;
+
+  const loadPacks = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title:
+        'A sound pack is a small file describing how to make its sounds. Anything ' +
+        'written for @web-kits/audio works, and nothing is uploaded or downloaded ' +
+        'to use one.',
+      on: { click: () => packInput.click() },
+    },
+    ['Load a sound pack'],
+  );
+
+  /** Filter, which is what makes several hundred sounds usable at all. */
+  const search = el('input', {
+    class: 'pick-search',
+    type: 'search',
+    attrs: { placeholder: 'Find a sound', 'aria-label': 'Find a sound' },
+  }) as HTMLInputElement;
+
+  function applyFilter(): void {
+    const term = search.value.trim().toLowerCase();
+    for (const section of sections) {
+      let showing = 0;
+      for (const pick of section.picks) {
+        const keep = !term || pick.label.toLowerCase().includes(term);
+        pick.node.style.display = keep ? '' : 'none';
+        if (keep) showing++;
+      }
+      section.node.style.display = showing ? '' : 'none';
+    }
+  }
+  search.addEventListener('input', applyFilter);
+
+  // Everything after this point is a pack.
+  builtIn = sections.length;
 
   const layerRow = el('div', { class: 'pick-row' });
 
@@ -330,11 +427,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const root = el('aside', { class: 'inspector' }, [
     el('div', {}, [
       el('div', { class: 'section-title', text: 'Place' }),
+      search,
       ...designSections,
-      el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'Kit' }),
-      el('div', { class: 'pick-row' }, kitButtons),
-      el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'Pitched' }),
-      el('div', { class: 'pick-row' }, pitchedButtons),
+      kitSection,
+      pitchedSection,
+      packSections,
+      el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'On layer' }),
       layerRow,
     ]),
@@ -345,6 +443,43 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;
+  let paintedPacks: AppState['packs'] | null = null;
+
+  /**
+   * Rebuild the pack sections.
+   *
+   * Packs change rarely, so the whole lot is redrawn rather than worked out
+   * one by one. Cutting the section list back to the built in ones first is
+   * what stops a removed pack's sounds going on being filtered and lit.
+   */
+  function paintPacks(packs: AppState['packs']): void {
+    sections.length = builtIn;
+    clear(packSections);
+
+    for (const pack of packs) {
+      const remove = button(
+        {
+          class: 'tl__layer-btn tl__layer-btn--remove',
+          title: `Remove ${pack.name}`,
+          on: { click: () => session.removePack(pack.id) },
+        },
+        ['×'],
+      );
+      packSections.appendChild(
+        pickGroup(
+          `${pack.name} · ${pack.sounds.length}`,
+          pack.sounds.map((sound) =>
+            pickButton(
+              sound.name,
+              { kind: 'pack', name: sound.name, pack: pack.id },
+              (c) => c.kind === 'pack' && c.pack === pack.id && c.name === sound.name,
+            ),
+          ),
+          remove,
+        ),
+      );
+    }
+  }
 
   return {
     el: root,
@@ -352,19 +487,17 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     update(state: AppState) {
       const { project, currentSource, selectedCueId } = state;
 
-      designButtons.forEach((node, i) =>
-        toggleClass(
-          node,
-          'is-on',
-          currentSource.kind === 'design' && currentSource.name === designNames[i],
-        ),
-      );
-      kitButtons.forEach((node, i) =>
-        toggleClass(node, 'is-on', sameSource(currentSource, { kind: 'kit', name: KIT_PICKS[i].name })),
-      );
-      pitchedButtons.forEach((node, i) =>
-        toggleClass(node, 'is-on', sameSource(currentSource, { kind: 'pitched', name: PITCHED[i].name })),
-      );
+      if (state.packs !== paintedPacks) {
+        paintedPacks = state.packs;
+        paintPacks(state.packs);
+        applyFilter();
+      }
+
+      for (const section of sections) {
+        for (const pick of section.picks) {
+          toggleClass(pick.node, 'is-on', pick.chosen(currentSource));
+        }
+      }
 
       if (project.layers !== paintedLayers) {
         paintedLayers = project.layers;

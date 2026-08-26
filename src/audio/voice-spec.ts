@@ -34,7 +34,18 @@
 export interface Point {
   at: number;
   to: number;
-  curve?: 'set' | 'linear' | 'exp';
+  /**
+   * How the value gets there.
+   *
+   * `target` eases towards the value rather than arriving at it, over the
+   * time constant in {@link tc}. It never quite gets there, which is what an
+   * instrument actually does when a note is let go, and it is how the
+   * `@web-kits/audio` format shapes every sound. Having it here means a pack
+   * written for that format can be described exactly rather than nearly.
+   */
+  curve?: 'set' | 'linear' | 'exp' | 'target';
+  /** Time constant for a `target` curve: how long it takes to close two thirds. */
+  tc?: number;
 }
 
 /** A value over time. One point holds it steady. */
@@ -50,10 +61,24 @@ export interface OscSource {
   freq: Curve;
   /** Detune in cents. */
   detune?: number;
+  /**
+   * A second oscillator driving this one's pitch.
+   *
+   * `ratio` is its frequency as a multiple of this one's, and `depth` is how
+   * far it pushes the pitch, in Hz. Ratios that are not whole numbers give a
+   * bell or a struck object rather than a note, which is why so much of the
+   * interface sound anyone has ever liked is made this way.
+   */
+  fm?: { ratio: number; depth: number };
 }
 
 export interface NoiseSource {
   kind: 'noise';
+  /**
+   * White is flat, pink falls away as the pitch rises, brown falls faster.
+   * White reads as air and hiss, brown as weather and rumble.
+   */
+  color?: 'white' | 'pink' | 'brown';
   /**
    * Fade the buffer out across its own length before anything else touches
    * it. The drum kit is built this way and it is part of why those voices
@@ -94,6 +119,30 @@ export interface LfoSpec {
   target: 'gain' | 'filterFreq';
 }
 
+/**
+ * A room around a sound.
+ *
+ * Beat Studio has always had one reverb at the end of everything, which means
+ * a click and an impact share a room whether that suits them or not. A voice
+ * can now carry its own, which is what lets an impact have a hall behind it
+ * while the click next to it stays dry.
+ */
+export interface ReverbSpec {
+  kind: 'reverb';
+  /** Length of the tail in seconds. */
+  decay: number;
+  /** How much of the sound is the room, 0 to 1. */
+  mix: number;
+  /** Silence before the room answers, in seconds. */
+  preDelay?: number;
+  /** Takes the top off the tail, 0 to 1, for a softer room. */
+  damping?: number;
+  /** Multiplier on the tail length. */
+  roomSize?: number;
+}
+
+export type EffectSpec = ReverbSpec;
+
 export interface LayerSpec {
   source: SourceSpec;
   filter?: FilterSpec;
@@ -104,6 +153,8 @@ export interface LayerSpec {
   /** Seconds after the voice starts. */
   delay?: number;
   lfo?: readonly LfoSpec[];
+  /** Applied to this layer alone, after its envelope. */
+  effects?: readonly EffectSpec[];
   /**
    * How long the source runs past its own length before being stopped.
    *
@@ -121,6 +172,8 @@ export interface VoiceSpec {
   /** How long the whole voice occupies. */
   duration: number;
   layers: readonly LayerSpec[];
+  /** Applied to all the layers together. */
+  effects?: readonly EffectSpec[];
 }
 
 /** What a voice is being asked for: how long, how high and how loud. */
@@ -182,6 +235,8 @@ function applyCurve(param: AudioParam, curve: Curve, t: number): void {
     if (point.curve === 'set') param.setValueAtTime(point.to, at);
     else if (point.curve === 'exp') {
       param.exponentialRampToValueAtTime(Math.max(FLOOR, point.to), at);
+    } else if (point.curve === 'target') {
+      param.setTargetAtTime(point.to, at, Math.max(1e-4, point.tc ?? 0.01));
     } else param.linearRampToValueAtTime(point.to, at);
   }
 }
@@ -189,16 +244,127 @@ function applyCurve(param: AudioParam, curve: Curve, t: number): void {
 function noiseBuffer(
   ctx: BaseAudioContext,
   seconds: number,
-  fade: boolean,
+  source: NoiseSource,
   random: () => number,
 ): AudioBuffer {
   const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) {
-    data[i] = (random() * 2 - 1) * (fade ? 1 - i / length : 1);
+  fillNoise(data, source.color ?? 'white', random);
+  if (source.fade) {
+    for (let i = 0; i < length; i++) data[i] *= 1 - i / length;
   }
   return buffer;
+}
+
+/**
+ * Noise of a given colour.
+ *
+ * Pink and brown are made by filtering white as it is generated rather than
+ * afterwards. The pink coefficients are the usual published set, and brown is
+ * a running sum held back from wandering away from zero. Both are written the
+ * way the `@web-kits/audio` engine writes them, so a pack that asks for pink
+ * gets the pink it was designed against.
+ */
+function fillNoise(
+  data: Float32Array,
+  color: 'white' | 'pink' | 'brown',
+  random: () => number,
+): void {
+  if (color === 'pink') {
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = random() * 2 - 1;
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.969 * b2 + white * 0.153852;
+      b3 = 0.8665 * b3 + white * 0.3104856;
+      b4 = 0.55 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.016898;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+      b6 = white * 0.115926;
+    }
+    return;
+  }
+  if (color === 'brown') {
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[i] = last * 3.5;
+    }
+    return;
+  }
+  for (let i = 0; i < data.length; i++) data[i] = random() * 2 - 1;
+}
+
+/** A room, built from decaying noise the convolver can multiply a sound by. */
+function buildReverb(
+  ctx: BaseAudioContext,
+  spec: ReverbSpec,
+  random: () => number,
+): { input: AudioNode; output: AudioNode } {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+
+  const dry = ctx.createGain();
+  dry.gain.value = 1 - spec.mix;
+  input.connect(dry);
+  dry.connect(output);
+
+  const wet = ctx.createGain();
+  wet.gain.value = spec.mix;
+  input.connect(wet);
+
+  const seconds = Math.max(0.01, spec.decay * (spec.roomSize ?? 1));
+  const length = Math.ceil(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      data[i] = (random() * 2 - 1) * Math.exp(-i / (length * 0.28));
+    }
+    const damping = Math.min(spec.damping ?? 0, 0.99);
+    if (damping > 0) {
+      let previous = 0;
+      for (let i = 0; i < length; i++) {
+        previous = data[i] * (1 - damping) + previous * damping;
+        data[i] = previous;
+      }
+    }
+  }
+
+  const convolver = ctx.createConvolver();
+  convolver.buffer = buffer;
+
+  if (spec.preDelay && spec.preDelay > 0) {
+    const wait = ctx.createDelay(Math.max(spec.preDelay + 0.01, 1));
+    wait.delayTime.value = spec.preDelay;
+    wet.connect(wait);
+    wait.connect(convolver);
+  } else {
+    wet.connect(convolver);
+  }
+  convolver.connect(output);
+
+  return { input, output };
+}
+
+/** Run a node through a chain of effects and on to a destination. */
+function through(
+  ctx: BaseAudioContext,
+  from: AudioNode,
+  effects: readonly EffectSpec[],
+  dest: AudioNode,
+  random: () => number,
+): void {
+  let cursor = from;
+  for (const effect of effects) {
+    const node = buildReverb(ctx, effect, random);
+    cursor.connect(node.input);
+    cursor = node.output;
+  }
+  cursor.connect(dest);
 }
 
 function reverseBuffer(
@@ -237,6 +403,22 @@ function buildSource(
     applyCurve(osc.frequency, source.freq, t);
     osc.start(t);
     osc.stop(until);
+
+    if (source.fm) {
+      // The modulator is pitched against where the carrier starts, so a
+      // sweeping note keeps the same character as it moves.
+      const carrier = source.freq[0]?.to ?? 440;
+      const modulator = ctx.createOscillator();
+      const depth = ctx.createGain();
+      modulator.type = 'sine';
+      modulator.frequency.value = carrier * source.fm.ratio;
+      depth.gain.value = source.fm.depth;
+      modulator.connect(depth);
+      depth.connect(osc.frequency);
+      modulator.start(t);
+      modulator.stop(until);
+    }
+
     return { node: osc, freq: osc.frequency };
   }
 
@@ -244,7 +426,7 @@ function buildSource(
   node.buffer =
     source.kind === 'reverse'
       ? reverseBuffer(ctx, length, source, random)
-      : noiseBuffer(ctx, length, source.fade === true, random);
+      : noiseBuffer(ctx, length, source, random);
   node.start(t);
   node.stop(until);
   return { node, freq: null };
@@ -285,6 +467,15 @@ export function renderVoice(
   // other however many of them there are.
   const random = seed === undefined ? Math.random : sequence(seed);
 
+  // Anything applied to the voice as a whole sits between every layer and the
+  // destination, so the layers reach it already summed.
+  let out = dest;
+  if (spec.effects?.length) {
+    const bus = ctx.createGain();
+    through(ctx, bus, spec.effects, dest, random);
+    out = bus;
+  }
+
   for (const layer of spec.layers) {
     const start = t + (layer.delay ?? 0);
     const { node } = buildSource(ctx, layer, start, random);
@@ -305,7 +496,8 @@ export function renderVoice(
     const gain = ctx.createGain();
     applyCurve(gain.gain, layer.gain, start);
     tail.connect(gain);
-    gain.connect(dest);
+    if (layer.effects?.length) through(ctx, gain, layer.effects, out, random);
+    else gain.connect(out);
 
     for (const lfo of layer.lfo ?? []) {
       const target = lfo.target === 'gain' ? gain.gain : filterFreq;
