@@ -107,12 +107,36 @@ export interface Cue {
   muted: boolean;
 }
 
+/**
+ * A point on a layer's level over time.
+ *
+ * Two of these are a fade. A handful are a shape that follows the picture,
+ * which is what a bed of rumble under a sequence actually needs: it has to
+ * come up as the shot opens out and get out of the way when someone speaks.
+ */
+export interface AutoPoint {
+  /** Seconds from the start of the video. */
+  t: number;
+  /** Level, 0 to 1.5. */
+  value: number;
+}
+
 export interface Layer {
   id: string;
   name: string;
   muted: boolean;
   solo: boolean;
+  /** The level, when nothing is drawn. */
   gain: number;
+  /**
+   * The level over time, in order.
+   *
+   * Empty means the fixed level above applies throughout. As soon as there is
+   * anything here it takes over completely, rather than multiplying with the
+   * fixed level, because two things claiming to be the same control is how
+   * you end up unable to work out why something is quiet.
+   */
+  auto: AutoPoint[];
 }
 
 export interface Project {

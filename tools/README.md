@@ -55,6 +55,18 @@ doing the work once and applying it to everything.
 
 Run the development server and open http://localhost:5173/tools/master-check.html
 
+## automation-check.html
+
+Checks that a level drawn over a layer reaches the file.
+
+It renders a steady bed of sound on one layer and then draws shapes over it:
+nothing at all, a fade, and a dip in the middle. Then it reads back how loud
+each second came out. It also checks that a drawn level takes over from the
+fixed one rather than stacking with it, and that reading a level between two
+points gives a straight line.
+
+Run the development server and open http://localhost:5173/tools/automation-check.html
+
 ## character-check.html
 
 Checks that Space and Drive do what they say.

@@ -52,6 +52,8 @@ const SECTIONS: readonly Section[] = [
       ['Drag the line above the timeline', 'Make the timeline bigger. The video scales down.'],
       ['Double click that line', 'Put it back to where it started'],
       ['+ Layer', 'Add another layer. Double click a name to rename it.'],
+      ['A, next to a layer name', 'Opens that layer’s level, so it can be drawn over time.'],
+      ['On a level lane', 'Click to add a point, drag to move it, click a point twice to remove it.'],
       ['Fit', 'Frame the whole clip in the timeline'],
       ['Stop it clipping', 'Holds the loudest moments back so a stack of sounds cannot distort the file.'],
       ['Match loudness', 'Brings every export to the same loudness, so two pieces sit the same way.'],

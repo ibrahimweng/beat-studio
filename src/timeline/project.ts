@@ -1,6 +1,7 @@
 import { packSpec } from '../audio/pack.ts';
 import { PAD_MIDI } from '../constants.ts';
 import type { PadName } from '../types.ts';
+import type { AutoPoint } from './types.ts';
 import {
   DEFAULT_CHARACTER,
   DESIGN_CHARACTER,
@@ -33,7 +34,7 @@ export function emptyProject(): Project {
     fps: DEFAULT_FPS,
     duration: 0,
     videoName: null,
-    layers: STARTER_LAYERS.map((l) => ({ ...l, muted: false, solo: false, gain: 1 })),
+    layers: STARTER_LAYERS.map((l) => ({ ...l, muted: false, solo: false, gain: 1, auto: [] })),
     cues: [],
     bpm: 120,
     snap: 'frame',
@@ -128,9 +129,90 @@ export function audibleCues(project: Project): Cue[] {
 }
 
 /** Level for a cue once its layer's level is applied. */
+/**
+ * Level for a cue once its layer's level is applied.
+ *
+ * A layer with a level drawn over time is not accounted for here, because
+ * that level belongs to a moment rather than to a sound: it is applied to
+ * everything on the layer at once, further down. See {@link layerLevelAt}.
+ */
 export function cueGain(project: Project, cue: Cue): number {
   const layer = project.layers.find((l) => l.id === cue.layerId);
-  return cue.gain * (layer ? layer.gain : 1);
+  if (!layer) return cue.gain;
+  return cue.gain * (layer.auto.length ? 1 : layer.gain);
+}
+
+/** What a layer's level is at a moment, reading between the points drawn. */
+export function layerLevelAt(layer: Layer, t: number): number {
+  const points = layer.auto;
+  if (!points.length) return layer.gain;
+  if (t <= points[0].t) return points[0].value;
+
+  const last = points[points.length - 1];
+  if (t >= last.t) return last.value;
+
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1];
+    const to = points[i];
+    if (t > to.t) continue;
+    const span = to.t - from.t;
+    return span <= 0 ? to.value : from.value + ((t - from.t) / span) * (to.value - from.value);
+  }
+  return last.value;
+}
+
+/**
+ * Write a layer's level onto a parameter, over a stretch of the video.
+ *
+ * Used twice over. The file is written in one pass, from nothing to the end.
+ * Playing writes only the fraction of a second ahead of where the video is,
+ * again on every tick, so that the level stays with the picture rather than
+ * drifting away from it over a long piece.
+ */
+export function scheduleLayerLevel(
+  param: AudioParam,
+  layer: Layer,
+  origin: number,
+  from: number,
+  to: number,
+): void {
+  if (to <= from) return;
+  param.cancelScheduledValues(origin + from);
+  param.setValueAtTime(layerLevelAt(layer, from), origin + from);
+  for (const point of layer.auto) {
+    if (point.t <= from || point.t > to) continue;
+    param.linearRampToValueAtTime(point.value, origin + point.t);
+  }
+  param.linearRampToValueAtTime(layerLevelAt(layer, to), origin + to);
+}
+
+/** Put a point on a layer's level, keeping the list in order. */
+export function addAutoPoint(project: Project, id: string, point: AutoPoint): Project {
+  const layer = project.layers.find((l) => l.id === id);
+  if (!layer) return project;
+  const auto = [...layer.auto.filter((p) => Math.abs(p.t - point.t) > 1e-4), point].sort(
+    (a, b) => a.t - b.t,
+  );
+  return updateLayer(project, id, { auto });
+}
+
+/** Move one, keeping the list in order. */
+export function moveAutoPoint(
+  project: Project,
+  id: string,
+  index: number,
+  point: AutoPoint,
+): Project {
+  const layer = project.layers.find((l) => l.id === id);
+  if (!layer || !layer.auto[index]) return project;
+  const auto = layer.auto.map((p, i) => (i === index ? point : p)).sort((a, b) => a.t - b.t);
+  return updateLayer(project, id, { auto });
+}
+
+export function removeAutoPoint(project: Project, id: string, index: number): Project {
+  const layer = project.layers.find((l) => l.id === id);
+  if (!layer) return project;
+  return updateLayer(project, id, { auto: layer.auto.filter((_, i) => i !== index) });
 }
 
 /**
@@ -181,6 +263,7 @@ export function addLayer(project: Project, name?: string): Project {
     muted: false,
     solo: false,
     gain: 1,
+    auto: [],
   };
   return { ...project, layers: [...project.layers, layer] };
 }
@@ -287,10 +370,24 @@ function readLayers(raw: unknown, fallback: readonly Layer[]): Layer[] {
       muted: layer.muted === true,
       solo: layer.solo === true,
       gain: readNumber(layer.gain, 1, 0, MAX_GAIN),
+      auto: readAuto(layer.auto),
     });
   }
 
   return layers.length ? layers : [...fallback];
+}
+
+/** Read a level drawn over time, dropping anything that is not a point. */
+function readAuto(raw: unknown): AutoPoint[] {
+  if (!Array.isArray(raw)) return [];
+  const points: AutoPoint[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const point = item as Partial<AutoPoint>;
+    if (typeof point.t !== 'number' || !Number.isFinite(point.t)) continue;
+    points.push({ t: Math.max(0, point.t), value: readNumber(point.value, 1, 0, MAX_GAIN) });
+  }
+  return points.sort((a, b) => a.t - b.t);
 }
 
 /**

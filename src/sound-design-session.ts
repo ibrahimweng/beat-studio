@@ -25,6 +25,7 @@ import {
   cuesOnLayer,
   fromSession,
   makeCue,
+  removeAutoPoint,
   removeCue,
   removeLayer,
   snapTime,
@@ -33,7 +34,7 @@ import {
   updateLayer,
   frameDuration,
 } from './timeline/project.ts';
-import type { Cue, CueSource, Layer, Project } from './timeline/types.ts';
+import type { AutoPoint, Cue, CueSource, Layer, Project } from './timeline/types.ts';
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
@@ -471,6 +472,21 @@ export class SoundDesignSession {
 
   updateLayer(id: string, patch: Partial<Layer>): void {
     this.#setProject(updateLayer(this.project, id, patch));
+  }
+
+  /**
+   * Set a layer's level over time.
+   *
+   * Given whole rather than a point at a time, because drawing one is a
+   * continuous movement and the interface has the finished shape by the time
+   * the pointer comes up.
+   */
+  setAuto(id: string, auto: AutoPoint[]): void {
+    this.updateLayer(id, { auto });
+  }
+
+  removeAutoPoint(id: string, index: number): void {
+    this.#setProject(removeAutoPoint(this.project, id, index));
   }
 
   /** Add a layer and make it the one new sounds go on. */
