@@ -55,6 +55,19 @@ doing the work once and applying it to everything.
 
 Run the development server and open http://localhost:5173/tools/master-check.html
 
+## character-check.html
+
+Checks that Space and Drive do what they say.
+
+Space should make a sound last longer without making it quieter, Drive should
+add harmonics above what was there rather than just turning the sound up, and
+both at nothing should leave the voice exactly as it was. The page renders the
+same placed sound with and without each and measures the difference: how long
+the tail runs, how much of the sound sits above 200Hz, and whether anything at
+all changed when neither was asked for.
+
+Run the development server and open http://localhost:5173/tools/character-check.html
+
 ## export-check.html
 
 Checks a whole export, from a project to the bytes of the file.

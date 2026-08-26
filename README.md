@@ -147,6 +147,32 @@ layer names, double click a name to change it, and the small cross removes a
 layer. Removing one that still has sounds on it asks first. There is always at
 least one layer.
 
+### Give it a space, and some weight
+
+Two controls on every placed sound, under Level, Tune and Length.
+
+"Space" puts the sound in a room of its own. Everything used to share a single
+reverb at the end of the chain, which meant a click and an impact were in the
+same place whether that suited them or not. Now an impact can have a hall
+behind it while the click next to it stays dry, which is most of the difference
+between a sound that reads as part of a scene and one that reads as pasted on
+top of it. The room is added to the sound rather than blended with it, so
+turning it up does not thin out the hit you started with.
+
+"Drive" pushes the sound into a gentle curve, which adds harmonics above what
+was there. This is what people mean by punch. It matters most for anything low:
+a sub with nothing above it cannot be reproduced by a phone at all, and a
+little of this puts something up where a small speaker can reach. At low
+settings it is heard as weight rather than as an effect.
+
+Every voice starts with an amount that suits it. Hits arrive with a room and
+some push, low end arrives pushed, and detail like the click and the tick
+arrives completely dry, because a room makes nothing more exact. All of it is
+a starting point and every sound can be set by hand.
+
+Sessions saved before these existed open sounding exactly as they did, with
+both at nothing.
+
 ### Getting the timing right
 
 Each sound has a setting for how it lands. "Starts on it" begins the sound on

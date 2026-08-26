@@ -3,7 +3,7 @@ import type { Cue, DesignName, Project } from '../timeline/types.ts';
 import type { PadName } from '../types.ts';
 import { playDesign } from './design-voices.ts';
 import { packSpec, shapeSpec } from './pack.ts';
-import { renderVoice, seedFrom } from './voice-spec.ts';
+import { effectChain, renderVoice, seedFrom, type EffectSpec } from './voice-spec.ts';
 import { drum, pianoSynth, pluck } from './voices.ts';
 
 /**
@@ -14,10 +14,10 @@ import { drum, pianoSynth, pluck } from './voices.ts';
  */
 export function playCue(
   ctx: BaseAudioContext,
-  dest: AudioNode,
+  out: AudioNode,
   cue: Cue,
   at: number,
-  gain: number,
+  outputGain: number,
 ): void {
   const { source } = cue;
 
@@ -26,6 +26,13 @@ export function playCue(
   // exporting all produce the same thing, and that a set of stems adds up to
   // the mixed file exactly rather than nearly.
   const seed = seedFrom(cue.id);
+
+  // The room and the push belong to the placed sound rather than to the voice,
+  // so they are put in front of whatever is about to play. That is what lets
+  // the same two controls reach a design voice, a drum, a pack sound and a
+  // piano note, none of which are built the same way underneath.
+  const dest = effectChain(ctx, cueEffects(cue), out, seed);
+  const gain = outputGain;
 
   if (source.kind === 'pack') {
     // A pack sound arrives at one length, pitch and level. Fitting it to what
@@ -63,6 +70,33 @@ export function playCue(
   const midi = (source.midi ?? 60) + cue.tune;
   if (source.name === 'guitar') pluck(ctx, dest, midi, at, gain);
   else pianoSynth(ctx, dest, midi, at, gain);
+}
+
+/**
+ * The room and the push a placed sound asks for.
+ *
+ * Pushed first and then put in a room, which is the order these happen in
+ * anywhere else: saturating a room's tail sounds like a fault, while putting
+ * a saturated sound in a room sounds like a sound in a room.
+ */
+function cueEffects(cue: Cue): EffectSpec[] {
+  const effects: EffectSpec[] = [];
+  if (cue.drive > 0) effects.push({ kind: 'drive', amount: cue.drive });
+  if (cue.space > 0) {
+    effects.push({
+      kind: 'reverb',
+      // A bigger setting is a bigger room as well as more of it, since a long
+      // tail at a low level is a hall heard from outside rather than a space
+      // the sound is in.
+      decay: 0.4 + cue.space * 2.2,
+      // Added to the sound rather than blended with it, so turning this up
+      // puts the hit in a room instead of trading the hit away for one.
+      dry: 1,
+      mix: cue.space * 0.45,
+      damping: 0.35,
+    });
+  }
+  return effects;
 }
 
 /** Schedule a cue against a timeline whose zero sits at `originTime`. */

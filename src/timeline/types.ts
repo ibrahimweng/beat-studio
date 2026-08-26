@@ -86,6 +86,23 @@ export interface Cue {
   /** Seconds. Design voices stretch to this; kit voices ignore it. */
   length: number;
   anchor: Anchor;
+  /**
+   * How much room is around it, 0 to 1.
+   *
+   * Its own room, not the one at the end of the chain that everything shares.
+   * An impact can have a hall behind it while the click next to it stays dry,
+   * which is most of the difference between a sound that reads as placed in a
+   * scene and one that reads as pasted on top of it.
+   */
+  space: number;
+  /**
+   * How hard it is pushed, 0 to 1.
+   *
+   * Saturation, which is what punch is. It adds harmonics above what was
+   * there, and those are why a hit still reads on a laptop speaker that
+   * cannot reproduce any of its low end.
+   */
+  drive: number;
   /** Silenced without being deleted, for comparing. */
   muted: boolean;
 }
@@ -174,6 +191,56 @@ export const DESIGN_DEFAULT_ANCHOR: Record<DesignName, Anchor> = {
   glitch: 'start',
   shimmer: 'start',
   static: 'start',
+};
+
+/**
+ * How much room and how much push each voice wants to start with.
+ *
+ * Not a rule, only a starting point: every one of these is a control on the
+ * placed sound. The pattern behind the numbers is that anything meant to land
+ * in a scene gets a room, anything meant to be exact stays dry, and anything
+ * that has to carry weight on a small speaker gets pushed.
+ */
+export const DESIGN_CHARACTER: Record<DesignName, { space: number; drive: number }> = {
+  // Hits land in a place, and want to be felt as much as heard.
+  impact: { space: 0.22, drive: 0.35 },
+  thud: { space: 0.15, drive: 0.2 },
+  slam: { space: 0.35, drive: 0.4 },
+  metal: { space: 0.3, drive: 0.1 },
+  clank: { space: 0.18, drive: 0.15 },
+  // Movement carries across a space rather than sitting in one.
+  whoosh: { space: 0.2, drive: 0 },
+  swipe: { space: 0.12, drive: 0 },
+  flutter: { space: 0.1, drive: 0 },
+  wobble: { space: 0.1, drive: 0.2 },
+  // Lead ins arrive somewhere, so they need somewhere to arrive.
+  riser: { space: 0.18, drive: 0.1 },
+  swell: { space: 0.22, drive: 0 },
+  reverse: { space: 0.2, drive: 0 },
+  // Low end is felt, and a sub with nothing above it is felt by nobody on a
+  // phone. Pushing it puts harmonics where a small speaker can reach them.
+  sub: { space: 0, drive: 0.25 },
+  rumble: { space: 0.15, drive: 0.1 },
+  drone: { space: 0.25, drive: 0.1 },
+  // Detail has to be exact, and a room makes nothing more exact.
+  click: { space: 0, drive: 0 },
+  tick: { space: 0, drive: 0 },
+  pop: { space: 0.08, drive: 0 },
+  beep: { space: 0, drive: 0 },
+  chirp: { space: 0.08, drive: 0 },
+  // Texture is the one place a room is the point rather than the setting.
+  zap: { space: 0.15, drive: 0.25 },
+  glitch: { space: 0.05, drive: 0.2 },
+  shimmer: { space: 0.35, drive: 0 },
+  static: { space: 0, drive: 0 },
+};
+
+/** What everything else starts at. Packs bring their own effects with them. */
+export const DEFAULT_CHARACTER: Record<SourceKind, { space: number; drive: number }> = {
+  design: { space: 0, drive: 0 },
+  kit: { space: 0.1, drive: 0 },
+  pitched: { space: 0.2, drive: 0 },
+  pack: { space: 0, drive: 0 },
 };
 
 export const DESIGN_NAMES: readonly DesignName[] = DESIGN_GROUPS.flatMap((g) => g.names);

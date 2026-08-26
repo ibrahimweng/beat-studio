@@ -2,6 +2,8 @@ import { packSpec } from '../audio/pack.ts';
 import { PAD_MIDI } from '../constants.ts';
 import type { PadName } from '../types.ts';
 import {
+  DEFAULT_CHARACTER,
+  DESIGN_CHARACTER,
   DESIGN_DEFAULT_ANCHOR,
   DESIGN_DEFAULT_LENGTH,
   DESIGN_NAMES,
@@ -79,6 +81,7 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
     tune: 0,
     length: design ? DESIGN_DEFAULT_LENGTH[design] : (packed?.duration ?? 0.4),
     anchor: design ? DESIGN_DEFAULT_ANCHOR[design] : 'start',
+    ...(design ? DESIGN_CHARACTER[design] : DEFAULT_CHARACTER[source.kind]),
     muted: false,
   };
 }
@@ -367,6 +370,11 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
           : design
             ? DESIGN_DEFAULT_ANCHOR[design]
             : 'start',
+      // Nothing rather than the voice's usual amount, because a session
+      // written before these existed should open sounding as it did. A sound
+      // placed from now on starts with its voice's own character.
+      space: readNumber(cue.space, 0, 0, 1),
+      drive: readNumber(cue.drive, 0, 0, 1),
       muted: cue.muted === true,
     });
   }

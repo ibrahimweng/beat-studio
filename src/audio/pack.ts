@@ -317,6 +317,10 @@ function toEffects(raw: unknown): EffectSpec[] {
   return effects;
 }
 
+/** A room stretches with the sound it is around. Saturation does not. */
+const stretchEffect = (stretch: number) => (effect: EffectSpec): EffectSpec =>
+  effect.kind === 'reverb' ? { ...effect, decay: effect.decay * stretch } : effect;
+
 function number(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -371,10 +375,8 @@ export function shapeSpec(base: VoiceSpec, options: VoiceOptions): VoiceSpec {
       ),
       length: layer.length * stretch,
       ...(layer.delay ? { delay: layer.delay * stretch } : {}),
-      ...(layer.effects ? { effects: layer.effects.map((e) => ({ ...e, decay: e.decay * stretch })) } : {}),
+      ...(layer.effects ? { effects: layer.effects.map(stretchEffect(stretch)) } : {}),
     })),
-    ...(base.effects
-      ? { effects: base.effects.map((e) => ({ ...e, decay: e.decay * stretch })) }
-      : {}),
+    ...(base.effects ? { effects: base.effects.map(stretchEffect(stretch)) } : {}),
   };
 }
