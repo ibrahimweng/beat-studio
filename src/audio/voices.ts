@@ -1,4 +1,5 @@
 import type { PadName, Voice } from '../types.ts';
+import { flat, renderVoice, type LayerSpec, type VoiceSpec } from './voice-spec.ts';
 
 /**
  * Voice synthesis. Every function here is pure in the sense that matters: it
@@ -83,6 +84,94 @@ export function boom(
   osc.stop(t + dur + 0.02);
 }
 
+/**
+ * Every drum voice, described rather than coded.
+ *
+ * Each one is the same two ingredients the kit has always been built from: a
+ * burst of filtered noise, and a tuned oscillator whose pitch falls quickly.
+ * Writing them down means the kit can go into a patch file alongside the
+ * design voices, and a pack from somewhere else can stand in for any of them.
+ */
+const KIT_OVERRUN = 0.02;
+
+export const KIT_SPECS: Record<PadName, (vel: number) => VoiceSpec> = {
+  kick: (v) => ({ duration: 0.42, layers: [tuned('sine', 148, 46, 0.42, 1.15 * v), burst(0.02, 0.3 * v, 'highpass', 1400)] }),
+  kick2: (v) => ({ duration: 0.5, layers: [tuned('sine', 118, 40, 0.5, 1.1 * v), burst(0.02, 0.22 * v, 'highpass', 900)] }),
+  snare: (v) => ({ duration: 0.19, layers: [burst(0.19, 0.62 * v, 'bandpass', 1900, 0.8), tuned('triangle', 220, 170, 0.09, 0.4 * v)] }),
+  hhc: (v) => ({ duration: 0.05, layers: [burst(0.05, 0.42 * v, 'highpass', 8200)] }),
+  hho: (v) => ({ duration: 0.38, layers: [burst(0.38, 0.34 * v, 'highpass', 7200)] }),
+  tom1: (v) => ({ duration: 0.3, layers: [tuned('sine', 250, 128, 0.3, 0.8 * v)] }),
+  tom2: (v) => ({ duration: 0.34, layers: [tuned('sine', 200, 104, 0.34, 0.8 * v)] }),
+  tom3: (v) => ({ duration: 0.38, layers: [tuned('sine', 165, 88, 0.38, 0.8 * v)] }),
+  floor: (v) => ({ duration: 0.46, layers: [tuned('sine', 128, 66, 0.46, 0.85 * v)] }),
+  crash1: (v) => ({
+    duration: 1.5,
+    layers: [burst(1.5, 0.4 * v, 'highpass', 5200), burst(1.1, 0.16 * v, 'bandpass', 8600, 0.6, 0.01)],
+  }),
+  crash2: (v) => ({
+    duration: 1.7,
+    layers: [burst(1.7, 0.42 * v, 'highpass', 4600), burst(1.2, 0.16 * v, 'bandpass', 7800, 0.6, 0.01)],
+  }),
+  splash: (v) => ({ duration: 0.55, layers: [burst(0.55, 0.36 * v, 'highpass', 6800)] }),
+  ride: (v) => ({
+    duration: 1.1,
+    layers: [burst(1.1, 0.24 * v, 'bandpass', 4400, 1.2), tuned('sine', 560, 520, 0.5, 0.1 * v)],
+  }),
+};
+
+/**
+ * A pitch-swept oscillator: the body of the kick, toms and floor.
+ *
+ * The sweep lands at f1 four fifths of the way through, which is what gives
+ * the drum its thump then tail shape rather than a flat tone.
+ */
+function tuned(
+  type: OscillatorType,
+  f0: number,
+  f1: number,
+  dur: number,
+  amp: number,
+): LayerSpec {
+  return {
+    source: { kind: 'osc', type, freq: [{ at: 0, to: f0 }, { at: dur * 0.8, to: f1, curve: 'exp' }] },
+    gain: [
+      { at: 0, to: 0 },
+      { at: 0.004, to: amp, curve: 'linear' },
+      { at: dur, to: 0.0008, curve: 'exp' },
+    ],
+    length: dur,
+    overrun: KIT_OVERRUN,
+  };
+}
+
+/**
+ * A filtered burst of noise. This makes the hi-hats, the snare rattle and the
+ * cymbals. The buffer fades out across its own length as well as being shaped
+ * by the envelope, which is part of why the kit sounds the way it does.
+ */
+function burst(
+  dur: number,
+  amp: number,
+  type: BiquadFilterType,
+  freq: number,
+  q?: number,
+  delay?: number,
+): LayerSpec {
+  return {
+    source: { kind: 'noise', fade: true },
+    filter: { type, freq: flat(freq), ...(q !== undefined ? { q } : {}) },
+    gain: [{ at: 0, to: amp }, { at: dur, to: 0.0008, curve: 'exp' }],
+    length: dur,
+    overrun: KIT_OVERRUN,
+    ...(delay !== undefined ? { delay } : {}),
+  };
+}
+
+/** Describe one drum voice without playing it, for exporting and editing. */
+export function kitSpec(pad: PadName, vel = 1): VoiceSpec {
+  return KIT_SPECS[pad](vel);
+}
+
 /** Fire one drum voice at an absolute context time. */
 export function drum(
   ctx: BaseAudioContext,
@@ -91,54 +180,8 @@ export function drum(
   t: number,
   vel = 1,
 ): void {
-  const v = vel;
-  switch (pad) {
-    case 'kick':
-      boom(ctx, dest, t, 148, 46, 0.42, 1.15 * v);
-      noise(ctx, dest, t, 0.02, 0.3 * v, 'highpass', 1400);
-      break;
-    case 'kick2':
-      boom(ctx, dest, t, 118, 40, 0.5, 1.1 * v);
-      noise(ctx, dest, t, 0.02, 0.22 * v, 'highpass', 900);
-      break;
-    case 'snare':
-      noise(ctx, dest, t, 0.19, 0.62 * v, 'bandpass', 1900, 0.8);
-      boom(ctx, dest, t, 220, 170, 0.09, 0.4 * v, 'triangle');
-      break;
-    case 'hhc':
-      noise(ctx, dest, t, 0.05, 0.42 * v, 'highpass', 8200);
-      break;
-    case 'hho':
-      noise(ctx, dest, t, 0.38, 0.34 * v, 'highpass', 7200);
-      break;
-    case 'tom1':
-      boom(ctx, dest, t, 250, 128, 0.3, 0.8 * v);
-      break;
-    case 'tom2':
-      boom(ctx, dest, t, 200, 104, 0.34, 0.8 * v);
-      break;
-    case 'tom3':
-      boom(ctx, dest, t, 165, 88, 0.38, 0.8 * v);
-      break;
-    case 'floor':
-      boom(ctx, dest, t, 128, 66, 0.46, 0.85 * v);
-      break;
-    case 'crash1':
-      noise(ctx, dest, t, 1.5, 0.4 * v, 'highpass', 5200);
-      noise(ctx, dest, t + 0.01, 1.1, 0.16 * v, 'bandpass', 8600, 0.6);
-      break;
-    case 'crash2':
-      noise(ctx, dest, t, 1.7, 0.42 * v, 'highpass', 4600);
-      noise(ctx, dest, t + 0.01, 1.2, 0.16 * v, 'bandpass', 7800, 0.6);
-      break;
-    case 'splash':
-      noise(ctx, dest, t, 0.55, 0.36 * v, 'highpass', 6800);
-      break;
-    case 'ride':
-      noise(ctx, dest, t, 1.1, 0.24 * v, 'bandpass', 4400, 1.2);
-      boom(ctx, dest, t, 560, 520, 0.5, 0.1 * v);
-      break;
-  }
+  const build = KIT_SPECS[pad];
+  if (build) renderVoice(ctx, dest, build(vel), t);
 }
 
 /**

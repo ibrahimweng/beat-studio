@@ -88,6 +88,9 @@ const tone = (
   extra: Partial<LayerSpec> = {},
 ): LayerSpec => ({ source: { kind: 'osc', type, freq }, gain, length, ...extra });
 
+/** These four have always stopped sooner than the rest. See LayerSpec.overrun. */
+const SHORT_TAIL = 0.02;
+
 /**
  * Partials that are not whole multiples of each other.
  *
@@ -341,6 +344,7 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
       source: { kind: 'reverse', freq: 320 * ratio(o.tune), shape: 3, air: 0.6 },
       gain: flat(0.7 * o.gain),
       length: dur,
+      overrun: SHORT_TAIL,
     });
   },
 
@@ -460,7 +464,7 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
         { at: 0.004, to: peak, curve: 'linear' },
         { at: dur - 0.006, to: peak, curve: 'set' },
         { at: dur, to: 0, curve: 'linear' },
-      ], dur),
+      ], dur, { overrun: SHORT_TAIL }),
     );
   },
 
@@ -475,6 +479,7 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
         [{ at: 0, to: 240 * r }, { at: dur, to: 2100 * r, curve: 'exp' }],
         struck(0.4 * o.gain, dur, 0.006),
         dur,
+        { overrun: SHORT_TAIL },
       ),
     );
   },
@@ -493,6 +498,7 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
         decays(0.45 * o.gain, dur),
         dur,
         {
+          overrun: SHORT_TAIL,
           // A resonant filter riding the pitch down keeps this clearly a
           // falling tone. Noise on top made it read as a click instead.
           filter: {

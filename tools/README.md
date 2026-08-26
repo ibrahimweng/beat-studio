@@ -42,6 +42,31 @@ Save the output before changing any voice, then run it again afterwards and
 compare. Anything that scores worse than a voice scores against itself has
 changed, and anything that does not has only moved within the noise.
 
+## wk-check.html
+
+Measures how well the exported patch survives leaving the app.
+
+`Export patch` writes the palette as a `@web-kits/audio` patch. That format
+describes a sound as a graph of standard nodes, and a few of these voices are
+not that, so some of them come out close rather than exact. This page renders
+every sound in the exported file using that project's own published engine,
+renders the same voice here, and compares the two.
+
+It needs their engine, which is not a dependency of this project because
+nothing in the app uses it. Fetch it into place first:
+
+```bash
+npm pack @web-kits/audio
+mkdir -p tools/.wk && tar xzf web-kits-audio-*.tgz -C tools/.wk --strip-components=1
+```
+
+Then export a patch from the app, save it as `tools/.wk/patch.json`, run the
+development server and open http://localhost:5173/tools/wk-check.html
+
+`tools/.wk/` is ignored by git. The scores it reports are recorded in
+`src/export/patch.ts`, next to the reason for each one. Run it again after
+changing a voice or the conversion, and update those numbers.
+
 ## make-icons.mjs
 
 Draws the site icons.
