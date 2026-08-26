@@ -255,6 +255,41 @@ function toLayer(layer: LayerSpec): PatchLayer[] {
     return [{ source: { type: 'noise', color: 'white' }, ...shared }];
   }
 
+  // A struck body is already a stack of decaying sines, and the format has
+  // sines and envelopes, so this one converts exactly rather than nearly.
+  if (layer.source.kind === 'modal') {
+    const { freq, partials } = layer.source;
+    return partials.map((partial) => ({
+      source: { type: 'sine' as const, frequency: hz(freq * partial.ratio) },
+      envelope: { attack: 0.001, decay: secs(partial.decay) },
+      gain: level(gain * partial.gain),
+    }));
+  }
+
+  // The next three have no equivalent at all: the format has no way to say
+  // "run this round itself", "scatter these" or "repeat this getting faster".
+  // Each is rebuilt from what is there, and what that costs is recorded in
+  // APPROXIMATE above rather than left for someone to discover.
+  if (layer.source.kind === 'pluck') {
+    return [
+      {
+        source: { type: 'sawtooth' as const, frequency: hz(layer.source.freq) },
+        ...shared,
+      },
+    ];
+  }
+
+  if (layer.source.kind === 'grains') {
+    const { freq } = layer.source;
+    return freq > 0
+      ? [{ source: { type: 'sine' as const, frequency: hz(freq) }, ...shared }]
+      : [{ source: { type: 'noise' as const, color: 'white' as const }, ...shared }];
+  }
+
+  if (layer.source.kind === 'impulses') {
+    return [{ source: { type: 'sine' as const, frequency: hz(layer.source.freq) }, ...shared }];
+  }
+
   // A buffer read backwards has no equivalent, so it is rebuilt out of what
   // the format does have: noise and a tone, both growing out of nothing over
   // the whole length and stopping rather than fading.
