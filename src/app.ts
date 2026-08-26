@@ -71,6 +71,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     if (mounted === mode) return;
     mounted = mode;
 
+    // Leaving the sound design screen stops its clock, the same way arriving
+    // at it stops the instrument transport. The browser pauses a video that
+    // has been taken out of the page, but the scheduler behind it would carry
+    // on running and the transport would still read as playing.
+    if (mode === 'play') soundDesign.pause();
+
     main.replaceChildren(
       ...(mode === 'play'
         ? [topbar.el, stage.el, dock.el, mixer.el]
