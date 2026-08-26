@@ -24,6 +24,24 @@ sound over its own length matters. An earlier version used a fixed three second
 window, which made every short sound look alike because most of both was
 silence.
 
+## voice-print.html
+
+Measures whether a change to the code behind a voice altered how it sounds.
+
+`voice-check.html` asks whether two voices are too alike. This asks a different
+question: whether a voice still sounds like it did before. It writes a
+fingerprint for every voice in the app, and a second fingerprint of the same
+voice rendered again. Most of these voices are built on noise, so no two
+renders are identical, and that second print is how much ordinary variation
+there is. A rebuilt voice has to match the old print at least as closely as the
+old print matches itself.
+
+Run the development server and open http://localhost:5173/tools/voice-print.html
+
+Save the output before changing any voice, then run it again afterwards and
+compare. Anything that scores worse than a voice scores against itself has
+changed, and anything that does not has only moved within the noise.
+
 ## make-icons.mjs
 
 Draws the site icons.
