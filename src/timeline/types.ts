@@ -1,7 +1,7 @@
 import type { PadName } from '../types.ts';
 
 /** Where a cue's sound comes from. */
-export type SourceKind = 'kit' | 'design' | 'pitched';
+export type SourceKind = 'kit' | 'design' | 'pitched' | 'pack';
 
 /**
  * Sound design voices, tuned for motion graphics rather than music.
@@ -56,10 +56,12 @@ export type PitchedName = 'piano' | 'guitar';
 
 export interface CueSource {
   kind: SourceKind;
-  /** A pad name, a design voice name, or a pitched instrument name. */
-  name: PadName | DesignName | PitchedName;
+  /** A pad name, a design voice name, a pitched instrument, or a pack sound. */
+  name: PadName | DesignName | PitchedName | string;
   /** Pitched sources only: the note to play. */
   midi?: number;
+  /** Pack sources only: which loaded pack the name belongs to. */
+  pack?: string;
 }
 
 /**

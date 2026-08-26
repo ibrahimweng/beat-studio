@@ -67,6 +67,33 @@ up to the mix, and that the marker list describes what was exported.
 
 Run the development server and open http://localhost:5173/tools/export-check.html
 
+## pack-check.html
+
+Measures how well a sound pack written for `@web-kits/audio` survives being
+read into this app.
+
+Beat Studio describes its own voices as data, and that format describes sounds
+as data too, so a pack can be read straight into the palette and played by the
+same code that plays everything else. This page renders every sound in every
+published pack twice, once with that project's own engine and once through
+this app's reader, and compares the two.
+
+It needs their engine and their packs, neither of which is a dependency here:
+
+```bash
+npm pack @web-kits/audio
+mkdir -p tools/.wk && tar xzf web-kits-audio-*.tgz -C tools/.wk --strip-components=1
+npx @web-kits/audio add raphaelsalaja/audio
+mkdir -p tools/.wk/packs && cp .web-kits/*.json tools/.wk/packs/
+```
+
+Then run the development server and open http://localhost:5173/tools/pack-check.html
+
+Across all 269 sounds in the ten published packs the middle score is 1.000 and
+nothing falls below 0.95. Reading in is close to exact because this app's model
+is wider than that format, which is also why writing a patch out is not: see
+`src/export/patch.ts`.
+
 ## wk-check.html
 
 Measures how well the exported patch survives leaving the app.

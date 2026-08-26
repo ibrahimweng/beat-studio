@@ -2,7 +2,8 @@ import { cueGain, cueLength, cueStart } from '../timeline/project.ts';
 import type { Cue, DesignName, Project } from '../timeline/types.ts';
 import type { PadName } from '../types.ts';
 import { playDesign } from './design-voices.ts';
-import { seedFrom } from './voice-spec.ts';
+import { packSpec, shapeSpec } from './pack.ts';
+import { renderVoice, seedFrom } from './voice-spec.ts';
 import { drum, pianoSynth, pluck } from './voices.ts';
 
 /**
@@ -25,6 +26,23 @@ export function playCue(
   // exporting all produce the same thing, and that a set of stems adds up to
   // the mixed file exactly rather than nearly.
   const seed = seedFrom(cue.id);
+
+  if (source.kind === 'pack') {
+    // A pack sound arrives at one length, pitch and level. Fitting it to what
+    // was asked for keeps the shape and changes only the scale, so the three
+    // controls mean the same thing as they do for the voices built in here.
+    const base = source.pack ? packSpec(source.pack, source.name) : null;
+    if (base) {
+      renderVoice(
+        ctx,
+        dest,
+        shapeSpec(base, { length: cueLength(cue), tune: cue.tune, gain }),
+        at,
+        seed,
+      );
+    }
+    return;
+  }
 
   if (source.kind === 'design') {
     playDesign(ctx, dest, source.name as DesignName, at, {

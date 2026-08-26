@@ -1,3 +1,4 @@
+import { packSpec } from '../audio/pack.ts';
 import { PAD_MIDI } from '../constants.ts';
 import type { PadName } from '../types.ts';
 import {
@@ -66,6 +67,9 @@ function reserveIds(ids: Iterable<string>): void {
 
 export function makeCue(time: number, layerId: string, source: CueSource): Cue {
   const design = source.kind === 'design' ? (source.name as DesignName) : null;
+  // A pack sound was written at a length of its own, so that is what it
+  // starts at rather than a number this app picked.
+  const packed = source.kind === 'pack' && source.pack ? packSpec(source.pack, source.name) : null;
   return {
     id: newId('c'),
     time: Math.max(0, time),
@@ -73,7 +77,7 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
     source,
     gain: 1,
     tune: 0,
-    length: design ? DESIGN_DEFAULT_LENGTH[design] : 0.4,
+    length: design ? DESIGN_DEFAULT_LENGTH[design] : (packed?.duration ?? 0.4),
     anchor: design ? DESIGN_DEFAULT_ANCHOR[design] : 'start',
     muted: false,
   };
@@ -210,10 +214,22 @@ export interface SessionFile {
   format: 'beat-studio-session';
   version: 1;
   project: Project;
+  /**
+   * The sound packs the project uses, as the files they came from.
+   *
+   * Carried along so the session is complete. Without them it would open
+   * somewhere else with sounds on the timeline that nothing could play.
+   */
+  packs?: readonly unknown[];
 }
 
-export function toSession(project: Project): SessionFile {
-  return { format: 'beat-studio-session', version: 1, project };
+export function toSession(project: Project, packs: readonly unknown[] = []): SessionFile {
+  return {
+    format: 'beat-studio-session',
+    version: 1,
+    project,
+    ...(packs.length ? { packs } : {}),
+  };
 }
 
 /**
@@ -286,6 +302,13 @@ function readSource(raw: unknown): CueSource | null {
   if (source.kind === 'kit') {
     return source.name in PAD_MIDI ? { kind: 'kit', name: source.name as PadName } : null;
   }
+  if (source.kind === 'pack') {
+    // The pack itself may not be loaded yet, so only the shape is checked
+    // here. A sound whose pack is missing is drawn and simply does not play.
+    return typeof source.pack === 'string' && source.pack
+      ? { kind: 'pack', name: source.name, pack: source.pack }
+      : null;
+  }
   if (source.kind === 'pitched' && (source.name === 'piano' || source.name === 'guitar')) {
     return {
       kind: 'pitched',
@@ -355,7 +378,7 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
  * Read a session file. Everything is checked, because the file came off disk
  * and may be from an older version. Returns null if it is not usable.
  */
-export function fromSession(raw: unknown): Project | null {
+export function fromSession(raw: unknown): { project: Project; packs: unknown[] } | null {
   if (!raw || typeof raw !== 'object') return null;
   const file = raw as Partial<SessionFile>;
   if (file.format !== 'beat-studio-session' || !file.project) return null;
@@ -368,7 +391,7 @@ export function fromSession(raw: unknown): Project | null {
   reserveIds(layers.map((l) => l.id));
   const cues = readCues(p.cues, new Set(layers.map((l) => l.id)));
 
-  return {
+  const project = {
     ...base,
     fps: typeof p.fps === 'number' && p.fps > 0 ? p.fps : base.fps,
     duration: typeof p.duration === 'number' && p.duration >= 0 ? p.duration : 0,
@@ -378,4 +401,6 @@ export function fromSession(raw: unknown): Project | null {
     layers,
     cues,
   };
+
+  return { project, packs: Array.isArray(file.packs) ? file.packs : [] };
 }

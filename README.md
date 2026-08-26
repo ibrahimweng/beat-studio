@@ -224,6 +224,35 @@ and any sound still ringing at the end is allowed to finish.
 later. The video is not stored in it, so you point at the video again when you
 come back.
 
+### Bring more sounds in
+
+"Load a sound pack" adds someone else's sounds to your palette. A pack is a
+small text file describing how to make its sounds rather than the sounds
+themselves, so nothing is uploaded, nothing is downloaded while you work, and
+a pack of two hundred sounds is a few tens of kilobytes.
+
+Anything written for `@web-kits/audio` works. The ten packs published with that
+project come to 269 sounds between them, covering interface clicks, notification
+tones, bells, chiptune, and a small drum kit. Get them with:
+
+```bash
+npx @web-kits/audio add raphaelsalaja/audio
+```
+
+That writes the files into `.web-kits/`, and you load them from there.
+
+Pack sounds sit in the picker under the pack's name, and behave exactly like
+the ones built in: the same level, tuning and length controls, placed the same
+way, exported the same way. Loading a pack that is already there replaces it.
+The small cross next to a pack's name takes it out again, and sounds already
+placed from it stay where they are.
+
+Once packs are loaded there are several hundred sounds to choose from, so
+there is a box at the top of the picker to find one by name.
+
+Packs are remembered between sessions, and "Save session" writes them into the
+session file, so a session opens complete on another machine.
+
 ### Take the sounds with you
 
 "Export patch" writes all 37 sounds to a file in the `@web-kits/audio` format.
@@ -382,6 +411,7 @@ src/
     chain.ts       the signal chain, shared by playback and export
     master.ts      loudness, and holding the loudest moments back
     voice-spec.ts  what a voice is made of, and the one thing that plays it
+    pack.ts        reading someone else's sound pack into that
     voices.ts      the drum kit and the pitched instruments
     design-voices.ts impacts, whooshes, risers and the rest
     sources.ts     turning a placed sound into a played sound

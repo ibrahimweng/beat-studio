@@ -1,5 +1,6 @@
 import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
+import type { Pack } from './audio/pack.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
@@ -62,6 +63,8 @@ export interface AppState {
   exporting: string | null;
   /** Suggested hits read from the video. */
   detect: Detection;
+  /** Sound packs that have been loaded, in the order they were added. */
+  packs: Pack[];
 }
 
 /**
@@ -120,6 +123,7 @@ export function initialState(): AppState {
     armed: false,
     exporting: null,
     detect: emptyDetection(),
+    packs: [],
   };
 }
 
