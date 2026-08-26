@@ -38,6 +38,7 @@ const SECTIONS: readonly Section[] = [
     rows: [
       ['Shift and an arrow', 'Move the selected sound one frame'],
       ['Delete', 'Remove the selected sound'],
+      ['Ctrl or Cmd and Z', 'Undo. Shift as well to redo.'],
       ['Escape', 'Deselect'],
       ['Pad keys, such as D or J', 'Drop that drum sound at the playhead'],
       ['Ends on it', 'The sound finishes on the marker. Use it for risers and reverse swells.'],

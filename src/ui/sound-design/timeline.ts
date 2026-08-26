@@ -124,6 +124,15 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const found = el('div', { class: 'hint', style: { whiteSpace: 'nowrap' } });
   const detectGroup = el('div', { class: 'tl__detect' }, [findButton, sensitivity, found, placeAll, clearHits]);
 
+  const undo = button(
+    { class: 'chip chip--sm', title: 'Undo (Ctrl or Cmd and Z)', on: { click: () => session.undo() } },
+    ['↶'],
+  );
+  const redo = button(
+    { class: 'chip chip--sm', title: 'Redo (Ctrl or Cmd, shift and Z)', on: { click: () => session.redo() } },
+    ['↷'],
+  );
+
   const zoomOut = button({ class: 'chip chip--sm', title: 'Zoom out', on: { click: () => setZoom(pxPerSec / 1.6) } }, ['−']);
   const zoomIn = button({ class: 'chip chip--sm', title: 'Zoom in', on: { click: () => setZoom(pxPerSec * 1.6) } }, ['+']);
   const zoomFit = button({ class: 'chip chip--sm', title: 'Fit the whole video', on: { click: fit } }, ['Fit']);
@@ -131,6 +140,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const root = el('section', { class: 'tl' }, [
     el('div', { class: 'tl__bar' }, [
       el('div', { class: 'micro-label', text: 'Timeline' }),
+      undo,
+      redo,
       detectGroup,
       el('div', { class: 'dock__spacer' }),
       zoomOut,
@@ -694,6 +705,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
 
     update(state: AppState) {
       paint(state.project);
+      undo.disabled = !session.canUndo;
+      redo.disabled = !session.canRedo;
       // Only the one losing the mark and the one gaining it, rather than
       // every sound on the timeline on every change.
       if (state.selectedCueId !== selectedId) {
