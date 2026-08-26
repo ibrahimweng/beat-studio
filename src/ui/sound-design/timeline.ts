@@ -1,6 +1,6 @@
 import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
-import { cueLength, cueStart, timecode } from '../../timeline/project.ts';
+import { bendFor, cueLength, cueStart, shape, timecode } from '../../timeline/project.ts';
 import {
   LANES,
   type AutoPoint,
@@ -30,6 +30,8 @@ const SHUT_HEIGHT = 16;
 const GRAB_RADIUS = 7;
 /** How near, in pixels, a value has to land to be taken as exactly that. */
 const SNAP_PX = 3;
+/** How small a bend counts as no bend at all. */
+const STRAIGHT = 0.06;
 /**
  * How wide a drawn sound has to be before it offers an edge to drag.
  *
@@ -640,8 +642,9 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
 
     // Held flat before the first point and after the last, which is what the
     // lane itself does, so the drawing cannot say something the sound does
-    // not do.
-    const steps = points.map((point) => `${point.t * pxPerSec},${y(point.value)}`);
+    // not do. Between them it follows whatever shape each segment was given,
+    // read from the same place the sound reads it.
+    const steps = outline(points, y);
     const first = `0,${y(points[0].value)}`;
     const last = `${width},${y(points[points.length - 1].value)}`;
     const line = [first, ...steps, last].join(' ');
@@ -653,6 +656,37 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     node.appendChild(svg('polyline', { class: 'tl__auto-line', points: line }));
 
     if (!open) return;
+
+    // The handle for each segment's shape, on the line at its middle, so it
+    // is where the shape is rather than off to one side of it. Only where the
+    // two ends differ: a segment that starts and finishes at the same value
+    // is a flat line whatever shape it is given.
+    points.forEach((point, index) => {
+      const previous = points[index - 1];
+      if (!previous || previous.value === point.value) return;
+
+      const middle = (previous.t + point.t) / 2;
+      const along = shape(0.5, point.curve);
+      const held = point.curve === 'hold';
+      const handle = held
+        ? svg('rect', {
+            class: 'tl__auto-bend is-held',
+            x: middle * pxPerSec - 3.5,
+            y: y(previous.value + along * (point.value - previous.value)) - 3.5,
+            width: 7,
+            height: 7,
+          })
+        : svg('circle', {
+            class: 'tl__auto-bend',
+            cx: middle * pxPerSec,
+            cy: y(previous.value + along * (point.value - previous.value)),
+            r: 4,
+          });
+      toggleClass(handle, 'is-bent', typeof point.curve === 'number' && point.curve !== 0);
+      handle.dataset.bend = String(index);
+      node.appendChild(handle);
+    });
+
     points.forEach((point, index) => {
       const dot = svg('circle', {
         class: 'tl__auto-point',
@@ -663,6 +697,47 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       dot.dataset.index = String(index);
       node.appendChild(dot);
     });
+  }
+
+  /**
+   * The drawn shape of a lane between its points, in the lane's own pixels.
+   *
+   * A straight segment is two ends and nothing in between. A held one is a
+   * flat run and then a vertical step. A bent one is sampled every few pixels,
+   * so it is as smooth as the zoom it is drawn at and no smoother.
+   */
+  function outline(points: readonly AutoPoint[], y: (value: number) => number): string[] {
+    const drawn: string[] = [];
+
+    points.forEach((point, index) => {
+      const previous = points[index - 1];
+      const x = point.t * pxPerSec;
+
+      if (!previous) {
+        drawn.push(`${x},${y(point.value)}`);
+        return;
+      }
+      if (point.curve === 'hold') {
+        drawn.push(`${x},${y(previous.value)}`);
+        drawn.push(`${x},${y(point.value)}`);
+        return;
+      }
+      if (typeof point.curve === 'number' && point.curve !== 0) {
+        const span = point.t - previous.t;
+        const steps = Math.max(2, Math.min(160, Math.round((span * pxPerSec) / 3)));
+        for (let step = 1; step < steps; step++) {
+          const u = step / steps;
+          const along = shape(u, point.curve);
+          drawn.push(
+            `${(previous.t + u * span) * pxPerSec},` +
+              `${y(previous.value + along * (point.value - previous.value))}`,
+          );
+        }
+      }
+      drawn.push(`${x},${y(point.value)}`);
+    });
+
+    return drawn;
   }
 
   /**
@@ -734,10 +809,16 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
 
       const target = event.target as SVGElement;
       const existing = target.dataset?.index;
+      const bending = target.dataset?.bend;
 
       // Working copy, so nothing is committed until the pointer is released.
       const drawn = session.project.layers.find((l) => l.id === layer.id)?.auto[spec.name] ?? [];
       let points: AutoPoint[] = [...drawn];
+
+      if (bending !== undefined) {
+        beginBend(node, layer, spec, height, points, Number(bending), event);
+        return;
+      }
       const near =
         existing !== undefined
           ? Number(existing)
@@ -758,9 +839,14 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         lastPress = { index: -1, at: 0 };
         // Added and then found again by identity, since where it lands in
         // the list depends on its time rather than on when it was made.
-        const added = readAuto(event, node, spec, height);
+        const added: AutoPoint = readAuto(event, node, spec, height);
         points = [...points, added].sort((a, b) => a.t - b.t);
         index = points.indexOf(added);
+        // A point dropped into a segment splits it in two, and both halves
+        // keep the shape the whole had. Otherwise adding a point to a curve
+        // would straighten out the half behind it.
+        const split = points[index + 1];
+        if (index > 0 && split?.curve !== undefined) added.curve = split.curve;
       }
 
       const width = Number(node.getAttribute('width')) || 1;
@@ -769,7 +855,9 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       node.setPointerCapture(event.pointerId);
 
       const move = (e: PointerEvent): void => {
-        points[index] = readAuto(e, node, spec, height);
+        // Spread over the point it replaces, so moving one does not straighten
+        // out the shape it was arrived at by.
+        points[index] = { ...points[index], ...readAuto(e, node, spec, height) };
         drawAuto(node, spec, points, width, height, true);
         node.querySelector(`[data-index="${index}"]`)?.classList.add('is-dragging');
       };
@@ -786,6 +874,66 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     });
 
     return node;
+  }
+
+  /**
+   * Drag a segment's handle to bend it, or press it and let go to hold it.
+   *
+   * Two things on one handle because they are two answers to the same
+   * question: what happens between these two points. A drag says how it gets
+   * there, and a press says that it does not, keeping the earlier value and
+   * stepping across on arrival, which is what a cut wants and what no amount
+   * of bending can do.
+   */
+  function beginBend(
+    node: SVGSVGElement,
+    layer: Layer,
+    spec: LaneSpec,
+    height: number,
+    points: AutoPoint[],
+    index: number,
+    event: PointerEvent,
+  ): void {
+    const previous = points[index - 1];
+    const point = points[index];
+    if (!previous || !point || previous.value === point.value) return;
+
+    const width = Number(node.getAttribute('width')) || 1;
+    const startY = event.clientY;
+    let moved = false;
+    node.setPointerCapture(event.pointerId);
+
+    const move = (e: PointerEvent): void => {
+      if (!moved && Math.abs(e.clientY - startY) < 3) return;
+      moved = true;
+
+      // How far up the segment the pointer is asking the middle to sit, as a
+      // fraction of the way from one end to the other. The bend that puts it
+      // there is worked out from that, so the handle stays under the hand.
+      const at = readAuto(e, node, spec, height).value;
+      const bend = bendFor((at - previous.value) / (point.value - previous.value));
+      points[index] = {
+        ...point,
+        curve: Math.abs(bend) < STRAIGHT ? undefined : bend,
+      };
+      drawAuto(node, spec, points, width, height, true);
+    };
+
+    const end = (): void => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', end);
+      node.removeEventListener('pointercancel', end);
+
+      if (!moved) {
+        // A press that went nowhere turns the hold on, or off again.
+        points[index] = { ...point, curve: point.curve === 'hold' ? undefined : 'hold' };
+      }
+      session.setAuto(layer.id, spec.name, points, 'shape');
+    };
+
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', end);
+    node.addEventListener('pointercancel', end);
   }
 
   /** Which point the pointer is on top of, or -1 for none. */

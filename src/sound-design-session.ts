@@ -795,14 +795,15 @@ export class SoundDesignSession {
    * continuous movement and the interface has the finished shape by the time
    * the pointer comes up.
    */
-  setAuto(id: string, lane: LaneName, points: AutoPoint[]): void {
+  setAuto(id: string, lane: LaneName, points: AutoPoint[], what = 'draw'): void {
     const layer = this.project.layers.find((l) => l.id === id);
     if (!layer) return;
-    // Labelled by the lane, so drawing a level and then a position straight
-    // afterwards is two things to undo rather than one.
+    // Labelled by the lane and by what was done, so drawing a level and then
+    // a position, or moving a point and then shaping the line into it, are
+    // two things to undo rather than one.
     this.#setProject(
       updateLayer(this.project, id, { auto: { ...layer.auto, [lane]: points } }),
-      `draw:${lane}:${id}`,
+      `${what}:${lane}:${id}`,
     );
   }
 

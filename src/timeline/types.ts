@@ -119,6 +119,19 @@ export interface AutoPoint {
   t: number;
   /** What the lane is set to at that moment, within the lane's own range. */
   value: number;
+  /**
+   * How the value gets here from the point before it.
+   *
+   * Missing, or zero, is a straight line, which is what every point was
+   * before there was anything else. A number from -1 to 1 bends that line:
+   * above zero it hangs back and then rushes, below zero it moves first and
+   * then settles. `hold` does not move at all, keeping the earlier value the
+   * whole way and stepping to this one on arrival, which is what a cut wants.
+   *
+   * It belongs to the point it arrives at rather than the one it leaves,
+   * which is how a curve is written down everywhere else in this app.
+   */
+  curve?: number | 'hold';
 }
 
 /** Which of a layer's curves a point belongs to. */

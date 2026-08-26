@@ -4,7 +4,7 @@
   /* A curve drawn over a layer has to reach the file, and has to move
      everything on that layer together. */
   import { renderProject, renderStems } from '/src/audio/render.ts';
-  import { emptyProject, emptyLanes, makeCue, layerLevelAt, laneValueAt } from '/src/timeline/project.ts';
+  import { emptyProject, emptyLanes, makeCue, layerLevelAt, laneValueAt, shape, bendFor } from '/src/timeline/project.ts';
   import { DEFAULT_CHAIN } from '/src/audio/chain.ts';
 
   const RATE = 48000;
@@ -39,10 +39,13 @@
     };
   }
 
-  async function render(p) {
-    const r = await renderProject(p, { settings: DEFAULT_CHAIN, master: { limit: false, target: null } });
+  async function render(p, settings = DEFAULT_CHAIN) {
+    const r = await renderProject(p, { settings, master: { limit: false, target: null } });
     return r.parts[0].buffer;
   }
+
+  /** The same, with the room at the end of the chain out of the way. */
+  const DRY = { ...DEFAULT_CHAIN, reverb: 0 };
 
   /** How loud each second is, which is what a drawn level should move. */
   function seconds(buffer, channel = 0) {
@@ -218,6 +221,109 @@
   const silent = await render({ ...gapped(flatSpace(1)), cues: [] });
   check('a room on a layer with nothing on it is silent',
     tail(silent, 0, 4) < 1e-6, tail(silent, 0, 4).toExponential(2));
+
+  // ---------- curves and holds ----------
+
+  /*
+   * The shape between two points, on its own, before any of it reaches a
+   * sound. Everything below rests on these three being true.
+   */
+  check('no shape at all is a straight line',
+    shape(0.25, undefined) === 0.25 && shape(0.5, 0) === 0.5 && shape(0.75, undefined) === 0.75, '');
+  check('a hold does not move until it arrives',
+    shape(0.01, 'hold') === 0 && shape(0.99, 'hold') === 0 && shape(1, 'hold') === 1, '');
+  // Bending one way and bending the other by the same amount have to be the
+  // same curve turned over, or dragging a segment up and back down again
+  // would not arrive where it started.
+  const mirrored = [0.1, 0.25, 0.5, 0.75, 0.9].map((u) =>
+    Math.abs(shape(u, 0.6) + shape(1 - u, -0.6) - 1));
+  check('bending up and bending down by the same amount are the same curve turned over',
+    Math.max(...mirrored) < 1e-12, `largest difference ${Math.max(...mirrored).toExponential(2)}`);
+  check('a bend never doubles back on itself',
+    [-1, -0.5, 0.5, 1].every((b) => {
+      let last = -1;
+      for (let u = 0; u <= 1.0001; u += 0.01) {
+        const v = shape(u, b);
+        if (v < last) return false;
+        last = v;
+      }
+      return true;
+    }), '');
+  check('and the drag works out the bend that puts the middle where the hand is',
+    Math.abs(shape(0.5, bendFor(0.2)) - 0.2) < 1e-9 &&
+    Math.abs(shape(0.5, bendFor(0.8)) - 0.8) < 1e-9 && bendFor(0.5) === 0,
+    `${shape(0.5, bendFor(0.2)).toFixed(4)} and ${shape(0.5, bendFor(0.8)).toFixed(4)}`);
+
+  // Reading a lane has to agree with all of that.
+  const bentLane = [{ t: 0, value: 0 }, { t: 2, value: 1, curve: 0.6 }];
+  const heldLane = [{ t: 0, value: 0 }, { t: 2, value: 1, curve: 'hold' }];
+  check('a lane reads its shapes the same way',
+    Math.abs(laneValueAt(bentLane, 1, 0) - shape(0.5, 0.6)) < 1e-12 &&
+    laneValueAt(heldLane, 1.99, 0) === 0 && laneValueAt(heldLane, 2, 0) === 1,
+    `bent at halfway ${laneValueAt(bentLane, 1, 0).toFixed(4)}`);
+
+  // And then the same shapes have to reach the file.
+  // Held flat across the whole of the first second, so that second is the
+  // same for every shape and can be used to check that they all start from
+  // the same place.
+  const ramp = (curve) => ({ level: [
+    { t: 0, value: 1 }, { t: 1, value: 1 },
+    ...(curve === undefined ? [{ t: 3.5, value: 0 }] : [{ t: 3.5, value: 0, curve }]),
+  ] });
+
+  const straightBuffer = await render(project(ramp(undefined)));
+  const straightRamp = seconds(straightBuffer);
+  const spelledOut = await levels(project(ramp(0)));
+  check('writing a straight line down as a straight line changes nothing',
+    straightRamp.every((v, i) => Math.abs(v - spelledOut[i]) < 1e-9),
+    straightRamp.map((v) => v.toFixed(4)).join(', '));
+
+  const hangsBuffer = await render(project(ramp(0.6)));
+  const rushesBuffer = await render(project(ramp(-0.6)));
+  const hangs = seconds(hangsBuffer);
+  const rushes = seconds(rushesBuffer);
+  check('a segment bent to hang back is louder for longer than a straight one',
+    hangs[1] > straightRamp[1] && hangs[2] > straightRamp[2],
+    `straight ${straightRamp.map((v) => v.toFixed(4)).join(', ')} against ${hangs.map((v) => v.toFixed(4)).join(', ')}`);
+  check('and one bent the other way gets out of the way sooner',
+    rushes[1] < straightRamp[1] && rushes[2] < straightRamp[2],
+    rushes.map((v) => v.toFixed(4)).join(', '));
+  /*
+   * Read on either side of the shape rather than across its end, since a
+   * window straddling the last point is measuring the shape and not the place
+   * it finishes at. And read with the room at the end of the chain out of the
+   * way: it rings on past the last point by design, most of all for the shape
+   * that was loudest going into it, and that would be read as a level that
+   * had not reached zero.
+   */
+  const after = async (curve) => tail(await render(project(ramp(curve)), DRY), 3.6, 3.9);
+  const ends = [await after(undefined), await after(0.6), await after(-0.6)];
+  check('every shape still starts and finishes exactly where the points are',
+    Math.abs(hangs[0] / straightRamp[0] - 1) < 0.005 &&
+    Math.abs(rushes[0] / straightRamp[0] - 1) < 0.005 &&
+    ends.every((v) => v < straightRamp[0] * 0.001),
+    `before it starts ${hangs[0].toFixed(4)}, ${rushes[0].toFixed(4)}, ${straightRamp[0].toFixed(4)}; ` +
+    `after it ends ${ends.map((v) => v.toExponential(1)).join(', ')}`);
+
+  // A hold is the one shape a bend cannot make: nothing happens, and then
+  // everything does.
+  const stepped = await levels(project({ level: [
+    { t: 0, value: 1 }, { t: 2.5, value: 0.15, curve: 'hold' },
+  ] }));
+  check('a hold does not move at all, and then steps',
+    Math.abs(stepped[1] / stepped[0] - 1) < 0.03 && stepped[3] < stepped[0] * 0.25,
+    stepped.map((v) => v.toFixed(4)).join(', '));
+
+  // A position is written out in steps for its own reasons, so its shapes
+  // have to come through that as well.
+  const heldPan = await render(project({ pan: [
+    { t: 0, value: -1 }, { t: 2.5, value: 1, curve: 'hold' },
+  ] }));
+  const heldPanL = seconds(heldPan, 0), heldPanR = seconds(heldPan, 1);
+  check('a held position stays on one side and then crosses over',
+    heldPanR[1] < heldPanL[1] * 0.05 && heldPanL[3] < heldPanR[3] * 0.05,
+    `second one ${heldPanL[1].toFixed(4)}/${heldPanR[1].toFixed(4)}, ` +
+    `second three ${heldPanL[3].toFixed(4)}/${heldPanR[3].toFixed(4)}`);
 
   // ---------- drive ----------
 

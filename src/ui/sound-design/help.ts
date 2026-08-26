@@ -61,6 +61,8 @@ const SECTIONS: readonly Section[] = [
       ['+ Layer', 'Add another layer. Double click a name to rename it.'],
       ['A, next to a layer name', 'Opens that layer’s curves: level, position, room and push.'],
       ['On a lane', 'Click to add a point, drag to move it, click a point twice to remove it.'],
+      ['Between two points', 'A small handle on the line. Drag it to bend the way one value becomes the next.'],
+      ['Press that handle', 'Holds instead: the value stays put and steps across on arrival, for a cut.'],
       ['A lane name', 'Opens it, or shuts it again. A shut one still shows its shape, small.'],
       ['Pan', 'Where a whole layer sits between the speakers. Up is right, down is left.'],
       ['Space, on a lane', 'Puts the whole layer in a room, and lets it walk into a bigger one.'],
