@@ -98,9 +98,52 @@
         }
 
         const envNorm = Math.hypot(...envelope) || 1;
-        const out = timbre.concat(envelope.map((v) => (v / envNorm) * 2));
+        const out = timbre
+          .concat(envelope.map((v) => (v / envNorm) * 2))
+          .concat(texture(data, span));
         const total = Math.hypot(...out) || 1;
         return out.map((v) => v / total);
+      }
+
+      /**
+       * Whether a sound is one event or many.
+       *
+       * The bands and the envelope above miss this entirely. Slice a single
+       * tick and a run of twenty of them into the same number of windows
+       * across their own lengths and both give the same timbre in every
+       * window and much the same shape over the whole, so they measure as
+       * nearly the same sound while being obviously different to anyone
+       * listening. That gap did not matter when every voice was one event.
+       * It matters now that whole mechanisms exist to repeat.
+       *
+       * Two numbers: how much the level jumps about from moment to moment,
+       * and how often it jumps upward. A drone scores near zero on both, a
+       * single tick scores high on the first and low on the second, and a
+       * ratchet scores high on both.
+       */
+      function texture(data, span) {
+        const hop = 256;
+        const env = [];
+        for (let i = 0; i + hop < span; i += hop) {
+          let peak = 0;
+          for (let j = 0; j < hop; j++) peak = Math.max(peak, Math.abs(data[i + j]));
+          env.push(peak);
+        }
+        if (env.length < 3) return [0, 0];
+
+        const mean = env.reduce((a, b) => a + b, 0) / env.length || 1e-9;
+        let jumps = 0, rises = 0;
+        for (let i = 1; i < env.length; i++) {
+          jumps += Math.abs(env[i] - env[i - 1]);
+          if (env[i] > env[i - 1] * 1.6 && env[i] > mean * 0.4) rises++;
+        }
+        const seconds = span / RATE;
+        // Weighted to matter as much as a handful of bands, so it can separate
+        // sounds the spectrum cannot without drowning out the spectrum.
+        return [
+          Math.min(1.5, jumps / ((env.length - 1) * mean)) * 1.5,
+          Math.min(1, rises / seconds / 30) * 1.5,
+        ];
       }
 
       function cosine(a, b) {
@@ -109,21 +152,53 @@
         return dot;
       }
 
+      /*
+       * Rendered from fixed seeds, and from more than one of them.
+       *
+       * Most of these voices are built on noise, so left to itself every
+       * render draws a different sound and every comparison comes out a
+       * little different: measured twice without this, an unchanged pair of
+       * voices moved by five hundredths, which is more than the differences
+       * being looked for here. Seeding makes a run repeatable. Using three
+       * seeds and averaging stops the answer being an accident of which
+       * particular noise one of them happened to draw.
+       */
+      const SEEDS = [1, 2, 3];
       const prints = {};
+      const levels = {};
       for (const name of DESIGN_NAMES) {
-        const ctx = new OfflineAudioContext(1, RATE * SECONDS, RATE);
-        playDesign(ctx, ctx.destination, name, 0, {
-          length: DESIGN_DEFAULT_LENGTH[name], tune: 0, gain: 1,
-        });
-        const buffer = await ctx.startRendering();
-        prints[name] = fingerprint(buffer.getChannelData(0));
+        prints[name] = [];
+        for (const seed of SEEDS) {
+          const ctx = new OfflineAudioContext(1, RATE * SECONDS, RATE);
+          playDesign(ctx, ctx.destination, name, 0, {
+            length: DESIGN_DEFAULT_LENGTH[name], tune: 0, gain: 1, seed,
+          });
+          const buffer = await ctx.startRendering();
+          const data = buffer.getChannelData(0);
+          prints[name].push(fingerprint(data));
+          if (seed === SEEDS[0]) {
+            let peak = 0, sum = 0;
+            for (let i = 0; i < data.length; i++) {
+              peak = Math.max(peak, Math.abs(data[i]));
+              sum += data[i] * data[i];
+            }
+            levels[name] = { peak: +peak.toFixed(3), rms: +Math.sqrt(sum / data.length).toFixed(4) };
+          }
+        }
       }
+
+      /** How alike two voices are, averaged over the seeds. */
+      const alike = (a, b) => {
+        let sum = 0;
+        for (let s = 0; s < SEEDS.length; s++) sum += cosine(prints[a][s], prints[b][s]);
+        return sum / SEEDS.length;
+      };
 
       const pairs = [];
       const names = DESIGN_NAMES;
       for (let i = 0; i < names.length; i++) {
         for (let j = i + 1; j < names.length; j++) {
-          pairs.push({ a: names[i], b: names[j], similarity: cosine(prints[names[i]], prints[names[j]]) });
+          pairs.push({ a: names[i], b: names[j], similarity: alike(names[i], names[j]) });
         }
       }
       pairs.sort((x, y) => y.similarity - x.similarity);
@@ -132,6 +207,13 @@
         voices: names.length,
         closest: pairs.slice(0, 12).map((p) => ({ pair: `${p.a} / ${p.b}`, similarity: +p.similarity.toFixed(3) })),
         median: +pairs[Math.floor(pairs.length / 2)].similarity.toFixed(3),
+        // A voice nobody can hear, or one that takes the roof off, is no use
+        // however distinct it measures.
+        silent: Object.entries(levels).filter(([, l]) => l.peak < 0.02).map(([n]) => n),
+        loudest: Object.entries(levels).sort((a, b) => b[1].peak - a[1].peak).slice(0, 5)
+          .map(([n, l]) => `${n} ${l.peak}`),
+        quietest: Object.entries(levels).sort((a, b) => a[1].peak - b[1].peak).slice(0, 5)
+          .map(([n, l]) => `${n} ${l.peak}`),
       }, null, 2);
       document.title = 'done';
     </script>

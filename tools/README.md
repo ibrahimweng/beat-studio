@@ -113,6 +113,31 @@ whoever picks them up.
 
 Run the development server and open http://localhost:5173/tools/automation-check.html
 
+## voice-check.html
+
+Measures how alike every voice is to every other, which is the check on
+whether adding voices is adding sounds or only adding names.
+
+Each voice is fingerprinted by what it is made of and how that moves across
+its own length, and every pair is compared. What matters is the closest pair:
+if a new voice lands nearer to something than anything already in the palette
+was to anything else, it is a variation rather than a voice.
+
+Two things had to be fixed here before the numbers meant anything. The
+fingerprint had no idea about repetition, so a single tick and a run of
+twenty of them measured as nearly the same sound; a run of hits is now
+described by how much its level jumps about and how often it jumps upward,
+which separates one event from many. And the renders were unseeded, so every
+run drew different noise and an unchanged pair of voices moved by five
+hundredths between runs, which is larger than the differences being looked
+for. Seeded, and averaged over three seeds, a run now gives exactly the same
+answer twice.
+
+It also reports the loudest and quietest voices and any that are silent,
+since a voice nobody can hear is no use however distinct it measures.
+
+Run the development server and open http://localhost:5173/tools/voice-check.html
+
 ## mechanism-check.html
 
 Checks that each way of making a sound actually does the thing it is named

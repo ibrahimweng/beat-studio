@@ -40,7 +40,27 @@ export type DesignName =
   | 'zap'
   | 'glitch'
   | 'shimmer'
-  | 'static';
+  | 'static'
+  // Struck bodies
+  | 'bell'
+  | 'glass'
+  | 'wood'
+  | 'pipe'
+  // Plucked
+  | 'string'
+  | 'thunk'
+  | 'wire'
+  // Clouds of grains
+  | 'rain'
+  | 'fire'
+  | 'gravel'
+  | 'swarm'
+  | 'pour'
+  // Runs of hits
+  | 'ratchet'
+  | 'clockwork'
+  | 'zip'
+  | 'motor';
 
 /** The groups the picker shows, in the order they appear. */
 export const DESIGN_GROUPS: readonly { title: string; names: readonly DesignName[] }[] = [
@@ -50,6 +70,10 @@ export const DESIGN_GROUPS: readonly { title: string; names: readonly DesignName
   { title: 'Low end', names: ['sub', 'rumble', 'drone'] },
   { title: 'Detail', names: ['click', 'tick', 'pop', 'beep', 'chirp'] },
   { title: 'Texture', names: ['zap', 'glitch', 'shimmer', 'static'] },
+  { title: 'Struck', names: ['bell', 'glass', 'wood', 'pipe'] },
+  { title: 'Plucked', names: ['string', 'thunk', 'wire'] },
+  { title: 'Grains', names: ['rain', 'fire', 'gravel', 'swarm', 'pour'] },
+  { title: 'Mechanical', names: ['ratchet', 'clockwork', 'zip', 'motor'] },
 ];
 
 export type PitchedName = 'piano' | 'guitar';
@@ -278,6 +302,22 @@ export const DESIGN_DEFAULT_LENGTH: Record<DesignName, number> = {
   glitch: 0.35,
   shimmer: 1.8,
   static: 0.8,
+  bell: 2.2,
+  glass: 1.6,
+  wood: 0.16,
+  pipe: 1.1,
+  string: 1.4,
+  thunk: 0.28,
+  wire: 2.0,
+  rain: 1.5,
+  fire: 1.6,
+  gravel: 0.7,
+  swarm: 1.4,
+  pour: 1.2,
+  ratchet: 0.8,
+  clockwork: 1.6,
+  zip: 0.5,
+  motor: 1.8,
 };
 
 /**
@@ -311,6 +351,23 @@ export const DESIGN_DEFAULT_ANCHOR: Record<DesignName, Anchor> = {
   glitch: 'start',
   shimmer: 'start',
   static: 'start',
+  bell: 'start',
+  glass: 'start',
+  wood: 'start',
+  pipe: 'start',
+  string: 'start',
+  thunk: 'start',
+  wire: 'start',
+  rain: 'start',
+  fire: 'start',
+  gravel: 'start',
+  swarm: 'start',
+  pour: 'start',
+  ratchet: 'start',
+  clockwork: 'start',
+  // A zip accelerating into a moment is a lead in, the same as a riser.
+  zip: 'end',
+  motor: 'start',
 };
 
 /**
@@ -353,6 +410,28 @@ export const DESIGN_CHARACTER: Record<DesignName, { space: number; drive: number
   glitch: { space: 0.05, drive: 0.2 },
   shimmer: { space: 0.35, drive: 0 },
   static: { space: 0, drive: 0 },
+  // Struck things are objects in a place, and a room is most of what says so.
+  bell: { space: 0.3, drive: 0 },
+  glass: { space: 0.32, drive: 0 },
+  wood: { space: 0.12, drive: 0 },
+  pipe: { space: 0.28, drive: 0.1 },
+  // Plucked things are closer to the ear than struck ones.
+  string: { space: 0.15, drive: 0 },
+  thunk: { space: 0.1, drive: 0.25 },
+  wire: { space: 0.22, drive: 0 },
+  // Weather and water are already made of a thousand small things, so a room
+  // on top of them turns to mush rather than to distance.
+  rain: { space: 0.08, drive: 0 },
+  fire: { space: 0.06, drive: 0.15 },
+  gravel: { space: 0.1, drive: 0.2 },
+  swarm: { space: 0.18, drive: 0 },
+  pour: { space: 0.12, drive: 0 },
+  // Machines are near and dry, and a little push is what makes them read as
+  // metal working rather than as clicks.
+  ratchet: { space: 0.08, drive: 0.2 },
+  clockwork: { space: 0.1, drive: 0.1 },
+  zip: { space: 0.05, drive: 0.15 },
+  motor: { space: 0.1, drive: 0.35 },
 };
 
 /** What everything else starts at. Packs bring their own effects with them. */

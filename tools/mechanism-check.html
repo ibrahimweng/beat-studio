@@ -174,9 +174,24 @@
   check('a thin cloud is mostly the silence between its grains',
     sparseGap > 0.5 && denseGap < 0.1,
     `thin is ${(sparseGap * 100).toFixed(0)}% silence, thick is ${(denseGap * 100).toFixed(0)}%`);
-  check('and a thick one runs together into a texture',
-    rms(dense, 0, Math.round(1.8 * RATE)) > rms(sparse, 0, Math.round(1.8 * RATE)) * 3,
-    `thin ${rms(sparse, 0, Math.round(1.8 * RATE)).toFixed(4)}, thick ${rms(dense, 0, Math.round(1.8 * RATE)).toFixed(4)}`);
+
+  /*
+   * Thickening a cloud has to change its texture and not its level.
+   *
+   * Grains land on top of each other, so without anything done about it
+   * thirty times as many of them is a far louder sound, and the density
+   * control is a volume control wearing a different name. Each grain is
+   * scaled by the square root of how many are sounding at once, which is how
+   * unrelated phases actually pile up, so the two clouds come out at much
+   * the same level while being obviously different sounds.
+   */
+  const thinLoud = rms(sparse, 0, Math.round(1.8 * RATE));
+  const thickLoud = rms(dense, 0, Math.round(1.8 * RATE));
+  check('and thickening a cloud changes its texture rather than its level',
+    thickLoud < thinLoud * 2.5 && denseGap < sparseGap * 0.2,
+    `level ${thinLoud.toFixed(4)} to ${thickLoud.toFixed(4)}, a factor of ` +
+    `${(thickLoud / thinLoud).toFixed(2)}, while the silence in it went from ` +
+    `${(sparseGap * 100).toFixed(0)}% to ${(denseGap * 100).toFixed(0)}%`);
 
   const narrow = await render({
     source: { kind: 'grains', density: 300, grain: 0.02, freq: 900, spread: 0 },
