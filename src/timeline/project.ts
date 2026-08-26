@@ -8,13 +8,21 @@ import {
   DESIGN_DEFAULT_ANCHOR,
   DESIGN_DEFAULT_LENGTH,
   DESIGN_NAMES,
+  LANES,
   type Cue,
   type CueSource,
   type DesignName,
+  type LaneName,
+  type Lanes,
   type Layer,
   type Project,
   type SnapMode,
 } from './types.ts';
+
+/** A layer with nothing drawn on it. Fresh arrays, since layers are edited. */
+export function emptyLanes(): Lanes {
+  return { level: [], pan: [], space: [] };
+}
 
 /** Layers a new project starts with, in the order they are drawn. */
 const STARTER_LAYERS: readonly { id: string; name: string }[] = [
@@ -34,7 +42,7 @@ export function emptyProject(): Project {
     fps: DEFAULT_FPS,
     duration: 0,
     videoName: null,
-    layers: STARTER_LAYERS.map((l) => ({ ...l, muted: false, solo: false, gain: 1, auto: [] })),
+    layers: STARTER_LAYERS.map((l) => ({ ...l, muted: false, solo: false, gain: 1, auto: emptyLanes() })),
     cues: [],
     bpm: 120,
     snap: 'frame',
@@ -128,24 +136,28 @@ export function audibleCues(project: Project): Cue[] {
   return project.cues.filter((c) => !c.muted && allowed.has(c.layerId));
 }
 
-/** Level for a cue once its layer's level is applied. */
 /**
  * Level for a cue once its layer's level is applied.
  *
  * A layer with a level drawn over time is not accounted for here, because
  * that level belongs to a moment rather than to a sound: it is applied to
- * everything on the layer at once, further down. See {@link layerLevelAt}.
+ * everything on the layer at once, further down. See {@link laneValueAt}.
  */
 export function cueGain(project: Project, cue: Cue): number {
   const layer = project.layers.find((l) => l.id === cue.layerId);
   if (!layer) return cue.gain;
-  return cue.gain * (layer.auto.length ? 1 : layer.gain);
+  return cue.gain * (layer.auto.level.length ? 1 : layer.gain);
 }
 
-/** What a layer's level is at a moment, reading between the points drawn. */
-export function layerLevelAt(layer: Layer, t: number): number {
-  const points = layer.auto;
-  if (!points.length) return layer.gain;
+/**
+ * What a drawn curve is worth at a moment, reading between its points.
+ *
+ * Held flat before the first point and after the last, which is what the
+ * drawing shows, so the two cannot disagree. An empty lane is worth whatever
+ * that lane means when nobody has drawn on it.
+ */
+export function laneValueAt(points: readonly AutoPoint[], t: number, fallback: number): number {
+  if (!points.length) return fallback;
   if (t <= points[0].t) return points[0].value;
 
   const last = points[points.length - 1];
@@ -161,58 +173,49 @@ export function layerLevelAt(layer: Layer, t: number): number {
   return last.value;
 }
 
+/** A layer's level at a moment, drawn or fixed. */
+export function layerLevelAt(layer: Layer, t: number): number {
+  return laneValueAt(layer.auto.level, t, layer.gain);
+}
+
 /**
- * Write a layer's level onto a parameter, over a stretch of the video.
+ * Write a drawn curve onto a parameter, over a stretch of the video.
  *
  * Used twice over. The file is written in one pass, from nothing to the end.
  * Playing writes only the fraction of a second ahead of where the video is,
- * again on every tick, so that the level stays with the picture rather than
- * drifting away from it over a long piece.
+ * again on every tick, so that what was drawn stays with the picture rather
+ * than drifting away from it over a long piece.
  */
-export function scheduleLayerLevel(
+export function scheduleLane(
   param: AudioParam,
-  layer: Layer,
+  points: readonly AutoPoint[],
+  fallback: number,
   origin: number,
   from: number,
   to: number,
 ): void {
   if (to <= from) return;
   param.cancelScheduledValues(origin + from);
-  param.setValueAtTime(layerLevelAt(layer, from), origin + from);
-  for (const point of layer.auto) {
+  param.setValueAtTime(laneValueAt(points, from, fallback), origin + from);
+  for (const point of points) {
     if (point.t <= from || point.t > to) continue;
     param.linearRampToValueAtTime(point.value, origin + point.t);
   }
-  param.linearRampToValueAtTime(layerLevelAt(layer, to), origin + to);
+  param.linearRampToValueAtTime(laneValueAt(points, to, fallback), origin + to);
 }
 
-/** Put a point on a layer's level, keeping the list in order. */
-export function addAutoPoint(project: Project, id: string, point: AutoPoint): Project {
-  const layer = project.layers.find((l) => l.id === id);
-  if (!layer) return project;
-  const auto = [...layer.auto.filter((p) => Math.abs(p.t - point.t) > 1e-4), point].sort(
-    (a, b) => a.t - b.t,
-  );
-  return updateLayer(project, id, { auto });
-}
-
-/** Move one, keeping the list in order. */
-export function moveAutoPoint(
+/** Take one point off one of a layer's curves. */
+export function removeAutoPoint(
   project: Project,
   id: string,
+  lane: LaneName,
   index: number,
-  point: AutoPoint,
 ): Project {
   const layer = project.layers.find((l) => l.id === id);
-  if (!layer || !layer.auto[index]) return project;
-  const auto = layer.auto.map((p, i) => (i === index ? point : p)).sort((a, b) => a.t - b.t);
-  return updateLayer(project, id, { auto });
-}
-
-export function removeAutoPoint(project: Project, id: string, index: number): Project {
-  const layer = project.layers.find((l) => l.id === id);
   if (!layer) return project;
-  return updateLayer(project, id, { auto: layer.auto.filter((_, i) => i !== index) });
+  return updateLayer(project, id, {
+    auto: { ...layer.auto, [lane]: layer.auto[lane].filter((_, i) => i !== index) },
+  });
 }
 
 /**
@@ -263,7 +266,7 @@ export function addLayer(project: Project, name?: string): Project {
     muted: false,
     solo: false,
     gain: 1,
-    auto: [],
+    auto: emptyLanes(),
   };
   return { ...project, layers: [...project.layers, layer] };
 }
@@ -371,22 +374,45 @@ function readLayers(raw: unknown, fallback: readonly Layer[]): Layer[] {
       muted: layer.muted === true,
       solo: layer.solo === true,
       gain: readNumber(layer.gain, 1, 0, MAX_GAIN),
-      auto: readAuto(layer.auto),
+      auto: readLanes(layer.auto),
     });
   }
 
   return layers.length ? layers : [...fallback];
 }
 
-/** Read a level drawn over time, dropping anything that is not a point. */
-function readAuto(raw: unknown): AutoPoint[] {
+/**
+ * Read a layer's curves.
+ *
+ * Sessions written before there was anything but a level hold a bare list of
+ * points here, and those are still someone's work, so a list is read as the
+ * level lane rather than thrown away.
+ */
+function readLanes(raw: unknown): Lanes {
+  const lanes = emptyLanes();
+  if (Array.isArray(raw)) {
+    lanes.level = readAuto(raw, LANES[0]);
+    return lanes;
+  }
+  if (!raw || typeof raw !== 'object') return lanes;
+
+  const held = raw as Record<string, unknown>;
+  for (const lane of LANES) lanes[lane.name] = readAuto(held[lane.name], lane);
+  return lanes;
+}
+
+/** Read one curve, dropping anything that is not a point on it. */
+function readAuto(raw: unknown, lane: { min: number; max: number; neutral: number }): AutoPoint[] {
   if (!Array.isArray(raw)) return [];
   const points: AutoPoint[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const point = item as Partial<AutoPoint>;
     if (typeof point.t !== 'number' || !Number.isFinite(point.t)) continue;
-    points.push({ t: Math.max(0, point.t), value: readNumber(point.value, 1, 0, MAX_GAIN) });
+    points.push({
+      t: Math.max(0, point.t),
+      value: readNumber(point.value, lane.neutral, lane.min, lane.max),
+    });
   }
   return points.sort((a, b) => a.t - b.t);
 }

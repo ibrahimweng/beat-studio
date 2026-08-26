@@ -4,8 +4,14 @@
   /* Row heights are shared by the layer names and the lanes beside them, so
      the two columns cannot slide out of line. */
   --tl-row: 30px;
-  /* Height of a layer's level lane, when it is open. */
+  /* Height of one of a layer's lanes, open and closed. */
   --tl-auto: 46px;
+  --tl-auto-shut: 16px;
+  /* Between one lane and the next, and between the last one and the layer
+     below it. Lighter than the lines elsewhere, since these separate things
+     that are the same colour as each other. */
+  --lane-line: color-mix(in oklab, var(--tc-fg) 8%, transparent);
+  --lane-edge: color-mix(in oklab, var(--tc-fg) 15%, transparent);
   --tl-ruler: 26px;
   --tl-strip: 34px;
   --tl-gutter: 140px;
@@ -314,16 +320,52 @@
   cursor: copy;
 }
 
-/* A layer with its level open is taller, and its name row grows to match, or
-   the two columns would stop lining up with each other. */
-.tl__lane.is-automating,
-.tl__gutter-row.is-automating {
-  height: calc(var(--tl-row) + var(--tl-auto));
+/* A layer showing its curves keeps its own height. The lanes are rows of
+   their own underneath it, in both columns, so the names on the left cannot
+   slide out of line with the shapes on the right. */
+.tl__lane.is-automating {
+  border-bottom-color: transparent;
 }
 
-.tl__gutter-row.is-automating {
-  align-items: flex-start;
-  padding-top: 7px;
+/* The name beside a lane, at the same height as the lane itself. */
+.tl__gutter-lane {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 16px;
+  /* Drawn against the ground rather than against the panel colour, since
+     three lanes stacked with a faint border between them read as one tall
+     area rather than as three things you can draw different shapes on. */
+  border-bottom: 1px solid var(--lane-line);
+  background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
+}
+
+.tl__gutter-lane.is-shut {
+  background: color-mix(in oklab, var(--tc-fg) 1.5%, transparent);
+}
+
+.tl__lane-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl__gutter-lane:not(.is-shut) .tl__lane-name {
+  color: var(--txt-2);
+}
+
+.tl__lane-name:hover {
+  color: var(--ac);
 }
 
 /* Dragged across the lanes to choose several sounds at once. */
@@ -339,19 +381,39 @@
 /* ---------- a level drawn over time ---------- */
 
 .tl__auto {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: var(--tl-auto);
   display: block;
+  /* The width in the attribute is the drawing's own; this keeps the element
+     from being what decides how wide the timeline is. */
+  width: 100%;
+  height: var(--tl-auto);
   cursor: crosshair;
   background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
-  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--lane-line);
 }
 
-/* Where the level is the level, so a shape can be read against something. */
+/* Closed: the shape at a sixth of the height, to be read rather than edited.
+   A press anywhere on it opens it. */
+.tl__auto.is-shut {
+  height: var(--tl-auto-shut);
+  cursor: pointer;
+  background: color-mix(in oklab, var(--tc-fg) 1.5%, transparent);
+}
+
+.tl__auto.is-shut:hover {
+  background: color-mix(in oklab, var(--tc-fg) 5%, transparent);
+}
+
+/* The end of a layer's lanes, drawn against the layer below it. */
+.tl__auto.is-last,
+.tl__gutter-lane.is-last {
+  border-bottom-color: var(--lane-edge);
+}
+
+/* Where the lane does nothing, so a shape can be read against something. It
+   carries more weight on a lane that runs both ways, since on those it is the
+   only thing saying which side of the middle a curve is on. */
 .tl__auto-unity {
-  stroke: var(--line);
+  stroke: color-mix(in oklab, var(--tc-fg) 16%, transparent);
   stroke-width: 1;
   stroke-dasharray: 3 4;
 }

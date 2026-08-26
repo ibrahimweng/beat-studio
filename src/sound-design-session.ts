@@ -37,7 +37,7 @@ import {
   updateLayer,
   frameDuration,
 } from './timeline/project.ts';
-import type { AutoPoint, Cue, CueSource, Layer, Project } from './timeline/types.ts';
+import type { AutoPoint, Cue, CueSource, LaneName, Layer, Project } from './timeline/types.ts';
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
@@ -789,18 +789,25 @@ export class SoundDesignSession {
   }
 
   /**
-   * Set a layer's level over time.
+   * Set one of a layer's curves.
    *
    * Given whole rather than a point at a time, because drawing one is a
    * continuous movement and the interface has the finished shape by the time
    * the pointer comes up.
    */
-  setAuto(id: string, auto: AutoPoint[]): void {
-    this.updateLayer(id, { auto });
+  setAuto(id: string, lane: LaneName, points: AutoPoint[]): void {
+    const layer = this.project.layers.find((l) => l.id === id);
+    if (!layer) return;
+    // Labelled by the lane, so drawing a level and then a position straight
+    // afterwards is two things to undo rather than one.
+    this.#setProject(
+      updateLayer(this.project, id, { auto: { ...layer.auto, [lane]: points } }),
+      `draw:${lane}:${id}`,
+    );
   }
 
-  removeAutoPoint(id: string, index: number): void {
-    this.#setProject(removeAutoPoint(this.project, id, index), `level:${id}:remove`);
+  removeAutoPoint(id: string, lane: LaneName, index: number): void {
+    this.#setProject(removeAutoPoint(this.project, id, lane, index), `${lane}:${id}:remove`);
   }
 
   /** Add a layer and make it the one new sounds go on. */

@@ -1,32 +1,52 @@
 <!doctype html>
 <html><head><meta charset="utf-8" /><title>automation check</title></head><body><pre id="out">working…</pre>
 <script type="module">
-  /* A level drawn over a layer has to reach the file, and has to move
+  /* A curve drawn over a layer has to reach the file, and has to move
      everything on that layer together. */
-  import { renderProject } from '/src/audio/render.ts';
-  import { emptyProject, makeCue, layerLevelAt, updateLayer } from '/src/timeline/project.ts';
+  import { renderProject, renderStems } from '/src/audio/render.ts';
+  import { emptyProject, emptyLanes, makeCue, layerLevelAt, laneValueAt } from '/src/timeline/project.ts';
   import { DEFAULT_CHAIN } from '/src/audio/chain.ts';
 
   const RATE = 48000;
   const results = [];
   const check = (name, pass, detail) => results.push({ name, pass, detail });
 
-  /** A steady bed of sound on one layer, so a level change is easy to read. */
-  function project(auto, gain = 1) {
+  /*
+   * One set of sounds, reused for every render.
+   *
+   * A sound draws its noise from its own id and every new sound gets a new
+   * one, so two projects built the same way are not the same sound and their
+   * levels differ by a percent or two. Built once and only the layer swapped,
+   * the comparisons below are exact rather than nearly.
+   */
+  const base = (() => {
     const p = { ...emptyProject(), duration: 4 };
     const id = p.layers[0].id;
-    p.layers = p.layers.map((l) => (l.id === id ? { ...l, auto, gain } : l));
     p.cues = [0, 1, 2, 3].map((t) => ({
       ...makeCue(t, id, { kind: 'design', name: 'static' }),
       length: 1, gain: 1, space: 0, drive: 0,
     }));
     return p;
+  })();
+
+  /** A steady bed of sound on one layer, so a change is easy to read. */
+  function project(lanes, gain = 1) {
+    const id = base.layers[0].id;
+    const auto = { ...emptyLanes(), ...lanes };
+    return {
+      ...base,
+      layers: base.layers.map((l) => (l.id === id ? { ...l, auto, gain } : l)),
+    };
   }
 
-  async function levels(p) {
+  async function render(p) {
     const r = await renderProject(p, { settings: DEFAULT_CHAIN, master: { limit: false, target: null } });
-    const d = r.parts[0].buffer.getChannelData(0);
-    // The loudness of each second, which is what a drawn level should move.
+    return r.parts[0].buffer;
+  }
+
+  /** How loud each second is, which is what a drawn level should move. */
+  function seconds(buffer, channel = 0) {
+    const d = buffer.getChannelData(channel);
     return [0, 1, 2, 3].map((second) => {
       let sum = 0, n = 0;
       for (let i = Math.round((second + 0.2) * RATE); i < Math.round((second + 0.8) * RATE); i++) {
@@ -36,13 +56,17 @@
     });
   }
 
+  const levels = async (p) => seconds(await render(p));
+
+  // ---------- level ----------
+
   // 1. Nothing drawn behaves as it always did.
-  const flat = await levels(project([]));
+  const flat = await levels(project({}));
   check('with nothing drawn the level holds steady',
     Math.max(...flat) / Math.min(...flat) < 1.15, flat.map((v) => v.toFixed(4)).join(', '));
 
   // 2. A fade from full to nothing is heard as one.
-  const faded = await levels(project([{ t: 0, value: 1 }, { t: 4, value: 0 }]));
+  const faded = await levels(project({ level: [{ t: 0, value: 1 }, { t: 4, value: 0 }] }));
   check('a fade is heard as a fade',
     faded[0] > faded[1] && faded[1] > faded[2] && faded[2] > faded[3],
     faded.map((v) => v.toFixed(4)).join(', '));
@@ -55,28 +79,194 @@
   // Held down across the whole of the third second rather than only touching
   // the bottom at one instant, so the measurement sits inside the dip rather
   // than across the ramps into and out of it.
-  const dipped = await levels(project([
+  const dipped = await levels(project({ level: [
     { t: 0, value: 1 }, { t: 1.9, value: 1 }, { t: 2.1, value: 0.1 },
     { t: 2.9, value: 0.1 }, { t: 3.1, value: 1 },
-  ]));
+  ] }));
   check('a dip in the middle only dips the middle',
     dipped[2] < dipped[1] * 0.5 && dipped[3] > dipped[2] * 1.5,
     dipped.map((v) => v.toFixed(4)).join(', '));
 
   // 4. Drawing takes over from the fixed level rather than multiplying with it.
-  const halfFixed = await levels(project([], 0.5));
-  const drawnFull = await levels(project([{ t: 0, value: 1 }, { t: 4, value: 1 }], 0.5));
+  const halfFixed = await levels(project({}, 0.5));
+  const drawnFull = await levels(project({ level: [{ t: 0, value: 1 }, { t: 4, value: 1 }] }, 0.5));
   check('a drawn level replaces the fixed one rather than stacking with it',
     Math.abs(drawnFull[0] / halfFixed[0] - 2) < 0.25,
     `fixed at half ${halfFixed[0].toFixed(4)}, drawn at full ${drawnFull[0].toFixed(4)}`);
 
-  // 5. Reading a level between points is a straight line.
+  // ---------- pan ----------
+
+  // 5. Nothing drawn leaves the two sides as they were.
+  const centred = await render(project({}));
+  const evenL = seconds(centred, 0), evenR = seconds(centred, 1);
+  check('with nothing drawn neither side is favoured',
+    Math.abs(evenL[0] - evenR[0]) / evenL[0] < 0.05,
+    `left ${evenL[0].toFixed(4)}, right ${evenR[0].toFixed(4)}`);
+
+  // 6. The one that matters: drawing a position and leaving it in the middle
+  //    has to change nothing at all, or adding a lane would quietly move a
+  //    mix that was already right.
+  const held = await render(project({ pan: [{ t: 0, value: 0 }, { t: 4, value: 0 }] }));
+  const heldL = seconds(held, 0), heldR = seconds(held, 1);
+  check('a position drawn down the middle is the same mix as none at all',
+    heldL.every((v, i) => Math.abs(v / evenL[i] - 1) < 0.01) &&
+    heldR.every((v, i) => Math.abs(v / evenR[i] - 1) < 0.01),
+    `left ${heldL[0].toFixed(4)} against ${evenL[0].toFixed(4)}`);
+
+  // A layer whose level is set rather than drawn keeps that level when a
+  // position is drawn on it, and keeps it exactly once: the fixed level is
+  // folded into each sound, and the bus must not apply it a second time.
+  const quietFixed = await render(project({}, 0.5));
+  const quietPanned = await render(project({ pan: [{ t: 0, value: 0 }, { t: 4, value: 0 }] }, 0.5));
+  check('a fixed level is applied once, not twice, when a position is drawn',
+    Math.abs(seconds(quietPanned)[0] / seconds(quietFixed)[0] - 1) < 0.01,
+    `${seconds(quietPanned)[0].toFixed(4)} against ${seconds(quietFixed)[0].toFixed(4)}`);
+
+  // 7. Held hard over, one side has all of it and the other has none.
+  const hard = await render(project({ pan: [{ t: 0, value: -1 }, { t: 4, value: -1 }] }));
+  const hardL = seconds(hard, 0), hardR = seconds(hard, 1);
+  check('held hard left, the right side is silent',
+    hardR[0] < hardL[0] * 0.02, `left ${hardL[0].toFixed(4)}, right ${hardR[0].toFixed(4)}`);
+  check('and the left side keeps everything it had',
+    Math.abs(hardL[0] / evenL[0] - 1) < 0.02,
+    `hard left ${hardL[0].toFixed(4)} against centred ${evenL[0].toFixed(4)}`);
+
+  // 8. A sweep across the picture crosses over, and goes through the middle
+  //    at full rather than dipping: what a position is worth to each side is
+  //    a curve, so it has to be written as one.
+  const swept = await render(project({ pan: [{ t: 0, value: -1 }, { t: 4, value: 1 }] }));
+  const sweptL = seconds(swept, 0), sweptR = seconds(swept, 1);
+  check('a sweep crosses from one side to the other',
+    sweptL[0] > sweptR[0] * 2 && sweptR[3] > sweptL[3] * 2,
+    `starts ${sweptL[0].toFixed(4)}/${sweptR[0].toFixed(4)}, ends ${sweptL[3].toFixed(4)}/${sweptR[3].toFixed(4)}`);
+  check('it crosses gradually rather than jumping',
+    sweptR.every((v, i) => i === 0 || v > sweptR[i - 1]) && sweptL[3] < sweptL[2] && sweptL[2] < sweptL[1],
+    `right ${sweptR.map((v) => v.toFixed(4)).join(', ')}`);
+  check('the side it has not left yet keeps everything it had',
+    Math.abs(sweptL[1] / evenL[1] - 1) < 0.02 && Math.abs(sweptR[2] / evenR[2] - 1) < 0.02,
+    `left through second one ${sweptL[1].toFixed(4)} against ${evenL[1].toFixed(4)}`);
+
+  // 9. Moving a layer across can quieten it, since half the speakers fall
+  //    silent, but it must never make it louder: this is a tool for handing
+  //    over files that do not clip.
+  const power = (l, r, i) => Math.sqrt(l[i] * l[i] + r[i] * r[i]);
+  const carried = [0, 1, 2, 3].map((i) => power(sweptL, sweptR, i) / power(evenL, evenR, i));
+  check('moving it across never makes it louder than it was',
+    carried.every((ratio) => ratio <= 1.02), carried.map((v) => v.toFixed(3)).join(', '));
+  // The reason the position is written once a frame rather than ramped
+  // straight from one drawn point to the next. Ramped, a sweep in two moves
+  // passes through the middle with both sides at a half, six decibels down.
+  check('and passing through the middle of a sweep leaves no hole in it',
+    carried[1] > 0.9 && carried[2] > 0.9,
+    `${carried[1].toFixed(3)} and ${carried[2].toFixed(3)} of centred`);
+
+  // ---------- space ----------
+
+  /** How much is still sounding in a gap, which is what a room leaves behind. */
+  function tail(buffer, from, to) {
+    const d = buffer.getChannelData(0);
+    let sum = 0, n = 0;
+    for (let i = Math.round(from * RATE); i < Math.round(to * RATE); i++) { sum += d[i] * d[i]; n++; }
+    return Math.sqrt(sum / n);
+  }
+
+  /** One short sound, then silence, so a tail has somewhere to be heard. */
+  const hit = {
+    ...makeCue(0.2, base.layers[0].id, { kind: 'design', name: 'impact' }),
+    length: 0.3, gain: 1, space: 0, drive: 0,
+  };
+
+  function gapped(lanes, cueSpace = 0) {
+    const id = base.layers[0].id;
+    return {
+      ...base,
+      layers: base.layers.map((l) => (l.id === id ? { ...l, auto: { ...emptyLanes(), ...lanes } } : l)),
+      cues: [{ ...hit, space: cueSpace }],
+    };
+  }
+
+  const flatSpace = (value) => ({ space: [{ t: 0, value }, { t: 4, value }] });
+
+  const dry = await render(gapped({}));
+  const wet = await render(gapped(flatSpace(1)));
+  check('a room drawn over a layer leaves a tail where there was none',
+    tail(wet, 1.5, 2.5) > tail(dry, 1.5, 2.5) * 4,
+    `dry ${tail(dry, 1.5, 2.5).toFixed(6)}, in a room ${tail(wet, 1.5, 2.5).toFixed(6)}`);
+  check('and the sound itself still arrives at the level it always did',
+    Math.abs(tail(wet, 0.2, 0.5) / tail(dry, 0.2, 0.5) - 1) < 0.05,
+    `dry ${tail(dry, 0.2, 0.5).toFixed(4)}, in a room ${tail(wet, 0.2, 0.5).toFixed(4)}`);
+
+  const none = await render(gapped(flatSpace(0)));
+  check('a room drawn at nothing is no room at all',
+    Math.abs(tail(none, 1.5, 2.5) / tail(dry, 1.5, 2.5) - 1) < 0.05,
+    `nothing drawn ${tail(dry, 1.5, 2.5).toFixed(6)}, drawn at zero ${tail(none, 1.5, 2.5).toFixed(6)}`);
+
+  const half = await render(gapped(flatSpace(0.5)));
+  check('halfway up leaves less tail than the top of it',
+    tail(half, 1.5, 2.5) < tail(wet, 1.5, 2.5) * 0.75 && tail(half, 1.5, 2.5) > tail(dry, 1.5, 2.5) * 1.5,
+    `dry ${tail(dry, 1.5, 2.5).toFixed(6)}, half ${tail(half, 1.5, 2.5).toFixed(6)}, full ${tail(wet, 1.5, 2.5).toFixed(6)}`);
+
+  // The layer room and the room on a single sound are two different pieces of
+  // machinery, so the only thing that keeps the two controls meaning the same
+  // thing is that they were measured against each other.
+  const onSound = await render(gapped({}, 1));
+  check('a layer taken all the way up is about as wet as a sound taken all the way up',
+    Math.abs(tail(wet, 1.5, 2.5) / tail(onSound, 1.5, 2.5) - 1) < 0.2,
+    `whole layer ${tail(wet, 1.5, 2.5).toFixed(6)}, one sound ${tail(onSound, 1.5, 2.5).toFixed(6)}`);
+
+  // Drawn on a layer nobody is playing through, it must not conjure anything.
+  const silent = await render({ ...gapped(flatSpace(1)), cues: [] });
+  check('a room on a layer with nothing on it is silent',
+    tail(silent, 0, 4) < 1e-6, tail(silent, 0, 4).toExponential(2));
+
+  // ---------- handing it over ----------
+
+  /*
+   * The stems have to add back up to the mix with curves drawn, which is not
+   * free: each layer's room and position belong to that layer, and a set of
+   * files where the room appeared twice, or not at all, would be no use to
+   * whoever picks them up.
+   */
+  const spread = (() => {
+    const [one, two] = base.layers;
+    const cues = base.cues.map((cue, i) => (i % 2 ? { ...cue, layerId: two.id } : cue));
+    return {
+      ...base,
+      cues,
+      layers: base.layers.map((l) => {
+        if (l.id === one.id) return { ...l, auto: { ...emptyLanes(), pan: [{ t: 0, value: -1 }, { t: 4, value: 1 }] } };
+        if (l.id === two.id) return { ...l, auto: { ...emptyLanes(), space: [{ t: 0, value: 0 }, { t: 4, value: 1 }] } };
+        return l;
+      }),
+    };
+  })();
+
+  const settings = DEFAULT_CHAIN, master = { limit: false, target: null };
+  const mixed = (await renderProject(spread, { settings, master })).parts[0].buffer;
+  const stems = await renderStems(spread, { settings, master });
+  let worst = 0;
+  for (let c = 0; c < 2; c++) {
+    const m = mixed.getChannelData(c);
+    const channels = stems.parts.map((p) => p.buffer.getChannelData(c));
+    for (let i = 0; i < m.length; i++) {
+      let sum = 0;
+      for (const d of channels) sum += d[i];
+      worst = Math.max(worst, Math.abs(m[i] - sum));
+    }
+  }
+  check('one file per layer still adds back up to the mix with curves drawn',
+    worst < 1e-5, `${stems.parts.length} layers, largest difference ${worst.toExponential(2)}`);
+
+  // ---------- reading between points ----------
+
   const layer = { id: 'l', name: 'x', muted: false, solo: false, gain: 1,
-                  auto: [{ t: 1, value: 0 }, { t: 3, value: 1 }] };
-  check('the level between two points is read as a straight line',
+                  auto: { ...emptyLanes(), level: [{ t: 1, value: 0 }, { t: 3, value: 1 }] } };
+  check('the value between two points is read as a straight line',
     layerLevelAt(layer, 0) === 0 && layerLevelAt(layer, 2) === 0.5 &&
     layerLevelAt(layer, 4) === 1 && layerLevelAt(layer, 1.5) === 0.25,
     `${layerLevelAt(layer, 0)}, ${layerLevelAt(layer, 1.5)}, ${layerLevelAt(layer, 2)}, ${layerLevelAt(layer, 4)}`);
+  check('an empty lane is worth whatever it means when nobody has drawn on it',
+    laneValueAt([], 2, -1) === -1 && laneValueAt([], 2, 0) === 0, '');
 
   const failed = results.filter((r) => !r.pass);
   document.getElementById('out').textContent = JSON.stringify(

@@ -324,6 +324,42 @@ function fillNoise(
   for (let i = 0; i < data.length; i++) data[i] = random() * 2 - 1;
 }
 
+/**
+ * A room, as the impulse a convolver multiplies a sound by.
+ *
+ * Decaying noise, damped by rolling off what came before it, which is most of
+ * what makes a room sound like a room rather than like a burst of static: the
+ * high end goes first, exactly as it does off real walls.
+ *
+ * Shared with the room a whole layer can be put in, so the two cannot end up
+ * being different rooms.
+ */
+export function roomImpulse(
+  ctx: BaseAudioContext,
+  seconds: number,
+  damping: number,
+  random: () => number,
+): AudioBuffer {
+  const length = Math.ceil(ctx.sampleRate * Math.max(0.01, seconds));
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  const roll = Math.min(Math.max(damping, 0), 0.99);
+
+  for (let c = 0; c < 2; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      data[i] = (random() * 2 - 1) * Math.exp(-i / (length * 0.28));
+    }
+    if (roll > 0) {
+      let previous = 0;
+      for (let i = 0; i < length; i++) {
+        previous = data[i] * (1 - roll) + previous * roll;
+        data[i] = previous;
+      }
+    }
+  }
+  return buffer;
+}
+
 /** A room, built from decaying noise the convolver can multiply a sound by. */
 function buildReverb(
   ctx: BaseAudioContext,
@@ -342,23 +378,12 @@ function buildReverb(
   wet.gain.value = spec.mix;
   input.connect(wet);
 
-  const seconds = Math.max(0.01, spec.decay * (spec.roomSize ?? 1));
-  const length = Math.ceil(ctx.sampleRate * seconds);
-  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const data = buffer.getChannelData(c);
-    for (let i = 0; i < length; i++) {
-      data[i] = (random() * 2 - 1) * Math.exp(-i / (length * 0.28));
-    }
-    const damping = Math.min(spec.damping ?? 0, 0.99);
-    if (damping > 0) {
-      let previous = 0;
-      for (let i = 0; i < length; i++) {
-        previous = data[i] * (1 - damping) + previous * damping;
-        data[i] = previous;
-      }
-    }
-  }
+  const buffer = roomImpulse(
+    ctx,
+    Math.max(0.01, spec.decay * (spec.roomSize ?? 1)),
+    spec.damping ?? 0,
+    random,
+  );
 
   const convolver = ctx.createConvolver();
   convolver.buffer = buffer;

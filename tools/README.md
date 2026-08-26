@@ -57,13 +57,35 @@ Run the development server and open http://localhost:5173/tools/master-check.htm
 
 ## automation-check.html
 
-Checks that a level drawn over a layer reaches the file.
+Checks that what is drawn over a layer reaches the file: the level, the
+position between the speakers, and the room around it.
 
 It renders a steady bed of sound on one layer and then draws shapes over it:
 nothing at all, a fade, and a dip in the middle. Then it reads back how loud
 each second came out. It also checks that a drawn level takes over from the
-fixed one rather than stacking with it, and that reading a level between two
+fixed one rather than stacking with it, and that reading a value between two
 points gives a straight line.
+
+The position is checked on both sides at once. Drawn down the middle it has
+to be the same mix as none at all, since otherwise adding a lane would move a
+mix that was already right. Held hard over, the far side has to be silent
+while the near side keeps everything it had. Swept across, it has to cross
+over gradually, never get louder than it was, and not dip in the middle: what
+a position is worth to each side is a curve, so it is written once a frame
+rather than ramped straight between the drawn points.
+
+The room is measured as what is left sounding in the gap after a short hit.
+Drawn at nothing it has to be no room at all, drawn at the top it has to
+leave about the same tail as the Space control on a single sound, which is
+what keeps the two controls meaning the same thing. Every render in the file
+uses the same sounds, since a sound draws its noise from its own id and two
+projects built the same way would otherwise differ by a percent or two.
+
+Last, it renders one file per layer from a piece with a position drawn on one
+layer and a room on another, and adds them back up. They have to come to the
+mixed file: a layer's room and position belong to that layer, and a set of
+files where the room appeared twice, or not at all, would be no use to
+whoever picks them up.
 
 Run the development server and open http://localhost:5173/tools/automation-check.html
 
