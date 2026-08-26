@@ -1,5 +1,10 @@
 import { KIT_SOUNDS, NAMES } from '../../constants.ts';
-import type { SoundDesignSession } from '../../sound-design-session.ts';
+import {
+  DEFAULT_EXPORT,
+  DEFAULT_TARGET_LUFS,
+  type ExportSettings,
+  type SoundDesignSession,
+} from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { timecode } from '../../timeline/project.ts';
 import { DESIGN_GROUPS, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
@@ -163,41 +168,126 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   // ---------- export ----------
   const exportStatus = el('div', { class: 'hint', style: { marginTop: '8px' } });
 
-  /**
-   * Off by default, so a reverb tail at the end of the piece is allowed to
-   * finish. Either way the file starts at zero and lines up when dropped at
-   * the head of the composition.
-   */
-  let trim = false;
-  const trimToggle = button(
-    {
-      class: 'switch',
-      attrs: { role: 'switch', 'aria-label': 'Match the video length exactly' },
-      on: {
-        click: () => {
-          trim = !trim;
-          toggleClass(trimToggle, 'is-on', trim);
+  const settings: ExportSettings = { ...DEFAULT_EXPORT };
+
+  /** A labelled switch that flips one setting. */
+  const toggle = (
+    label: string,
+    title: string,
+    on: boolean,
+    onChange: (value: boolean) => void,
+    after?: HTMLElement,
+  ): HTMLElement => {
+    const node = button(
+      {
+        class: 'switch',
+        attrs: { role: 'switch', 'aria-label': label },
+        on: {
+          click: () => {
+            const next = !node.classList.contains('is-on');
+            toggleClass(node, 'is-on', next);
+            onChange(next);
+          },
         },
       },
-    },
-    [el('i', { class: 'switch__thumb' })],
-  );
+      [el('i', { class: 'switch__thumb' })],
+    );
+    toggleClass(node, 'is-on', on);
+    return el('div', { class: 'setting-row', title }, [
+      el('div', { class: 'setting-row__label', text: label }),
+      ...(after ? [after] : []),
+      node,
+    ]);
+  };
+
+  const loudnessValue = el('div', {
+    class: 'hint',
+    style: { marginRight: '8px', whiteSpace: 'nowrap' },
+    text: `${DEFAULT_TARGET_LUFS} LUFS`,
+  });
+
+  /** A row of buttons that write the same thing in two formats. */
+  const formats = (
+    label: string,
+    title: string,
+    write: (format: 'wav' | 'mp3') => void,
+    accent = false,
+  ): HTMLElement =>
+    el('div', { style: { marginTop: '10px' }, title }, [
+      el('div', { class: 'setting-row__label', text: label }),
+      el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [
+        button(
+          {
+            class: accent ? 'btn-accent' : 'chip chip--sm',
+            style: { flex: '1 1 0' },
+            on: { click: () => write('wav') },
+          },
+          ['WAV'],
+        ),
+        button(
+          { class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => write('mp3') } },
+          ['MP3'],
+        ),
+      ]),
+    ]);
 
   const exportBody = el('div', { class: 'card', style: { padding: '12px 14px 14px' } }, [
-    el('div', { class: 'setting-row' }, [
-      el('div', { class: 'setting-row__label', text: 'Cut to video length' }),
-      trimToggle,
-    ]),
+    /*
+     * Off by default, so a reverb tail at the end of the piece is allowed to
+     * finish. Either way the file starts at zero and lines up when dropped at
+     * the head of the composition.
+     */
+    toggle(
+      'Cut to video length',
+      'End the file exactly where the video ends, cutting anything still sounding',
+      settings.trimToDuration,
+      (on) => {
+        settings.trimToDuration = on;
+      },
+    ),
+    toggle(
+      'Stop it clipping',
+      'A hundred sounds on one frame add up past what a file can hold, and the ' +
+        'part that does not fit is heard as a crack on the loudest moment. This ' +
+        'holds those moments back instead, and leaves everything else alone.',
+      settings.limit,
+      (on) => {
+        settings.limit = on;
+      },
+    ),
+    toggle(
+      'Match loudness',
+      'Bring every export to the same loudness, so two pieces cut together sit ' +
+        'the same way against picture without anyone reaching for a fader.',
+      settings.target !== null,
+      (on) => {
+        settings.target = on ? DEFAULT_TARGET_LUFS : null;
+        loudnessValue.style.opacity = on ? '1' : '0.4';
+      },
+      loudnessValue,
+    ),
     el('div', { class: 'rule' }),
-    el('div', { class: 'setting-row__label', text: 'One mixed file' }),
-    el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [
-      button({ class: 'btn-accent', style: { flex: '1 1 0' }, on: { click: () => void session.exportAudio('wav', trim) } }, ['WAV']),
-      button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => void session.exportAudio('mp3', trim) } }, ['MP3']),
-    ]),
-    el('div', { class: 'setting-row__label', style: { marginTop: '12px' }, text: 'One file per layer' }),
-    el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [
-      button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => void session.exportStems('wav', trim) } }, ['WAV stems']),
-      button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => void session.exportStems('mp3', trim) } }, ['MP3 stems']),
+    formats('One mixed file', 'Everything in one file', (f) => void session.exportAudio(f, settings), true),
+    formats(
+      'One file per layer',
+      'All the same length and all starting at zero, so they sit on separate tracks and stay in sync',
+      (f) => void session.exportStems(f, settings),
+    ),
+    formats(
+      'One file per sound',
+      'Every impact in one file, every whoosh in another, so they can be balanced against each other later',
+      (f) => void session.exportPerSound(f, settings),
+    ),
+    el('div', { style: { marginTop: '10px' } }, [
+      button(
+        {
+          class: 'chip chip--sm',
+          style: { width: '100%' },
+          title: 'A spreadsheet of every sound and the frame it lands on, for whoever picks this up next',
+          on: { click: () => session.exportMarkers() },
+        },
+        ['Marker list'],
+      ),
     ]),
     exportStatus,
   ]);

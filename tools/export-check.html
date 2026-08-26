@@ -1,0 +1,131 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>export check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  import { renderProject, renderStems, renderPerSound } from '/src/audio/render.ts';
+  import { measureLoudness, CEILING } from '/src/audio/master.ts';
+  import { encodeWav } from '/src/export/wav.ts';
+  import { markerCsv } from '/src/export/markers.ts';
+  import { emptyProject, makeCue } from '/src/timeline/project.ts';
+  import { DEFAULT_CHAIN } from '/src/audio/chain.ts';
+
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  // A deliberately punishing project: many loud sounds stacked on the same
+  // frames, which is exactly what used to clip.
+  const project = { ...emptyProject(), duration: 6, fps: 25, videoName: 'test.mp4' };
+  const cues = [];
+  for (let i = 0; i < 24; i++) {
+    const at = 0.4 + (i % 8) * 0.7;
+    const layer = project.layers[i % project.layers.length].id;
+    const name = ['impact', 'slam', 'sub', 'whoosh'][i % 4];
+    const cue = makeCue(at, layer, { kind: 'design', name });
+    cues.push({ ...cue, gain: 1.4 });
+  }
+  project.cues = cues;
+
+  const settings = DEFAULT_CHAIN;
+  const master = { limit: true, target: -18 };
+
+  const peakOf = (b) => {
+    let p = 0;
+    for (let c = 0; c < b.numberOfChannels; c++) {
+      const d = b.getChannelData(c);
+      for (let i = 0; i < d.length; i++) p = Math.max(p, Math.abs(d[i]));
+    }
+    return p;
+  };
+
+  // 1. Left alone, this project clips badly.
+  const raw = await renderProject(project, { settings, master: { limit: false, target: null } });
+  const rawPeak = peakOf(raw.parts[0].buffer);
+  check('the test project really does clip', rawPeak > 1.0, `peak ${rawPeak.toFixed(2)}`);
+
+  // 2. With the master on, nothing gets past the ceiling.
+  const done = await renderProject(project, { settings, master });
+  const buffer = done.parts[0].buffer;
+  check('the exported mix cannot clip', peakOf(buffer) <= CEILING + 1e-6,
+    `peak ${peakOf(buffer).toFixed(4)}`);
+  check('it reaches the loudness it was asked for',
+    Math.abs(measureLoudness(buffer) - (-18)) < 1.5,
+    `${measureLoudness(buffer).toFixed(2)} LUFS, held back ${done.report.reductionDb.toFixed(1)} dB`);
+  // With loudness matching on, this project is brought down far enough that
+  // nothing would clip anyway. The warning belongs to the case where the level
+  // is left alone, which is what is checked here.
+  const asIs = await renderProject(project, { settings, master: { limit: true, target: null } });
+  check('it says when a file would have clipped',
+    asIs.report.wouldHaveClipped === true && asIs.report.reductionDb > 1,
+    `held back ${asIs.report.reductionDb.toFixed(1)} dB`);
+  check('leaving the level alone still cannot clip', peakOf(asIs.parts[0].buffer) <= CEILING + 1e-6,
+    `peak ${peakOf(asIs.parts[0].buffer).toFixed(4)}`);
+
+  // Rendering the same project twice must give the same file, or stems and
+  // mix can never be checked against each other.
+  const again = await renderProject(project, { settings, master });
+  let drift = 0;
+  for (let c = 0; c < 2; c++) {
+    const a = buffer.getChannelData(c), b = again.parts[0].buffer.getChannelData(c);
+    for (let i = 0; i < a.length; i++) drift = Math.max(drift, Math.abs(a[i] - b[i]));
+  }
+  // Not to the last bit: the reverb is done with an FFT, and floating point
+  // addition there does not come out identical twice running. A millionth of
+  // full scale is 135dB down, which is nothing.
+  check('the same project exports the same file twice', drift < 1e-5,
+    `difference ${drift.toExponential(2)}`);
+
+  // 3. The file on disk really is 24 bit, read back out of the header.
+  const bytes = new DataView(await encodeWav(buffer).arrayBuffer());
+  const bits = bytes.getUint16(34, true);
+  const rate = bytes.getUint32(24, true);
+  const channels = bytes.getUint16(22, true);
+  check('the file is 24 bit at 48k stereo',
+    bits === 24 && rate === 48000 && channels === 2, `${bits} bit, ${rate} Hz, ${channels} ch`);
+  const declared = bytes.getUint32(40, true);
+  check('the header length matches the samples',
+    declared === buffer.length * channels * 3, `${declared} bytes declared`);
+  check('16 bit is still available', new DataView(await encodeWav(buffer, 16).arrayBuffer()).getUint16(34, true) === 16, '');
+
+  // 4. Layers, treated as one, still add up to the mix.
+  const stems = await renderStems(project, { settings, master });
+  let worst = 0;
+  for (let c = 0; c < 2; c++) {
+    const m = buffer.getChannelData(c);
+    // Read each channel once. Reading it per sample turns this from
+    // milliseconds into minutes.
+    const channels = stems.parts.map((p) => p.buffer.getChannelData(c));
+    for (let i = 0; i < m.length; i++) {
+      let s = 0;
+      for (const d of channels) s += d[i];
+      const diff = Math.abs(m[i] - s);
+      if (diff > worst) worst = diff;
+    }
+  }
+  check('the layers add back up to the mix', worst < 1e-5,
+    `${stems.parts.length} layers, largest difference ${worst.toExponential(2)}`);
+
+  // 5. One file per sound covers every sound used, and no more.
+  const perSound = await renderPerSound(project, { settings, master });
+  const used = new Set(project.cues.map((c) => String(c.source.name)));
+  check('one file per sound, for each sound used',
+    perSound.parts.length === used.size && perSound.parts.every((p) => used.has(p.name)),
+    `${perSound.parts.length} files: ${perSound.parts.map((p) => p.name).join(', ')}`);
+
+  // 6. Every file in a set is the same length, or they will not line up.
+  const lengths = new Set([...stems.parts, ...perSound.parts, ...done.parts].map((p) => p.buffer.length));
+  check('every file in a set is the same length', lengths.size === 1, `${[...lengths].join(', ')} samples`);
+
+  // 7. The marker list describes what was exported.
+  const csv = markerCsv(project);
+  const lines = csv.trim().split('\n');
+  check('the marker list has a row for every sound',
+    lines.length === project.cues.length + 2, `${lines.length - 2} rows for ${project.cues.length} sounds`);
+  check('markers are in timecode order',
+    lines.slice(1, -1).every((l, i, a) => i === 0 || a[i - 1].split(',')[0] <= l.split(',')[0]), '');
+  check('the timecode is the form editors read',
+    /^\d\d:\d\d:\d\d:\d\d$/.test(lines[1].split(',')[0]), lines[1]);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>

@@ -128,6 +128,40 @@ export interface VoiceOptions {
   length: number;
   tune: number;
   gain: number;
+  /**
+   * Where to start drawing the noise from.
+   *
+   * Most of these voices are built on noise, so left to itself every render
+   * draws a different sound. That is right for an instrument being played,
+   * where a hi-hat struck sixteen times should not be the same recording
+   * sixteen times. It is wrong for a sound placed on a timeline, which ought
+   * to be the same sound every time it is heard, whether that is while you
+   * are working or in the file you hand over. Giving a placed sound a number
+   * of its own is what makes those the same thing.
+   */
+  seed?: number;
+}
+
+/** The same stream of numbers between 0 and 1 every time, from a given start. */
+export function sequence(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Turn anything that names a sound into a number to draw noise from. */
+export function seedFrom(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
 }
 
 /** Semitones to a frequency multiplier. */
@@ -152,12 +186,17 @@ function applyCurve(param: AudioParam, curve: Curve, t: number): void {
   }
 }
 
-function noiseBuffer(ctx: BaseAudioContext, seconds: number, fade: boolean): AudioBuffer {
+function noiseBuffer(
+  ctx: BaseAudioContext,
+  seconds: number,
+  fade: boolean,
+  random: () => number,
+): AudioBuffer {
   const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < length; i++) {
-    data[i] = (Math.random() * 2 - 1) * (fade ? 1 - i / length : 1);
+    data[i] = (random() * 2 - 1) * (fade ? 1 - i / length : 1);
   }
   return buffer;
 }
@@ -166,6 +205,7 @@ function reverseBuffer(
   ctx: BaseAudioContext,
   seconds: number,
   source: ReverseSource,
+  random: () => number,
 ): AudioBuffer {
   const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -174,7 +214,7 @@ function reverseBuffer(
   const tone = 1 - source.air;
   for (let i = 0; i < length; i++) {
     const decay = Math.pow(1 - i / length, source.shape);
-    data[i] = ((Math.random() * 2 - 1) * source.air + Math.sin(i * step) * tone) * decay;
+    data[i] = ((random() * 2 - 1) * source.air + Math.sin(i * step) * tone) * decay;
   }
   data.reverse();
   return buffer;
@@ -185,6 +225,7 @@ function buildSource(
   ctx: BaseAudioContext,
   layer: LayerSpec,
   t: number,
+  random: () => number,
 ): { node: AudioNode; freq: AudioParam | null } {
   const { source, length } = layer;
   const until = t + length + (layer.overrun ?? OVERRUN);
@@ -202,8 +243,8 @@ function buildSource(
   const node = ctx.createBufferSource();
   node.buffer =
     source.kind === 'reverse'
-      ? reverseBuffer(ctx, length, source)
-      : noiseBuffer(ctx, length, source.fade === true);
+      ? reverseBuffer(ctx, length, source, random)
+      : noiseBuffer(ctx, length, source.fade === true, random);
   node.start(t);
   node.stop(until);
   return { node, freq: null };
@@ -238,10 +279,15 @@ export function renderVoice(
   dest: AudioNode,
   spec: VoiceSpec,
   t: number,
+  seed?: number,
 ): void {
+  // One stream for the whole voice, so its layers stay in step with each
+  // other however many of them there are.
+  const random = seed === undefined ? Math.random : sequence(seed);
+
   for (const layer of spec.layers) {
     const start = t + (layer.delay ?? 0);
-    const { node } = buildSource(ctx, layer, start);
+    const { node } = buildSource(ctx, layer, start, random);
 
     let tail: AudioNode = node;
     let filterFreq: AudioParam | null = null;

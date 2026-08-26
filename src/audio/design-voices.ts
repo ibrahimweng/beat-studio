@@ -3,6 +3,7 @@ import {
   flat,
   ratio,
   renderVoice,
+  sequence,
   type Curve,
   type LayerSpec,
   type VoiceOptions,
@@ -521,15 +522,18 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
     const dur = Math.max(0.06, o.length);
     const bursts = Math.max(3, Math.min(14, Math.round(dur * 16)));
     const r = ratio(o.tune);
+    // Where the bursts fall is part of the description, so a placed glitch is
+    // the same glitch every time it is heard rather than a new one.
+    const random = o.seed === undefined ? Math.random : sequence(o.seed ^ 0x9e3779b9);
     const layers: LayerSpec[] = [];
     for (let i = 0; i < bursts; i++) {
       // Uneven on purpose. Evenly spaced bursts read as a rhythm.
-      const delay = (i / bursts) * dur + Math.random() * (dur / bursts) * 0.7;
-      const life = 0.006 + Math.random() * 0.03;
+      const delay = (i / bursts) * dur + random() * (dur / bursts) * 0.7;
+      const life = 0.006 + random() * 0.03;
       layers.push({
-        ...noise(life, decays((0.25 + Math.random() * 0.35) * o.gain, life), {
+        ...noise(life, decays((0.25 + random() * 0.35) * o.gain, life), {
           type: 'bandpass',
-          freq: flat((600 + Math.random() * 5200) * r),
+          freq: flat((600 + random() * 5200) * r),
           q: 3,
         }),
         delay,
@@ -586,5 +590,5 @@ export function playDesign(
   options: DesignOptions,
 ): void {
   const build = DESIGN_SPECS[name];
-  if (build) renderVoice(ctx, dest, build(options), t);
+  if (build) renderVoice(ctx, dest, build(options), t, options.seed);
 }
