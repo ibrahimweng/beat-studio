@@ -16,6 +16,15 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    title: 'Choosing a sound',
+    rows: [
+      ['Click a sound', 'Plays it, so you can hear it before you place it.'],
+      ['The box at the top', 'Finds a sound by name, which matters once packs are loaded.'],
+      ['Arrow keys in that box', 'Steps through what is left, playing each one, for comparing.'],
+      ['Load a sound pack', 'Adds someone else’s sounds to the list. Anything written for @web-kits/audio works.'],
+    ],
+  },
+  {
     title: 'Transport',
     rows: [
       ['Space', 'Play or pause'],
@@ -32,15 +41,19 @@ const SECTIONS: readonly Section[] = [
       ['Pad keys, such as D or J', 'Drop that drum sound at the playhead'],
       ['Ends on it', 'The sound finishes on the marker. Use it for risers and reverse swells.'],
       ['In context', 'Plays from a second before, so you hear it in place.'],
+      ['Space', 'Puts this sound in a room of its own, added to it rather than mixed with it.'],
+      ['Drive', 'Pushes it, which adds weight. It is what makes low sounds read on a small speaker.'],
     ],
   },
   {
-    title: 'Layout',
+    title: 'Layout and export',
     rows: [
       ['Drag the line above the timeline', 'Make the timeline bigger. The video scales down.'],
       ['Double click that line', 'Put it back to where it started'],
       ['+ Layer', 'Add another layer. Double click a name to rename it.'],
       ['Fit', 'Frame the whole clip in the timeline'],
+      ['Stop it clipping', 'Holds the loudest moments back so a stack of sounds cannot distort the file.'],
+      ['Match loudness', 'Brings every export to the same loudness, so two pieces sit the same way.'],
     ],
   },
 ];

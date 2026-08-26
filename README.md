@@ -67,6 +67,11 @@ The timeline below the video is measured in time, not in bars. Pick a sound on
 the right, then click a lane to place it. Click a sound to select it, and drag
 it to move it.
 
+Clicking a sound in the picker plays it, so you hear it before you place it.
+The box at the top of the picker finds one by name, and with the box focused
+the up and down arrows step through whatever is left, playing each. That is the
+quickest way to compare a handful of similar sounds against each other.
+
 There are four layers. Use them to keep your impacts apart from your movement
 and detail, so you can balance them separately and export them separately.
 

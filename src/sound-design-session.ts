@@ -302,7 +302,10 @@ export class SoundDesignSession {
   togglePlay(): void {
     if (!this.#clock) return;
     if (this.#clock.playing) this.#clock.pause();
-    else void this.#clock.play();
+    else {
+      this.#wake();
+      void this.#clock.play();
+    }
   }
 
   pause(): void {
@@ -323,6 +326,24 @@ export class SoundDesignSession {
 
   setSource(source: CueSource): void {
     this.#store.set({ currentSource: source });
+  }
+
+  /**
+   * Choose a sound and hear it.
+   *
+   * Picking from a list of three hundred names without hearing any of them is
+   * guesswork, and the way round it was to place one, listen, undo, and try
+   * again. Choosing now plays the sound at the settings it would arrive with,
+   * so the list can be worked through by ear.
+   */
+  chooseSource(source: CueSource): void {
+    this.setSource(source);
+    this.preview(source);
+  }
+
+  /** Hear a sound as it would arrive, without putting it anywhere. */
+  preview(source: CueSource): void {
+    this.audition(makeCue(0, this.#store.state.activeLayerId, source));
   }
 
   setActiveLayer(layerId: string): void {
@@ -435,8 +456,22 @@ export class SoundDesignSession {
     });
   }
 
+  /**
+   * Start the audio engine, and say so.
+   *
+   * The engine starts itself the first time anything asks it to make a sound,
+   * but the light on the rail is driven by the app's own idea of whether it
+   * is on, which only the instrument half was setting. So the sound design
+   * screen could be playing while the light said it was off.
+   */
+  #wake(): void {
+    this.#engine.start();
+    if (!this.#store.state.ready) this.#store.set({ ready: true });
+  }
+
   /** Hear one cue on its own. */
   audition(cue: Cue): void {
+    this.#wake();
     this.#clock?.audition(cue);
   }
 
