@@ -74,7 +74,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     chosen: (current: CueSource) => boolean,
   ): Pick => ({
     node: button(
-      { class: 'cell pick', on: { click: () => session.setSource(source) } },
+      // Choosing plays it, so a list this long can be worked through by ear.
+      { class: 'cell pick', on: { click: () => session.chooseSource(source) } },
       [el('span', { text: label })],
     ),
     label,
@@ -170,6 +171,36 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     }
   }
   search.addEventListener('input', applyFilter);
+
+  /**
+   * Step through what the filter left, hearing each one.
+   *
+   * The point of the box is not only to find a sound by name but to narrow
+   * three hundred down to a handful and then compare them. Arrow keys with
+   * the box still focused is what makes that a single movement rather than a
+   * round trip to the mouse for every sound.
+   */
+  search.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+
+    const visible = sections
+      .flatMap((section) => section.picks)
+      .filter((pick) => pick.node.style.display !== 'none');
+    if (!visible.length) return;
+
+    const at = visible.findIndex((pick) => pick.node.classList.contains('is-on'));
+    const to =
+      at < 0
+        ? 0
+        : Math.max(0, Math.min(visible.length - 1, at + (event.key === 'ArrowDown' ? 1 : -1)));
+
+    // A click rather than setting the source directly, so this and the mouse
+    // can never come to mean different things. It does not take focus, so the
+    // box stays ready for the next key.
+    visible[to].node.click();
+    visible[to].node.scrollIntoView({ block: 'nearest' });
+  });
 
   // Everything after this point is a pack.
   builtIn = sections.length;
