@@ -21,6 +21,7 @@ import { encodeWav } from './export/wav.ts';
 import {
   addLayer,
   newId,
+  cueLength,
   cueStart,
   cuesOnLayer,
   fromSession,
@@ -122,6 +123,8 @@ export class SoundDesignSession {
   #clock: VideoClock | null = null;
   #objectUrl: string | null = null;
 
+  /** What was copied, waiting to be put somewhere. */
+  #clipboard: Cue[] = [];
   /** What the project was, most recent last. */
   #past: Step[] = [];
   /** And what it was before it was undone. */
@@ -343,12 +346,13 @@ export class SoundDesignSession {
 
     // A sound that no longer exists cannot stay selected, or the panel would
     // be editing something that is not there.
-    const selected = this.#store.state.selectedCueId;
-    const stillThere = step.project.cues.some((cue) => cue.id === selected);
+    // Sounds that no longer exist cannot stay chosen, or the panel would be
+    // editing something that is not there.
+    const alive = new Set(step.project.cues.map((cue) => cue.id));
 
     this.#store.set({
       project: step.project,
-      selectedCueId: stillThere ? selected : null,
+      selection: this.#store.state.selection.filter((id) => alive.has(id)),
       status: from === this.#past ? 'undone' : 'redone',
     });
   }
@@ -509,8 +513,25 @@ export class SoundDesignSession {
     this.#store.set({ activeLayerId: layerId });
   }
 
-  select(id: string | null): void {
-    this.#store.set({ selectedCueId: id });
+  /** Work on exactly these, replacing whatever was chosen before. */
+  select(ids: readonly string[]): void {
+    this.#store.set({ selection: [...ids] });
+  }
+
+  /** Add one to what is chosen, or take it out if it is already there. */
+  toggleSelected(id: string): void {
+    const selection = this.#store.state.selection;
+    this.select(selection.includes(id) ? selection.filter((it) => it !== id) : [...selection, id]);
+  }
+
+  selectAll(): void {
+    this.select(this.project.cues.map((cue) => cue.id));
+  }
+
+  /** The sounds chosen, in the order they sit on the timeline. */
+  get selected(): Cue[] {
+    const chosen = new Set(this.#store.state.selection);
+    return this.project.cues.filter((cue) => chosen.has(cue.id));
   }
 
   toggleArmed(): void {
@@ -532,7 +553,7 @@ export class SoundDesignSession {
       source ?? state.currentSource,
     );
     this.#setProject({ ...this.project, cues: [...this.project.cues, cue] }, `place:${cue.id}`);
-    this.#store.set({ selectedCueId: cue.id });
+    this.#store.set({ selection: [cue.id] });
     this.audition(cue);
     return cue;
   }
@@ -557,6 +578,162 @@ export class SoundDesignSession {
     return end > 0 ? Math.min(t, end) : t;
   }
 
+  /**
+   * Change everything chosen at once.
+   *
+   * One change to the piece rather than one per sound, so a slider moved over
+   * six sounds is one thing to undo rather than six.
+   */
+  updateSelected(patch: Partial<Cue>): void {
+    const chosen = new Set(this.#store.state.selection);
+    if (!chosen.size) return;
+    const bounded =
+      patch.time === undefined ? patch : { ...patch, time: this.#insideVideo(patch.time) };
+    this.#setProject(
+      {
+        ...this.project,
+        cues: this.project.cues.map((cue) => (chosen.has(cue.id) ? { ...cue, ...bounded } : cue)),
+      },
+      `cues:${[...chosen].join()}:${Object.keys(patch).join()}`,
+    );
+  }
+
+  /** Move everything chosen by a number of seconds, together. */
+  moveSelection(seconds: number): void {
+    const chosen = this.selected;
+    if (!chosen.length || seconds === 0) return;
+
+    /*
+     * Held at both ends before anything moves, rather than each sound being
+     * held on its own. Holding them one at a time would let the ends of the
+     * group pile up against the start or the finish while the middle carried
+     * on, and the shape of what was being moved would be lost.
+     */
+    const earliest = Math.min(...chosen.map((cue) => cue.time));
+    const latest = Math.max(...chosen.map((cue) => cue.time));
+    const end = this.project.duration;
+    let shift = Math.max(seconds, -earliest);
+    if (end > 0) shift = Math.min(shift, end - latest);
+    if (shift === 0) return;
+
+    const moving = new Set(chosen.map((cue) => cue.id));
+    this.#setProject(
+      {
+        ...this.project,
+        cues: this.project.cues.map((cue) =>
+          moving.has(cue.id) ? { ...cue, time: Math.max(0, cue.time + shift) } : cue,
+        ),
+      },
+      `move:${[...moving].join()}`,
+    );
+  }
+
+  /** Move everything chosen by whole frames. */
+  nudgeSelection(frames: number): void {
+    this.moveSelection(frames * frameDuration(this.project));
+  }
+
+  /** Remove everything chosen. */
+  removeSelected(): void {
+    const chosen = new Set(this.#store.state.selection);
+    if (!chosen.size) return;
+    this.#setProject(
+      { ...this.project, cues: this.project.cues.filter((cue) => !chosen.has(cue.id)) },
+      `remove:${[...chosen].join()}`,
+    );
+    this.#store.set({
+      selection: [],
+      status: chosen.size === 1 ? 'sound removed' : `${chosen.size} sounds removed`,
+    });
+  }
+
+  // ---------- copying ----------
+
+  /**
+   * Copy what is chosen.
+   *
+   * Kept here rather than on the system clipboard. What is being copied is a
+   * set of placed sounds, which means nothing outside this app, and reading
+   * the system clipboard needs permission that would have to be asked for
+   * every time.
+   */
+  copySelection(): void {
+    const chosen = this.selected;
+    if (!chosen.length) {
+      this.#store.set({ status: 'nothing to copy' });
+      return;
+    }
+    this.#clipboard = chosen.map((cue) => ({ ...cue }));
+    this.#store.set({
+      status: chosen.length === 1 ? 'sound copied' : `${chosen.length} sounds copied`,
+    });
+  }
+
+  cutSelection(): void {
+    const count = this.#store.state.selection.length;
+    if (!count) return;
+    this.copySelection();
+    this.removeSelected();
+    this.#store.set({ status: count === 1 ? 'sound cut' : `${count} sounds cut` });
+  }
+
+  /**
+   * Put what was copied at the playhead.
+   *
+   * The gaps between them are kept, so a rhythm copied is a rhythm pasted.
+   * Anything whose layer has gone since goes on the layer new sounds are
+   * going on, rather than being dropped.
+   */
+  paste(): void {
+    if (!this.#clipboard.length) {
+      this.#store.set({ status: 'nothing to paste' });
+      return;
+    }
+    const earliest = Math.min(...this.#clipboard.map((cue) => cue.time));
+    const at = snapTime(this.project, this.#insideVideo(this.time));
+    const cues = this.#clipboard.map((cue) => this.#copyOf(cue, at + (cue.time - earliest)));
+
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'paste');
+    this.#store.set({
+      selection: cues.map((cue) => cue.id),
+      status: cues.length === 1 ? 'sound pasted' : `${cues.length} sounds pasted`,
+    });
+  }
+
+  /**
+   * Copy what is chosen and lay it out straight after itself.
+   *
+   * Offset by how much of the timeline the group occupies, so pressing it
+   * again and again lays out a run rather than a stack. The copies become
+   * what is chosen, which is what makes that work.
+   */
+  duplicateSelection(): void {
+    const chosen = this.selected;
+    if (!chosen.length) return;
+
+    const from = Math.min(...chosen.map((cue) => cueStart(cue)));
+    const to = Math.max(...chosen.map((cue) => cueStart(cue) + cueLength(cue)));
+    const offset = Math.max(to - from, 0.1);
+
+    const cues = chosen.map((cue) => this.#copyOf(cue, cue.time + offset));
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'duplicate');
+    this.#store.set({
+      selection: cues.map((cue) => cue.id),
+      status: cues.length === 1 ? 'sound duplicated' : `${cues.length} sounds duplicated`,
+    });
+  }
+
+  /** The same sound somewhere else, with an id of its own. */
+  #copyOf(cue: Cue, time: number): Cue {
+    const layers = new Set(this.project.layers.map((layer) => layer.id));
+    return {
+      ...cue,
+      id: newId('c'),
+      time: this.#insideVideo(Math.max(0, time)),
+      layerId: layers.has(cue.layerId) ? cue.layerId : this.#store.state.activeLayerId,
+    };
+  }
+
   /** Move a cue by whole frames. */
   nudgeCue(id: string, frames: number): void {
     const cue = this.project.cues.find((c) => c.id === id);
@@ -567,7 +744,7 @@ export class SoundDesignSession {
 
   removeCue(id: string): void {
     this.#setProject(removeCue(this.project, id), `remove:${id}`);
-    if (this.#store.state.selectedCueId === id) this.#store.set({ selectedCueId: null });
+    this.select(this.#store.state.selection.filter((it) => it !== id));
   }
 
   updateLayer(id: string, patch: Partial<Layer>): void {
@@ -623,7 +800,7 @@ export class SoundDesignSession {
     const active = this.#store.state.activeLayerId === id ? next.layers[0].id : this.#store.state.activeLayerId;
     this.#store.set({
       activeLayerId: active,
-      selectedCueId: null,
+      selection: [],
       status: lost
         ? `${layer?.name ?? 'layer'} removed with ${lost} sound${lost === 1 ? '' : 's'}`
         : `${layer?.name ?? 'layer'} removed`,
@@ -960,7 +1137,7 @@ export class SoundDesignSession {
     const active = this.#store.state.activeLayerId;
     this.#store.set({
       activeLayerId: project.layers.some((l) => l.id === active) ? active : project.layers[0].id,
-      selectedCueId: null,
+      selection: [],
       status: `session loaded, ${project.cues.length} sounds`,
     });
   }

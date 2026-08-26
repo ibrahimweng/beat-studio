@@ -326,6 +326,16 @@
   padding-top: 7px;
 }
 
+/* Dragged across the lanes to choose several sounds at once. */
+.tl__band {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--ac-soft);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--r-2);
+}
+
 /* ---------- a level drawn over time ---------- */
 
 .tl__auto {

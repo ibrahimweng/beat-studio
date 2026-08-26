@@ -136,21 +136,22 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 /** Keyboard control, which differs between the two halves of the app. */
 function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
-    // Undo is checked before anything else, because it is the one shortcut
-    // that is meant to carry a modifier and would otherwise be turned away
-    // with the browser's own.
-    if (!inField(event) && session.state.mode === 'sound-design' && undoKey(event) !== null) {
-      event.preventDefault();
-      if (undoKey(event) === 'undo') soundDesign.undo();
-      else soundDesign.redo();
-      return;
-    }
+    // Somewhere text is being typed. Nothing here applies.
+    if (inField(event)) return;
+
+    // Editing shortcuts next, because they are the ones meant to carry a
+    // modifier and would otherwise be turned away with the browser's own.
+    if (session.state.mode === 'sound-design' && editKey(soundDesign, event)) return;
+
+    // A control that uses this key itself keeps it.
+    if (controlKeeps(event)) return;
     if (ignore(event)) return;
+
     if (session.state.mode === 'sound-design') soundDesignKey(session, soundDesign, event);
     else handleKey(session, event, true);
   };
   const onKeyUp = (event: KeyboardEvent): void => {
-    if (ignore(event)) return;
+    if (inField(event) || controlKeeps(event) || ignore(event)) return;
     if (session.state.mode !== 'sound-design') handleKey(session, event, false);
   };
 
@@ -163,29 +164,84 @@ function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () =
   };
 }
 
+/**
+ * Whether something is being typed into.
+ *
+ * Only places that take text. A slider is focused after it is dragged, and
+ * leaving the whole keyboard turned off afterwards would mean that moving a
+ * level and then pressing delete did nothing at all, which is not what
+ * anyone expects from having touched a fader.
+ */
 function inField(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  return !!target && /input|textarea|select/i.test(target.tagName);
+  if (!target) return false;
+  const tag = target.tagName.toLowerCase();
+  if (tag === 'textarea') return true;
+  if (tag !== 'input') return target.isContentEditable;
+  const type = (target as HTMLInputElement).type;
+  return !['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color'].includes(type);
 }
 
+/**
+ * Whether the focused control uses this key for itself.
+ *
+ * A slider moves on the arrows and a menu opens on them, so those keys are
+ * left where they are. Everything else still reaches the timeline.
+ */
+function controlKeeps(event: KeyboardEvent): boolean {
+  const target = event.target as HTMLElement | null;
+  if (!target) return false;
+  const tag = target.tagName.toLowerCase();
+  if (tag === 'select') return true;
+  if (tag !== 'input') return false;
+
+  const type = (target as HTMLInputElement).type;
+  if (type === 'range') {
+    return event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End';
+  }
+  if (type === 'checkbox' || type === 'radio') return event.key === ' ';
+  return false;
+}
+
+/** Leave browser and system shortcuts alone. */
 function ignore(event: KeyboardEvent): boolean {
-  if (inField(event)) return true;
-  // Leave browser and system shortcuts alone.
   return event.metaKey || event.ctrlKey || event.altKey;
 }
 
 /**
- * Whether this is undo, redo, or neither.
+ * The shortcuts that carry a modifier, which are the ones any editor has.
  *
- * Both spellings of redo are taken, since which one is expected depends on
- * where someone learned to use a computer.
+ * Returns whether it did something, so the caller knows to stop. Both
+ * spellings of redo are taken, since which one is expected depends on where
+ * someone learned to use a computer.
  */
-function undoKey(event: KeyboardEvent): 'undo' | 'redo' | null {
-  if (!event.metaKey && !event.ctrlKey) return null;
-  const key = event.key.toLowerCase();
-  if (key === 'z') return event.shiftKey ? 'redo' : 'undo';
-  if (key === 'y') return 'redo';
-  return null;
+function editKey(soundDesign: SoundDesignSession, event: KeyboardEvent): boolean {
+  if (!event.metaKey && !event.ctrlKey) return false;
+
+  const done = (run: () => void): boolean => {
+    event.preventDefault();
+    run();
+    return true;
+  };
+
+  switch (event.key.toLowerCase()) {
+    case 'z':
+      return done(() => (event.shiftKey ? soundDesign.redo() : soundDesign.undo()));
+    case 'y':
+      return done(() => soundDesign.redo());
+    case 'a':
+      return done(() => soundDesign.selectAll());
+    case 'c':
+      return done(() => soundDesign.copySelection());
+    case 'x':
+      return done(() => soundDesign.cutSelection());
+    case 'v':
+      return done(() => soundDesign.paste());
+    case 'd':
+      return done(() => soundDesign.duplicateSelection());
+    default:
+      return false;
+  }
 }
 
 /**
@@ -197,7 +253,7 @@ function undoKey(event: KeyboardEvent): 'undo' | 'redo' | null {
  */
 function soundDesignKey(session: Session, soundDesign: SoundDesignSession, event: KeyboardEvent): void {
   const key = event.key;
-  const selected = session.state.selectedCueId;
+  const chosen = session.state.selection.length;
 
   if (key === ' ') {
     event.preventDefault();
@@ -208,19 +264,19 @@ function soundDesignKey(session: Session, soundDesign: SoundDesignSession, event
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     event.preventDefault();
     const direction = key === 'ArrowLeft' ? -1 : 1;
-    if (event.shiftKey && selected) soundDesign.nudgeCue(selected, direction);
+    if (event.shiftKey && chosen) soundDesign.nudgeSelection(direction);
     else soundDesign.stepFrames(direction);
     return;
   }
 
-  if ((key === 'Delete' || key === 'Backspace') && selected) {
+  if ((key === 'Delete' || key === 'Backspace') && chosen) {
     event.preventDefault();
-    soundDesign.removeCue(selected);
+    soundDesign.removeSelected();
     return;
   }
 
   if (key === 'Escape') {
-    soundDesign.select(null);
+    soundDesign.select([]);
     return;
   }
 

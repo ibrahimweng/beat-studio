@@ -51,8 +51,14 @@ export interface AppState {
   project: Project;
   /** A video file has been loaded and can be played. */
   videoReady: boolean;
-  /** The cue being edited in the inspector. */
-  selectedCueId: string | null;
+  /**
+   * The sounds being worked on, in the order they were chosen.
+   *
+   * A list rather than one, because moving four sounds together is the
+   * difference between placing forty and placing four and repeating them.
+   * Most of the interface still cares only about the case of exactly one.
+   */
+  selection: string[];
   /** The sound that clicking the timeline will place. */
   currentSource: CueSource;
   /** The layer new cues are placed on. */
@@ -119,7 +125,7 @@ export function initialState(): AppState {
     mode: 'sound-design',
     project: emptyProject(),
     videoReady: false,
-    selectedCueId: null,
+    selection: [],
     currentSource: { kind: 'design', name: 'impact' },
     activeLayerId: 'impacts',
     armed: false,
