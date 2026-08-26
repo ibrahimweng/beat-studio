@@ -103,7 +103,113 @@ export interface ReverseSource {
   air: number;
 }
 
-export type SourceSpec = OscSource | NoiseSource | ReverseSource;
+/**
+ * A struck body, as the set of notes it rings at.
+ *
+ * A bell, a glass, a wooden block and a steel bar are not one sound with the
+ * numbers moved around: they differ in which partials they ring at, how loud
+ * each one starts, and how fast each one dies. Wood loses its high partials
+ * almost at once; glass holds them for seconds. Saying that directly, one
+ * partial at a time, is what lets one mechanism cover the whole family, and
+ * the ratios between the partials are what decide whether the result reads as
+ * a note or as an object.
+ */
+export interface ModalSource {
+  kind: 'modal';
+  /** The lowest partial, in Hz. */
+  freq: number;
+  /** The partials, as multiples of the lowest, each with its own life. */
+  partials: readonly {
+    ratio: number;
+    gain: number;
+    /** Seconds to fall away, for this partial alone. */
+    decay: number;
+  }[];
+  /**
+   * How hard it is struck, 0 to 1.
+   *
+   * A soft strike hardly wakes the high partials; a hard one sets all of them
+   * going at once. It is the difference between a fingertip and a hammer on
+   * the same object.
+   */
+  strike?: number;
+}
+
+/**
+ * A string or a tube: something excited once, then left to run round itself.
+ *
+ * Worked out sample by sample into a buffer rather than built as a feedback
+ * loop in the audio graph, because a loop through a delay node cannot be
+ * shorter than one render block, which puts a floor under the pitch at a few
+ * hundred cycles. Written out by hand there is no floor, the pitch is exact,
+ * and it comes out the same every time.
+ */
+export interface PluckSource {
+  kind: 'pluck';
+  freq: number;
+  /** How fast the top end dies away, 0 to 1. Low is bright, high is dull. */
+  damping: number;
+  /** How much of the excitation is noise rather than a single pulse, 0 to 1. */
+  colour?: number;
+  /** Below 1 the whole thing shortens; near 1 it rings on. */
+  sustain?: number;
+}
+
+/**
+ * A cloud of short bursts.
+ *
+ * One grain is a click. Thousands of them, scattered in time and pitch, are
+ * rain, fire, gravel, a crowd, or a machine, and which one depends almost
+ * entirely on how often they arrive and how far apart they are in pitch.
+ */
+export interface GrainSource {
+  kind: 'grains';
+  /** Grains per second. */
+  density: number;
+  /** How long one grain lasts, in seconds. */
+  grain: number;
+  /** Centre pitch of a grain in Hz, or 0 for grains of noise. */
+  freq: number;
+  /** How far the pitch scatters either side, in octaves. */
+  spread: number;
+  /** How much of a grain is noise rather than tone, 0 to 1. */
+  air?: number;
+  /**
+   * How far a grain's pitch climbs across its own length, as a multiple.
+   *
+   * A rising grain is a bubble, which is the one shape water is made of, so
+   * a cloud of them is a stream, a pour, or a drip.
+   */
+  rise?: number;
+}
+
+/**
+ * A run of hits, at a rate that can change while it runs.
+ *
+ * The rate being a curve rather than a number is the whole point: a ratchet
+ * slowing down, a motor spinning up and a zip being pulled are the same
+ * mechanism at three different accelerations.
+ */
+export interface ImpulseSource {
+  kind: 'impulses';
+  /** Hits per second, over time. */
+  rate: Curve;
+  /** How long one hit rings, in seconds. */
+  ring: number;
+  /** What it rings at, in Hz. */
+  freq: number;
+  /** How ragged the spacing is, 0 to 1. Nothing is clockwork, one is a rattle. */
+  jitter?: number;
+}
+
+export type SourceSpec =
+  | OscSource
+  | NoiseSource
+  | ReverseSource
+  | ModalSource
+  | PluckSource
+  | GrainSource
+  | ImpulseSource;
 
 export interface FilterSpec {
   type: BiquadFilterType;
@@ -550,14 +656,208 @@ function buildSource(
     return { node: osc, freq: osc.frequency };
   }
 
+  if (source.kind === 'modal') {
+    return { node: buildModal(ctx, source, layer, t, until), freq: null };
+  }
+
   const node = ctx.createBufferSource();
-  node.buffer =
-    source.kind === 'reverse'
-      ? reverseBuffer(ctx, length, source, random)
-      : noiseBuffer(ctx, length, source, random);
+  if (source.kind === 'reverse') node.buffer = reverseBuffer(ctx, length, source, random);
+  else if (source.kind === 'pluck') node.buffer = pluckBuffer(ctx, length, source, random);
+  else if (source.kind === 'grains') node.buffer = grainBuffer(ctx, length, source, random);
+  else if (source.kind === 'impulses') node.buffer = impulseBuffer(ctx, length, source, random);
+  else node.buffer = noiseBuffer(ctx, length, source, random);
   node.start(t);
   node.stop(until);
   return { node, freq: null };
+}
+
+/**
+ * A struck body: one decaying sine for each note it rings at.
+ *
+ * Built in the graph rather than into a buffer because every partial is a
+ * plain oscillator and the graph is better at those than a loop written by
+ * hand. A hard strike wakes the high partials fully; a soft one leaves them
+ * behind, which is done by leaning on the ones furthest from the bottom.
+ */
+function buildModal(
+  ctx: BaseAudioContext,
+  source: ModalSource,
+  layer: LayerSpec,
+  t: number,
+  until: number,
+): AudioNode {
+  const out = ctx.createGain();
+  const strike = Math.max(0, Math.min(1, source.strike ?? 1));
+
+  for (const partial of source.partials) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = source.freq * partial.ratio;
+
+    // How much this partial was woken. The first is always struck fully; the
+    // rest are held back further the softer the strike and the higher they
+    // sit, which is what a soft mallet does to a real object.
+    const reach = partial.ratio <= 1 ? 1 : Math.pow(strike, Math.log2(partial.ratio));
+    const peak = Math.max(0.0001, partial.gain * reach);
+
+    const level = ctx.createGain();
+    level.gain.setValueAtTime(peak, t);
+    // Exponential, because that is how a ringing object actually falls away,
+    // and it cannot reach zero, so it ends just under where anyone can hear.
+    level.gain.exponentialRampToValueAtTime(peak * 0.0005, t + Math.max(0.01, partial.decay));
+
+    osc.connect(level);
+    level.connect(out);
+    osc.start(t);
+    osc.stop(Math.min(until, t + Math.max(0.01, partial.decay) + (layer.overrun ?? OVERRUN)));
+  }
+
+  return out;
+}
+
+/**
+ * A plucked string, worked out one sample at a time.
+ *
+ * A short burst is written into a ring the length of one cycle, and then read
+ * round and round, each time averaged a little with the sample before it. The
+ * averaging is what takes the top off a bit more on every pass, which is why
+ * a string starts bright and turns dull rather than simply getting quieter.
+ */
+function pluckBuffer(
+  ctx: BaseAudioContext,
+  seconds: number,
+  source: PluckSource,
+  random: () => number,
+): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const length = Math.max(1, Math.floor(rate * seconds));
+  const buffer = ctx.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+
+  const period = Math.max(2, Math.round(rate / Math.max(20, source.freq)));
+  const colour = Math.max(0, Math.min(1, source.colour ?? 1));
+  const damping = Math.max(0, Math.min(0.99, source.damping));
+  const sustain = Math.max(0.8, Math.min(0.9999, source.sustain ?? 0.996));
+
+  // The excitation. All noise is a plucked string; a single pulse is more
+  // like something struck, and between them is everything else.
+  const ring = new Float32Array(period);
+  for (let i = 0; i < period; i++) {
+    const pulse = i === 0 ? 1 : 0;
+    ring[i] = (random() * 2 - 1) * colour + pulse * (1 - colour);
+  }
+
+  /*
+   * The damping is a filter that carries its own state round the loop rather
+   * than an average of each sample with the one beside it. Averaging two
+   * neighbours takes almost nothing off at these pitches: a tenth of a
+   * percent per pass, which over a whole note is barely a change and leaves
+   * the control with nothing to do. Carrying the state makes the parameter
+   * mean something across its whole range, from a string that keeps its
+   * harmonics for seconds to one that is a thud within two cycles.
+   */
+  let rolled = 0;
+  for (let i = 0; i < length; i++) {
+    const at = i % period;
+    const held = ring[at];
+    rolled = held * (1 - damping) + rolled * damping;
+    ring[at] = rolled * sustain;
+    data[i] = held;
+  }
+
+  return buffer;
+}
+
+/** A cloud of short bursts, scattered in time and in pitch. */
+function grainBuffer(
+  ctx: BaseAudioContext,
+  seconds: number,
+  source: GrainSource,
+  random: () => number,
+): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const length = Math.max(1, Math.floor(rate * seconds));
+  const buffer = ctx.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+
+  const grain = Math.max(1, Math.round(rate * Math.max(0.001, source.grain)));
+  const count = Math.max(1, Math.round(source.density * seconds));
+  const air = Math.max(0, Math.min(1, source.air ?? 0));
+  const rise = Math.max(0.05, source.rise ?? 1);
+
+  for (let g = 0; g < count; g++) {
+    const at = Math.floor(random() * length);
+    // Pitch scattered in octaves rather than in Hz, so the spread sounds the
+    // same wherever the centre sits.
+    const octaves = (random() * 2 - 1) * source.spread;
+    const freq = source.freq * Math.pow(2, octaves);
+    const step = (2 * Math.PI * freq) / rate;
+    let phase = random() * Math.PI * 2;
+
+    for (let i = 0; i < grain && at + i < length; i++) {
+      const u = i / grain;
+      // Raised cosine, so a grain fades in and out rather than clicking at
+      // both ends. Thousands of clicks would be their own sound.
+      const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * u);
+      phase += step * Math.pow(rise, u);
+      const tone = source.freq > 0 ? Math.sin(phase) : 0;
+      data[at + i] += (tone * (1 - air) + (random() * 2 - 1) * air) * window;
+    }
+  }
+
+  return buffer;
+}
+
+/** A run of hits at a rate that can change while it runs. */
+function impulseBuffer(
+  ctx: BaseAudioContext,
+  seconds: number,
+  source: ImpulseSource,
+  random: () => number,
+): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const length = Math.max(1, Math.floor(rate * seconds));
+  const buffer = ctx.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+
+  const ring = Math.max(1, Math.round(rate * Math.max(0.0005, source.ring)));
+  const jitter = Math.max(0, Math.min(1, source.jitter ?? 0));
+  const step = (2 * Math.PI * source.freq) / rate;
+
+  // Walked forward in time rather than laid out in advance, because the gap
+  // to the next hit depends on the rate where this one landed, which is the
+  // only way a run that speeds up actually speeds up.
+  let at = 0;
+  let guard = 0;
+  while (at < seconds && guard++ < 20000) {
+    const hits = Math.max(0.1, valueOn(source.rate, at));
+    const start = Math.floor(at * rate);
+
+    for (let i = 0; i < ring && start + i < length; i++) {
+      const decay = Math.exp(-4 * (i / ring));
+      data[start + i] += Math.sin(i * step) * decay;
+    }
+
+    const gap = 1 / hits;
+    at += gap * (1 + (random() * 2 - 1) * jitter);
+  }
+
+  return buffer;
+}
+
+/** Read a curve at a moment, for the places that need a number rather than a param. */
+function valueOn(curve: Curve, at: number): number {
+  if (!curve.length) return 1;
+  if (at <= curve[0].at) return curve[0].to;
+  for (let i = 1; i < curve.length; i++) {
+    const from = curve[i - 1];
+    const to = curve[i];
+    if (at > to.at) continue;
+    const span = to.at - from.at;
+    if (span <= 0) return to.to;
+    return from.to + ((at - from.at) / span) * (to.to - from.to);
+  }
+  return curve[curve.length - 1].to;
 }
 
 function buildLfo(

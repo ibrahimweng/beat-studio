@@ -113,6 +113,35 @@ whoever picks them up.
 
 Run the development server and open http://localhost:5173/tools/automation-check.html
 
+## mechanism-check.html
+
+Checks that each way of making a sound actually does the thing it is named
+after, rather than being another way of arriving at the same noise.
+
+A struck body has to ring at the notes it was given and at nothing in
+between, its louder partials have to be the louder ones, and its short
+partials have to die first, which is the difference between an object and a
+chord. A soft strike has to leave the high partials behind.
+
+A pluck has to come out at the pitch asked for, put its harmonics where a
+string puts them, and start bright and turn dull rather than only getting
+quieter. Its damping has to mean something across its whole range.
+
+A cloud has to be mostly the silence between its grains when it is thin and
+continuous when it is thick, and spreading the pitch has to actually spread
+it. A run of hits has to arrive at the rate it was given, and a run told to
+speed up has to speed up.
+
+Two of the measurements needed care. Counting hits by looking for samples
+over a threshold counts the cycles of the tone inside each hit rather than
+the hits, so they are counted as sharp rises instead, which also survives
+hits arriving faster than they die away. Grains have no sharp rise at all,
+since they are faded in deliberately so that a thousand a second is not a
+thousand clicks, so a cloud is measured by what lies between its grains
+instead.
+
+Run the development server and open http://localhost:5173/tools/mechanism-check.html
+
 ## shaper-check.html
 
 Records why Drive is not oversampled, which is not the usual answer.

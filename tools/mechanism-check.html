@@ -1,0 +1,259 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>mechanism check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Each new mechanism has to actually do the thing it is named after.
+     A modal body has to ring at the notes it was told to and no others, a
+     pluck has to come out at the pitch asked for and lose its top end as it
+     goes, a cloud has to be made of separate grains, and a run of hits has
+     to arrive at the rate it was given. */
+  import { renderVoice, seedFrom } from '/src/audio/voice-spec.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  /** Render one layer on its own, dry, so nothing else colours the reading. */
+  async function render(layer, seconds = 2) {
+    const ctx = new OfflineAudioContext(1, Math.round(RATE * seconds), RATE);
+    renderVoice(ctx, ctx.destination, { duration: seconds, layers: [layer] }, 0, seedFrom('check'));
+    return (await ctx.startRendering()).getChannelData(0);
+  }
+
+  const flat = (v) => [{ at: 0, to: v }];
+  /** A level that holds, so the source is what is being measured. */
+  const held = (seconds, peak = 0.8) => [
+    { at: 0, to: peak }, { at: seconds - 0.01, to: peak, curve: 'set' }, { at: seconds, to: 0.0001, curve: 'exp' },
+  ];
+
+  /** How much sits at one frequency. Windowed, or the strong parts leak everywhere. */
+  function at(d, hz, from, to) {
+    let re = 0, im = 0, norm = 0;
+    const n = to - from;
+    for (let i = from; i < to; i++) {
+      const w = (2 * Math.PI * hz * i) / RATE;
+      const win = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i - from)) / n);
+      re += d[i] * win * Math.cos(w);
+      im += d[i] * win * Math.sin(w);
+      norm += win;
+    }
+    return (Math.sqrt(re * re + im * im) * 2) / norm;
+  }
+
+  const rms = (d, from, to) => {
+    let s = 0;
+    for (let i = from; i < to; i++) s += d[i] * d[i];
+    return Math.sqrt(s / (to - from));
+  };
+
+  // ---------- a struck body ----------
+
+  // Deliberately inharmonic, so it reads as an object rather than a note, and
+  // so every partial can be told apart from every other.
+  const bell = {
+    source: {
+      kind: 'modal', freq: 220, strike: 1,
+      partials: [
+        { ratio: 1, gain: 0.5, decay: 1.6 },
+        { ratio: 2.76, gain: 0.3, decay: 0.9 },
+        { ratio: 5.4, gain: 0.2, decay: 0.5 },
+      ],
+    },
+    gain: flat(1), length: 2,
+  };
+  const rung = await render(bell);
+  const window = [Math.round(0.05 * RATE), Math.round(0.4 * RATE)];
+  const heard = bell.source.partials.map((p) => at(rung, 220 * p.ratio, ...window));
+  // Halfway between two partials there should be next to nothing: that gap is
+  // what says these are discrete modes and not a smear.
+  const between = at(rung, 220 * 1.88, ...window);
+  check('a struck body rings at the notes it was given',
+    heard.every((v) => v > between * 8),
+    `${heard.map((v) => v.toFixed(4)).join(', ')} against ${between.toFixed(4)} in the gap`);
+  check('and the louder partials really are the louder ones',
+    heard[0] > heard[1] && heard[1] > heard[2], heard.map((v) => v.toFixed(4)).join(' > '));
+
+  // Each partial has its own life, so the short ones have to go first.
+  const early = [Math.round(0.05 * RATE), Math.round(0.25 * RATE)];
+  const late = [Math.round(1.0 * RATE), Math.round(1.4 * RATE)];
+  const topEarly = at(rung, 220 * 5.4, ...early), topLate = at(rung, 220 * 5.4, ...late);
+  const lowEarly = at(rung, 220, ...early), lowLate = at(rung, 220, ...late);
+  check('the short partials die first, which is what makes it an object and not a chord',
+    topLate / topEarly < lowLate / lowEarly * 0.5,
+    `top keeps ${(topLate / topEarly).toFixed(3)}, bottom keeps ${(lowLate / lowEarly).toFixed(3)}`);
+
+  // A soft strike should leave the high partials behind.
+  const soft = await render({ ...bell, source: { ...bell.source, strike: 0.25 } });
+  const softTop = at(soft, 220 * 5.4, ...early), softLow = at(soft, 220, ...early);
+  check('a soft strike hardly wakes the high partials',
+    softTop / softLow < (topEarly / lowEarly) * 0.6,
+    `hard ${(topEarly / lowEarly).toFixed(3)}, soft ${(softTop / softLow).toFixed(3)} of the bottom`);
+
+  // ---------- a plucked string ----------
+
+  const pluck = {
+    source: { kind: 'pluck', freq: 196, damping: 0.35, colour: 1, sustain: 0.998 },
+    gain: flat(1), length: 2,
+  };
+  const plucked = await render(pluck);
+  const pluckWin = [Math.round(0.05 * RATE), Math.round(0.5 * RATE)];
+  const fundamental = at(plucked, 196, ...pluckWin);
+  const offPitch = at(plucked, 196 * 1.5, ...pluckWin);
+  check('a pluck comes out at the pitch it was asked for',
+    fundamental > offPitch * 6,
+    `at 196Hz ${fundamental.toFixed(4)}, off pitch ${offPitch.toFixed(4)}`);
+  check('and its harmonics are where a string puts them',
+    at(plucked, 392, ...pluckWin) > offPitch * 2,
+    `second harmonic ${at(plucked, 392, ...pluckWin).toFixed(4)}`);
+
+  // The whole point of the damping: bright first, dull later.
+  const bright = (d, a, b) => at(d, 196 * 6, a, b) / Math.max(1e-9, at(d, 196, a, b));
+  const first = bright(plucked, Math.round(0.01 * RATE), Math.round(0.1 * RATE));
+  const later = bright(plucked, Math.round(0.6 * RATE), Math.round(0.9 * RATE));
+  check('a string starts bright and turns dull, rather than only getting quieter',
+    later < first * 0.6, `${first.toFixed(4)} at the start, ${later.toFixed(4)} later`);
+
+  const dull = await render({ ...pluck, source: { ...pluck.source, damping: 0.9 } });
+  check('more damping takes the top off sooner, across the whole of its range',
+    bright(dull, Math.round(0.01 * RATE), Math.round(0.1 * RATE)) < first * 0.5,
+    `${bright(dull, Math.round(0.01 * RATE), Math.round(0.1 * RATE)).toFixed(4)} against ${first.toFixed(4)}`);
+
+  // ---------- a cloud of grains ----------
+
+  /*
+   * How many separate hits a stretch is made of.
+   *
+   * Counted as sharp rises rather than as loud stretches. Two reasons. A
+   * burst with a tone in it crosses zero on every cycle of that tone, so
+   * counting samples over a threshold counts the cycles and not the hits.
+   * And once hits arrive faster than they die away they overlap, so there
+   * are no quiet gaps left to count between them, even though every hit is
+   * still plainly there as an attack.
+   */
+  function onsets(d, from, to) {
+    const refractory = Math.round(RATE * 0.004);
+    let follower = 0, count = 0, since = refractory;
+    for (let i = from; i < to; i++) {
+      const now = Math.abs(d[i]);
+      since++;
+      if (now > follower * 2.5 && now > 0.05 && since > refractory) {
+        count++;
+        since = 0;
+      }
+      // Fast enough to have fallen back before the next hit at any rate this
+      // mechanism reaches, so a run that speeds up stays countable.
+      follower = Math.max(now, follower * 0.997);
+    }
+    return count;
+  }
+
+  const sparse = await render({
+    source: { kind: 'grains', density: 12, grain: 0.02, freq: 900, spread: 0.5 },
+    gain: held(2), length: 2,
+  }, 2);
+  const dense = await render({
+    source: { kind: 'grains', density: 400, grain: 0.02, freq: 900, spread: 0.5 },
+    gain: held(2), length: 2,
+  }, 2);
+  /*
+   * How much of a stretch is silence.
+   *
+   * Grains are deliberately faded in and out rather than switched on, or a
+   * thousand of them a second would be a thousand clicks. That means they
+   * have no attack for an onset detector to find, so a cloud is measured by
+   * what is between the grains instead: a thin one is mostly silence with
+   * things in it, a thick one is continuous.
+   */
+  function silence(d, from, to) {
+    let quiet = 0;
+    for (let i = from; i < to; i++) if (Math.abs(d[i]) < 0.01) quiet++;
+    return quiet / (to - from);
+  }
+
+  const sparseGap = silence(sparse, 0, Math.round(1.8 * RATE));
+  const denseGap = silence(dense, 0, Math.round(1.8 * RATE));
+  check('a thin cloud is mostly the silence between its grains',
+    sparseGap > 0.5 && denseGap < 0.1,
+    `thin is ${(sparseGap * 100).toFixed(0)}% silence, thick is ${(denseGap * 100).toFixed(0)}%`);
+  check('and a thick one runs together into a texture',
+    rms(dense, 0, Math.round(1.8 * RATE)) > rms(sparse, 0, Math.round(1.8 * RATE)) * 3,
+    `thin ${rms(sparse, 0, Math.round(1.8 * RATE)).toFixed(4)}, thick ${rms(dense, 0, Math.round(1.8 * RATE)).toFixed(4)}`);
+
+  const narrow = await render({
+    source: { kind: 'grains', density: 300, grain: 0.02, freq: 900, spread: 0 },
+    gain: held(2), length: 2,
+  }, 2);
+  const wide = await render({
+    source: { kind: 'grains', density: 300, grain: 0.02, freq: 900, spread: 2 },
+    gain: held(2), length: 2,
+  }, 2);
+  const focus = (d) => at(d, 900, Math.round(0.2 * RATE), Math.round(1.2 * RATE)) /
+    Math.max(1e-9, rms(d, Math.round(0.2 * RATE), Math.round(1.2 * RATE)));
+  check('spreading the pitch really does spread it',
+    focus(wide) < focus(narrow) * 0.5,
+    `all on one pitch ${focus(narrow).toFixed(3)}, spread over four octaves ${focus(wide).toFixed(3)}`);
+
+  // ---------- a run of hits ----------
+
+  const steady = await render({
+    source: { kind: 'impulses', rate: flat(10), ring: 0.01, freq: 1400 },
+    gain: held(2), length: 2,
+  }, 2);
+  const hits = onsets(steady, 0, Math.round(1.9 * RATE));
+  check('a run of hits arrives at the rate it was given',
+    Math.abs(hits - 19) <= 2, `${hits} hits in 1.9s at ten a second`);
+
+  // The rate being a curve is the whole point of the mechanism.
+  const speeding = await render({
+    source: { kind: 'impulses', rate: [{ at: 0, to: 4 }, { at: 2, to: 40 }], ring: 0.008, freq: 1400 },
+    gain: held(2), length: 2,
+  }, 2);
+  const early2 = onsets(speeding, 0, Math.round(0.5 * RATE));
+  const late2 = onsets(speeding, Math.round(1.4 * RATE), Math.round(1.9 * RATE));
+  check('and a run told to speed up actually speeds up',
+    late2 > early2 * 3, `${early2} hits in the first half second, ${late2} in a later one`);
+
+  // ---------- everything comes out the same twice ----------
+
+  const apart = async (layer, first) => {
+    const again = await render(layer);
+    let worst = 0;
+    for (let i = 0; i < again.length; i++) worst = Math.max(worst, Math.abs(again[i] - first[i]));
+    return worst;
+  };
+
+  // A plain oscillator, which none of this work touched, is measured beside
+  // them: if it drifts by the same amount then the drift is the platform's
+  // and not the mechanism's, and saying which is which matters.
+  const plainOsc = { source: { kind: 'osc', type: 'sine', freq: flat(300) }, gain: flat(0.8), length: 2 };
+  const oscOnce = await render(plainOsc);
+  const oscDrift = await apart(plainOsc, oscOnce);
+  const modalDrift = await apart(bell, rung);
+  const pluckDrift = await apart(pluck, plucked);
+
+  // The ones written out by hand come back bit for bit, because a buffer of
+  // numbers worked out in order has nothing left to vary.
+  check('a pluck comes back bit for bit, as a plain oscillator does',
+    pluckDrift === 0 && oscDrift === 0,
+    `a plain oscillator ${oscDrift.toExponential(2)}, a pluck ${pluckDrift.toExponential(2)}`);
+
+  /*
+   * A struck body usually does too, but not always, and it is worth saying
+   * why rather than rounding it away. Its partials are separate oscillators
+   * summed by the graph rather than numbers added up in a fixed order, and
+   * floating point addition gives a different last bit depending on the order
+   * it happens in. Measured here it has come out at both nothing at all and
+   * one part in sixteen million, depending on what else was rendered first.
+   * That is a hundred and forty four decibels down, below the noise floor of
+   * the format it is written to, and the export already holds itself to the
+   * same standard for the same reason.
+   */
+  check('a struck body comes back to within the last bit of a float',
+    modalDrift < 1e-6,
+    `${modalDrift.toExponential(2)}, which is ` +
+    `${(20 * Math.log10(Math.max(modalDrift, 1e-12))).toFixed(0)}dB down`);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>
