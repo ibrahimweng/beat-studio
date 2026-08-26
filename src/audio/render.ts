@@ -8,7 +8,7 @@ import {
   type MasterOptions,
   type MasterReport,
 } from './master.ts';
-import { playCue, scheduleLayerLevels, syncLayerBuses } from './sources.ts';
+import { playCue, scheduleLayerLanes, syncLayerBuses, type LayerBus } from './sources.ts';
 
 /** Extra time past the video's end so a long tail is not cut off mid-decay. */
 const TAIL = 2;
@@ -174,14 +174,14 @@ async function renderCues(
 
   const seconds = frames / sampleRate;
   // Written in one pass here, since the whole file is known in advance.
-  const buses = new Map<string, GainNode>();
+  const buses = new Map<string, LayerBus>();
   syncLayerBuses(ctx, project, chain.input, buses);
-  scheduleLayerLevels(buses, project, 0, 0, seconds);
+  scheduleLayerLanes(buses, project, 0, 0, seconds);
 
   for (const cue of cues) {
     const at = cueStart(cue);
     if (at >= seconds) continue;
-    playCue(ctx, buses.get(cue.layerId) ?? chain.input, cue, at, cueGain(project, cue));
+    playCue(ctx, buses.get(cue.layerId)?.input ?? chain.input, cue, at, cueGain(project, cue));
   }
 
   return ctx.startRendering();

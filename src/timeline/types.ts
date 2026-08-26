@@ -108,7 +108,7 @@ export interface Cue {
 }
 
 /**
- * A point on a layer's level over time.
+ * A point on one of a layer's curves.
  *
  * Two of these are a fade. A handful are a shape that follows the picture,
  * which is what a bed of rumble under a sequence actually needs: it has to
@@ -117,26 +117,99 @@ export interface Cue {
 export interface AutoPoint {
   /** Seconds from the start of the video. */
   t: number;
-  /** Level, 0 to 1.5. */
+  /** What the lane is set to at that moment, within the lane's own range. */
   value: number;
 }
+
+/** Which of a layer's curves a point belongs to. */
+export type LaneName = 'level' | 'pan' | 'space';
+
+/**
+ * The curves a layer carries, each drawn over time.
+ *
+ * An empty lane does nothing at all, and nothing is built in the audio graph
+ * for it: the fixed level applies, the layer stays in the middle, and there
+ * is no room around it.
+ */
+export interface Lanes {
+  level: AutoPoint[];
+  pan: AutoPoint[];
+  space: AutoPoint[];
+}
+
+/** What one lane is: what it controls, how far it goes, and how it reads. */
+export interface LaneSpec {
+  name: LaneName;
+  label: string;
+  /** What it does, for the label people hover. */
+  about: string;
+  min: number;
+  max: number;
+  /** What the lane means when nothing is drawn, and where its guide line sits. */
+  neutral: number;
+  /**
+   * Where the shaded area under the curve is measured from.
+   *
+   * An amount is shaded from the floor, because what you want to see is how
+   * much of it there is. A direction is shaded from the middle, because what
+   * you want to see is how far off centre it has gone, and which way.
+   */
+  base: 'floor' | 'neutral';
+}
+
+/**
+ * What each lane is, in the order they are drawn.
+ *
+ * The range and the resting value live here rather than in the interface,
+ * because the audio has to agree with the drawing about what the height of a
+ * point means. One table, read by both.
+ */
+export const LANES: readonly LaneSpec[] = [
+  {
+    name: 'level',
+    label: 'Level',
+    about: 'How loud the layer is, over time. A bed has to get out of the way when something else speaks.',
+    min: 0,
+    max: 1.5,
+    neutral: 1,
+    base: 'floor',
+  },
+  {
+    name: 'pan',
+    label: 'Pan',
+    about: 'Where it sits between the speakers. Up is right, down is left, the middle is the middle.',
+    min: -1,
+    max: 1,
+    neutral: 0,
+    base: 'neutral',
+  },
+  {
+    name: 'space',
+    label: 'Space',
+    about: 'How much room is around the whole layer, over time. A sequence can walk out of a booth into a hall.',
+    min: 0,
+    max: 1,
+    neutral: 0,
+    base: 'floor',
+  },
+];
 
 export interface Layer {
   id: string;
   name: string;
   muted: boolean;
   solo: boolean;
-  /** The level, when nothing is drawn. */
+  /** The level, when none is drawn. */
   gain: number;
   /**
-   * The level over time, in order.
+   * What is drawn over time, lane by lane, each in time order.
    *
-   * Empty means the fixed level above applies throughout. As soon as there is
-   * anything here it takes over completely, rather than multiplying with the
-   * fixed level, because two things claiming to be the same control is how
-   * you end up unable to work out why something is quiet.
+   * An empty level lane means the fixed level above applies throughout. As
+   * soon as anything is drawn there it takes over completely, rather than
+   * multiplying with the fixed level, because two things claiming to be the
+   * same control is how you end up unable to work out why something is quiet.
    */
-  auto: AutoPoint[];
+  auto: Lanes;
 }
 
 export interface Project {

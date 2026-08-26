@@ -1,5 +1,11 @@
 import type { AudioEngine } from '../audio/engine.ts';
-import { scheduleCue, scheduleLayerLevels, syncLayerBuses } from '../audio/sources.ts';
+import {
+  releaseBus,
+  scheduleCue,
+  scheduleLayerLanes,
+  syncLayerBuses,
+  type LayerBus,
+} from '../audio/sources.ts';
 import { audibleCues, cueStart, layerLevelAt } from '../timeline/project.ts';
 import type { Cue, Project } from '../timeline/types.ts';
 
@@ -36,8 +42,8 @@ export class VideoClock {
   #timer: ReturnType<typeof setInterval> | null = null;
   /** Cues before this video time have already been queued. */
   #queuedUpTo = 0;
-  /** A node per layer whose level is drawn, rebuilt whenever we start. */
-  #buses = new Map<string, GainNode>();
+  /** The nodes for each layer with something drawn on it, rebuilt on play. */
+  #buses = new Map<string, LayerBus>();
 
   constructor(video: HTMLVideoElement, engine: AudioEngine, hooks: ClockHooks) {
     this.#video = video;
@@ -71,7 +77,7 @@ export class VideoClock {
     this.#video.pause();
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
-    for (const bus of this.#buses.values()) bus.disconnect();
+    for (const bus of this.#buses.values()) releaseBus(bus);
     this.#buses.clear();
   }
 
@@ -91,7 +97,7 @@ export class VideoClock {
     // Reading it at this sound's own moment is what makes hearing it on its
     // own match hearing it in place.
     const layer = project.layers.find((l) => l.id === cue.layerId);
-    const level = layer?.auto.length ? layerLevelAt(layer, cue.time) : 1;
+    const level = layer && layer.auto.level.length ? layerLevelAt(layer, cue.time) : 1;
     // Place the timeline origin so this cue sounds now.
     scheduleCue(
       ctx,
@@ -137,12 +143,13 @@ export class VideoClock {
      * tick are still playing through them.
      */
     syncLayerBuses(ctx, project, this.#engine.cueDestination, this.#buses);
-    scheduleLayerLevels(this.#buses, project, origin, videoNow, until);
+    scheduleLayerLanes(this.#buses, project, origin, videoNow, until);
 
     for (const cue of audibleCues(project)) {
       const start = cueStart(cue);
       if (start < this.#queuedUpTo || start >= until) continue;
-      scheduleCue(ctx, this.#buses.get(cue.layerId) ?? this.#engine.cueDestination, project, cue, origin);
+      const bus = this.#buses.get(cue.layerId)?.input ?? this.#engine.cueDestination;
+      scheduleCue(ctx, bus, project, cue, origin);
       this.#hooks.onCue(cue, origin + start);
     }
 

@@ -1,7 +1,15 @@
 import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { cueLength, cueStart, timecode } from '../../timeline/project.ts';
-import type { AutoPoint, Cue, Layer, Project } from '../../timeline/types.ts';
+import {
+  LANES,
+  type AutoPoint,
+  type Cue,
+  type LaneName,
+  type LaneSpec,
+  type Layer,
+  type Project,
+} from '../../timeline/types.ts';
 import { button, clear, el, setText, svg, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 import { createMotionStrip } from './motion-strip.ts';
@@ -9,12 +17,19 @@ import { createMotionStrip } from './motion-strip.ts';
 const MIN_PX_PER_SEC = 8;
 const MAX_PX_PER_SEC = 600;
 
-/** Height of a layer's level lane, matching --tl-auto in the stylesheet. */
+/** Height of an open lane, matching --tl-auto in the stylesheet. */
 const AUTO_HEIGHT = 46;
-/** Loudest a drawn level goes, matching the level control on a sound. */
-const MAX_LEVEL = 1.5;
+/**
+ * Height of one that is closed, matching --tl-auto-shut.
+ *
+ * Closed rather than hidden. A lane you cannot see is a lane you forget you
+ * drew, so a closed one still shows its shape, small, and opens when clicked.
+ */
+const SHUT_HEIGHT = 16;
 /** How near the pointer has to be to grab a point rather than add one. */
 const GRAB_RADIUS = 7;
+/** How near, in pixels, a value has to land to be taken as exactly that. */
+const SNAP_PX = 3;
 /**
  * How wide a drawn sound has to be before it offers an edge to drag.
  *
@@ -60,15 +75,15 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
 
   const cueNodes = new Map<string, DrawnCue>();
   /**
-   * Which layers have their level open.
+   * Which layers are showing their curves, and which lanes are open on them.
    *
-   * Kept here rather than in the project. Whether you are looking at a level
-   * is about what you are doing at this moment, not about the piece, and a
-   * session that reopened with four lanes expanded because of what someone
-   * was doing a fortnight ago would be a nuisance rather than a convenience.
+   * Kept here rather than in the project. What you are looking at is about
+   * what you are doing at this moment, not about the piece, and a session
+   * that reopened with twelve lanes expanded because of what someone was
+   * doing a fortnight ago would be a nuisance rather than a convenience.
    */
-  const automating = new Set<string>();
-  /** The drawn level for each open layer, so it can be redrawn on its own. */
+  const opened = new Map<string, Set<LaneName>>();
+  /** Each drawn lane, so it can be redrawn on its own. */
   const autoLanes = new Map<string, SVGSVGElement>();
   /** Which sounds currently carry the chosen mark. */
   let marked: readonly string[] = [];
@@ -266,19 +281,54 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     return found;
   }
 
-  /** Draw every open level lane against the current zoom. */
+  /** Where one layer's lane lives, since a layer has more than one. */
+  function laneKey(layerId: string, lane: LaneName): string {
+    return `${layerId}:${lane}`;
+  }
+
+  /**
+   * Show or hide a layer's curves.
+   *
+   * Opening shows whatever is already drawn on it, and the level when nothing
+   * is, since that is what someone reaching for this wants first almost every
+   * time. The other lanes are still there underneath, closed.
+   */
+  function toggleLayer(layer: Layer): void {
+    if (opened.has(layer.id)) {
+      opened.delete(layer.id);
+      return;
+    }
+    const drawn = LANES.filter((lane) => layer.auto[lane.name].length).map((lane) => lane.name);
+    opened.set(layer.id, new Set(drawn.length ? drawn : ['level']));
+  }
+
+  /** Open or close one lane on a layer that is already showing its curves. */
+  function toggleLane(layerId: string, name: LaneName): void {
+    const showing = opened.get(layerId);
+    if (!showing) return;
+    if (showing.has(name)) showing.delete(name);
+    else showing.add(name);
+  }
+
+  /** Draw every lane on show against the current zoom. */
   function paintAuto(project: Project): void {
     // The laid out width rather than the width the clip works out to. A
     // timeline shorter than the window is stretched to fill it, and sounds
-    // can be placed anywhere in that space, so the level has to reach there
+    // can be placed anywhere in that space, so a curve has to reach there
     // too or it would run out partway across a lane you can still click on.
     const width = Math.max(
       content.clientWidth,
       Math.round(Math.max(project.duration, 1) * pxPerSec + 24),
     );
     for (const layer of project.layers) {
-      const lane = autoLanes.get(layer.id);
-      if (lane) drawAuto(lane, layer.auto, width);
+      const showing = opened.get(layer.id);
+      if (!showing) continue;
+      for (const spec of LANES) {
+        const node = autoLanes.get(laneKey(layer.id, spec.name));
+        if (!node) continue;
+        const open = showing.has(spec.name);
+        drawAuto(node, spec, layer.auto[spec.name], width, open ? AUTO_HEIGHT : SHUT_HEIGHT, open);
+      }
     }
   }
 
@@ -286,9 +336,13 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
    * Whether the layers themselves changed, as opposed to what is drawn on
    * them.
    *
-   * Drawing a level makes a new layer list on every movement of the pointer.
+   * Drawing a curve makes a new layer list on every movement of the pointer.
    * Treating that as the layers having changed would rebuild every lane and
    * every sound on them, sixty times a second, while someone drags a point.
+   *
+   * Whether a lane is empty does count, because the row beside it says so: a
+   * lane with something on it offers a way to clear it and an empty one has
+   * nothing to clear. That happens once, on the first point and on the last.
    */
   function sameLayers(before: readonly Layer[], after: readonly Layer[]): boolean {
     if (before.length !== after.length) return false;
@@ -298,7 +352,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         layer.id === now.id &&
         layer.name === now.name &&
         layer.muted === now.muted &&
-        layer.solo === now.solo
+        layer.solo === now.solo &&
+        LANES.every((lane) => !layer.auto[lane.name].length === !now.auto[lane.name].length)
       );
     });
   }
@@ -399,23 +454,22 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       );
       toggleClass(solo, 'is-on', layer.solo);
 
-      const level = button(
+      const curves = button(
         {
           class: 'tl__layer-btn',
           title:
-            `Draw ${layer.name}'s level over time. Click to add a point, drag ` +
-            'to move it, click it twice to take it away.',
+            `Draw ${layer.name}'s level, position and room over time. Click a ` +
+            'lane to add a point, drag to move it, click it twice to take it away.',
           on: {
             click: () => {
-              if (automating.has(layer.id)) automating.delete(layer.id);
-              else automating.add(layer.id);
+              toggleLayer(layer);
               paint(session.project, true);
             },
           },
         },
         ['A'],
       );
-      toggleClass(level, 'is-on', automating.has(layer.id));
+      toggleClass(curves, 'is-on', opened.has(layer.id));
 
       const remove = button(
         {
@@ -436,8 +490,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         ['×'],
       );
 
-      const row = el('div', { class: 'tl__gutter-row' }, [name, mute, solo, level, remove]);
-      toggleClass(row, 'is-automating', automating.has(layer.id));
+      const row = el('div', { class: 'tl__gutter-row' }, [name, mute, solo, curves, remove]);
+      toggleClass(row, 'is-automating', opened.has(layer.id));
       gutterRows.appendChild(row);
 
       const lane = el('div', {
@@ -453,16 +507,33 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         },
       });
       toggleClass(lane, 'is-muted', layer.muted);
-      toggleClass(lane, 'is-automating', automating.has(layer.id));
-
-      if (automating.has(layer.id)) {
-        const auto = buildAutoLane(layer);
-        autoLanes.set(layer.id, auto);
-        lane.appendChild(auto);
-      }
+      toggleClass(lane, 'is-automating', opened.has(layer.id));
 
       laneNodes.set(layer.id, lane);
       lanes.appendChild(lane);
+
+      // The curves sit under the layer rather than inside it, in both columns
+      // at once, so the names on the left cannot slide out of line with the
+      // shapes on the right however many lanes are open.
+      const showing = opened.get(layer.id);
+      if (!showing) continue;
+
+      for (const spec of LANES) {
+        const open = showing.has(spec.name);
+        const height = open ? AUTO_HEIGHT : SHUT_HEIGHT;
+        // The last one closes the layer off, so the next layer down does not
+        // read as another lane of this one.
+        const last = spec === LANES[LANES.length - 1];
+
+        const named = buildLaneName(layer, spec, open, height);
+        toggleClass(named, 'is-last', last);
+        gutterRows.appendChild(named);
+
+        const strip = buildAutoLane(layer, spec, open, height);
+        toggleClass(strip, 'is-last', last);
+        autoLanes.set(laneKey(layer.id, spec.name), strip);
+        lanes.appendChild(strip);
+      }
     }
 
     syncCues(project, true);
@@ -482,50 +553,106 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   }
 
   /**
-   * Draw a layer's level over time.
+   * The name beside a lane, which is also how it is opened and closed.
+   *
+   * One row per lane whether it is open or not, at the same height as the
+   * lane itself, because these two columns are read across.
+   */
+  function buildLaneName(layer: Layer, spec: LaneSpec, open: boolean, height: number): HTMLElement {
+    const name = button(
+      {
+        class: 'tl__lane-name',
+        title: spec.about,
+        on: {
+          click: () => {
+            toggleLane(layer.id, spec.name);
+            paint(session.project, true);
+          },
+        },
+      },
+      [spec.label],
+    );
+
+    const parts: HTMLElement[] = [name];
+    // Only where there is something to clear, and only on an open lane, so a
+    // row of closed ones stays quiet.
+    if (open && layer.auto[spec.name].length) {
+      parts.push(
+        button(
+          {
+            class: 'tl__layer-btn tl__layer-btn--remove',
+            title: `Take away everything drawn on ${layer.name}'s ${spec.label.toLowerCase()}`,
+            on: { click: () => session.setAuto(layer.id, spec.name, []) },
+          },
+          ['×'],
+        ),
+      );
+    }
+
+    const row = el('div', { class: 'tl__gutter-lane', style: { height: `${height}px` } }, parts);
+    toggleClass(row, 'is-shut', !open);
+    return row;
+  }
+
+  /**
+   * Draw one of a layer's curves over time.
    *
    * The shape is the whole point, so it is drawn as an area under a line
    * rather than as a line alone: at a glance you want to see where the layer
    * is loud, not trace a path. Points are drawn on top and can be taken hold
    * of. Everything is worked out from the same pixels per second the sounds
-   * use, so the level always lines up with what it is controlling.
+   * use, so a curve always lines up with what it is controlling.
+   *
+   * A closed lane is the same drawing at a sixth of the height, without the
+   * guide line or the points: enough to see that something is there and
+   * roughly what shape it is, and not enough to be edited by accident.
    */
-  function drawAuto(lane: SVGSVGElement, points: readonly AutoPoint[], width: number): void {
-    clear(lane);
-    lane.setAttribute('width', String(width));
-    lane.setAttribute('height', String(AUTO_HEIGHT));
+  function drawAuto(
+    node: SVGSVGElement,
+    spec: LaneSpec,
+    points: readonly AutoPoint[],
+    width: number,
+    height: number,
+    open: boolean,
+  ): void {
+    clear(node);
+    node.setAttribute('width', String(width));
+    node.setAttribute('height', String(height));
 
+    const span = spec.max - spec.min;
     const y = (value: number): number =>
-      AUTO_HEIGHT - (Math.max(0, Math.min(MAX_LEVEL, value)) / MAX_LEVEL) * AUTO_HEIGHT;
-    const unity = y(1);
+      height - ((Math.max(spec.min, Math.min(spec.max, value)) - spec.min) / span) * height;
+    const rest = y(spec.neutral);
 
-    lane.appendChild(
-      svg('line', { class: 'tl__auto-unity', x1: 0, x2: width, y1: unity, y2: unity }),
-    );
+    // Where the lane does nothing, so a shape can be read against something.
+    if (open) {
+      node.appendChild(svg('line', { class: 'tl__auto-unity', x1: 0, x2: width, y1: rest, y2: rest }));
+    }
 
     if (!points.length) {
-      lane.appendChild(
-        svg('text', { class: 'tl__auto-hint', x: 8, y: AUTO_HEIGHT / 2 + 3 }, [])
-      ).textContent = 'click to start drawing the level';
+      if (open) {
+        node.appendChild(
+          svg('text', { class: 'tl__auto-hint', x: 8, y: height / 2 + 3 }, []),
+        ).textContent = `click to start drawing ${spec.label.toLowerCase()}`;
+      }
       return;
     }
 
     // Held flat before the first point and after the last, which is what the
-    // level itself does, so the drawing cannot say something the sound does
+    // lane itself does, so the drawing cannot say something the sound does
     // not do.
     const steps = points.map((point) => `${point.t * pxPerSec},${y(point.value)}`);
     const first = `0,${y(points[0].value)}`;
     const last = `${width},${y(points[points.length - 1].value)}`;
     const line = [first, ...steps, last].join(' ');
+    const base = spec.base === 'neutral' ? rest : height;
 
-    lane.appendChild(
-      svg('polygon', {
-        class: 'tl__auto-fill',
-        points: `0,${AUTO_HEIGHT} ${line} ${width},${AUTO_HEIGHT}`,
-      }),
+    node.appendChild(
+      svg('polygon', { class: 'tl__auto-fill', points: `0,${base} ${line} ${width},${base}` }),
     );
-    lane.appendChild(svg('polyline', { class: 'tl__auto-line', points: line }));
+    node.appendChild(svg('polyline', { class: 'tl__auto-line', points: line }));
 
+    if (!open) return;
     points.forEach((point, index) => {
       const dot = svg('circle', {
         class: 'tl__auto-point',
@@ -534,28 +661,64 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         r: 4,
       });
       dot.dataset.index = String(index);
-      lane.appendChild(dot);
+      node.appendChild(dot);
     });
   }
 
-  /** Where a pointer is on a level lane, in seconds and level. */
-  function readAuto(event: PointerEvent, lane: SVGSVGElement): AutoPoint {
-    const rect = lane.getBoundingClientRect();
+  /**
+   * Where a pointer is on a lane, in seconds and in what the lane controls.
+   *
+   * The two ends and the resting value are landed on exactly when the pointer
+   * comes near them. Off is off, hard over is hard over, and back in the
+   * middle is back in the middle, and none of the three is reachable by hand
+   * otherwise: the whole of a lane is forty six pixels, so the bottom of it
+   * is the one row of them the pointer cannot be inside.
+   */
+  function readAuto(
+    event: PointerEvent,
+    node: SVGSVGElement,
+    spec: LaneSpec,
+    height: number,
+  ): AutoPoint {
+    const rect = node.getBoundingClientRect();
     const t = Math.max(0, (event.clientX - rect.left) / pxPerSec);
-    const level = ((rect.bottom - event.clientY) / AUTO_HEIGHT) * MAX_LEVEL;
-    return { t, value: Math.max(0, Math.min(MAX_LEVEL, level)) };
+    const span = spec.max - spec.min;
+    const raw = spec.min + ((rect.bottom - event.clientY) / height) * span;
+    const value = Math.max(spec.min, Math.min(spec.max, raw));
+
+    for (const mark of [spec.min, spec.max, spec.neutral]) {
+      if (Math.abs(value - mark) * (height / span) <= SNAP_PX) return { t, value: mark };
+    }
+    return { t, value };
   }
 
   /**
-   * Build the lane for one layer and give it its behaviour.
+   * Build one lane and give it its behaviour.
    *
    * Dragging changes a copy and only writes the result back on release. The
    * alternative, writing on every movement, means a new project sixty times a
    * second, and the point being dragged is replaced underneath the pointer
    * each time.
    */
-  function buildAutoLane(layer: Layer): SVGSVGElement {
-    const lane = svg('svg', { class: 'tl__auto' });
+  function buildAutoLane(
+    layer: Layer,
+    spec: LaneSpec,
+    open: boolean,
+    height: number,
+  ): SVGSVGElement {
+    const node = svg('svg', { class: 'tl__auto' });
+    toggleClass(node, 'is-shut', !open);
+
+    // A closed lane is there to be read, not drawn on, so a press opens it.
+    if (!open) {
+      node.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleLane(layer.id, spec.name);
+        paint(session.project, true);
+      });
+      return node;
+    }
 
     /*
      * Two presses in quick succession are worked out here rather than left to
@@ -565,7 +728,7 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
      */
     let lastPress = { index: -1, at: 0 };
 
-    lane.addEventListener('pointerdown', (event) => {
+    node.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -573,8 +736,12 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       const existing = target.dataset?.index;
 
       // Working copy, so nothing is committed until the pointer is released.
-      let points: AutoPoint[] = [...(session.project.layers.find((l) => l.id === layer.id)?.auto ?? [])];
-      const near = existing !== undefined ? Number(existing) : nearestPoint(points, readAuto(event, lane));
+      const drawn = session.project.layers.find((l) => l.id === layer.id)?.auto[spec.name] ?? [];
+      let points: AutoPoint[] = [...drawn];
+      const near =
+        existing !== undefined
+          ? Number(existing)
+          : nearestPoint(points, readAuto(event, node, spec, height), spec, height);
       let index: number;
 
       if (near >= 0) {
@@ -582,7 +749,7 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         // away. Anywhere else is a new point.
         if (lastPress.index === near && event.timeStamp - lastPress.at < 400) {
           lastPress = { index: -1, at: 0 };
-          session.removeAutoPoint(layer.id, near);
+          session.removeAutoPoint(layer.id, spec.name, near);
           return;
         }
         lastPress = { index: near, at: event.timeStamp };
@@ -591,42 +758,46 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         lastPress = { index: -1, at: 0 };
         // Added and then found again by identity, since where it lands in
         // the list depends on its time rather than on when it was made.
-        const added = readAuto(event, lane);
+        const added = readAuto(event, node, spec, height);
         points = [...points, added].sort((a, b) => a.t - b.t);
         index = points.indexOf(added);
       }
 
-      const width = Number(lane.getAttribute('width')) || 1;
-      drawAuto(lane, points, width);
-      const dot = lane.querySelector(`[data-index="${index}"]`);
-      dot?.classList.add('is-dragging');
-      lane.setPointerCapture(event.pointerId);
+      const width = Number(node.getAttribute('width')) || 1;
+      drawAuto(node, spec, points, width, height, true);
+      node.querySelector(`[data-index="${index}"]`)?.classList.add('is-dragging');
+      node.setPointerCapture(event.pointerId);
 
       const move = (e: PointerEvent): void => {
-        points[index] = readAuto(e, lane);
-        drawAuto(lane, points, width);
-        lane.querySelector(`[data-index="${index}"]`)?.classList.add('is-dragging');
+        points[index] = readAuto(e, node, spec, height);
+        drawAuto(node, spec, points, width, height, true);
+        node.querySelector(`[data-index="${index}"]`)?.classList.add('is-dragging');
       };
       const end = (): void => {
-        lane.removeEventListener('pointermove', move);
-        lane.removeEventListener('pointerup', end);
-        lane.removeEventListener('pointercancel', end);
-        session.setAuto(layer.id, [...points].sort((a, b) => a.t - b.t));
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', end);
+        node.removeEventListener('pointercancel', end);
+        session.setAuto(layer.id, spec.name, [...points].sort((a, b) => a.t - b.t));
       };
 
-      lane.addEventListener('pointermove', move);
-      lane.addEventListener('pointerup', end);
-      lane.addEventListener('pointercancel', end);
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', end);
+      node.addEventListener('pointercancel', end);
     });
 
-    return lane;
+    return node;
   }
 
   /** Which point the pointer is on top of, or -1 for none. */
-  function nearestPoint(points: readonly AutoPoint[], at: AutoPoint): number {
+  function nearestPoint(
+    points: readonly AutoPoint[],
+    at: AutoPoint,
+    spec: LaneSpec,
+    height: number,
+  ): number {
     for (let i = 0; i < points.length; i++) {
       const dx = (points[i].t - at.t) * pxPerSec;
-      const dy = ((points[i].value - at.value) / MAX_LEVEL) * AUTO_HEIGHT;
+      const dy = ((points[i].value - at.value) / (spec.max - spec.min)) * height;
       if (Math.hypot(dx, dy) <= GRAB_RADIUS) return i;
     }
     return -1;
