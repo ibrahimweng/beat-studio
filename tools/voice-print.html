@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>voice print</title></head>
+  <body>
+    <pre id="out">working…</pre>
+    <script type="module">
+      /*
+       * Fingerprint every voice, so a change can be measured rather than
+       * guessed at.
+       *
+       * voice-check.html asks whether two voices are too alike. This asks a
+       * different question: whether a voice still sounds like it did before
+       * the code behind it was changed. It writes a print for each one, and
+       * a second print of the same voice rendered again, because most of
+       * these are built on noise and no two renders are identical. That
+       * second print is the noise floor of the measurement. A rebuilt voice
+       * has to score against the old one at least as well as the old one
+       * scores against itself.
+       */
+      import { playDesign } from '/src/audio/design-voices.ts';
+      import { drum, pianoSynth, pluck } from '/src/audio/voices.ts';
+      import { DESIGN_NAMES, DESIGN_DEFAULT_LENGTH } from '/src/timeline/types.ts';
+      import { KIT_SOUNDS } from '/src/constants.ts';
+
+      const RATE = 44100;
+      const SECONDS = 3;
+      const WINDOWS = 8;
+      const BANDS = 20;
+      /** The note the pitched voices are printed at, as the panel places them. */
+      const REF_MIDI = 48;
+
+      /** Iterative radix-2 FFT, in place, on real input. */
+      function fft(re, im) {
+        const n = re.length;
+        for (let i = 1, j = 0; i < n; i++) {
+          let bit = n >> 1;
+          for (; j & bit; bit >>= 1) j ^= bit;
+          j ^= bit;
+          if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+        }
+        for (let len = 2; len <= n; len <<= 1) {
+          const ang = (-2 * Math.PI) / len;
+          const wr = Math.cos(ang), wi = Math.sin(ang);
+          for (let i = 0; i < n; i += len) {
+            let cr = 1, ci = 0;
+            for (let k = 0; k < len / 2; k++) {
+              const ur = re[i + k], ui = im[i + k];
+              const vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+              const vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+              re[i + k] = ur + vr; im[i + k] = ui + vi;
+              re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+              const nr = cr * wr - ci * wi;
+              ci = cr * wi + ci * wr; cr = nr;
+            }
+          }
+        }
+      }
+
+      /** Where the sound actually is, so silence after it is not compared. */
+      function extent(data) {
+        let last = 0;
+        for (let i = 0; i < data.length; i++) if (Math.abs(data[i]) > 0.0015) last = i;
+        return Math.max(RATE * 0.02, last);
+      }
+
+      /** What a sound is made of and how it moves, over its own length. */
+      function fingerprint(data) {
+        const size = 2048;
+        const span = extent(data);
+        const step = Math.max(1, Math.floor(span / WINDOWS));
+        const edges = [];
+        for (let b = 0; b <= BANDS; b++) edges.push(40 * Math.pow(20000 / 40, b / BANDS));
+
+        const timbre = [];
+        const envelope = [];
+
+        for (let w = 0; w < WINDOWS; w++) {
+          const start = w * step;
+          const re = new Float64Array(size), im = new Float64Array(size);
+          let sum = 0;
+          for (let i = 0; i < size; i++) {
+            const v = data[start + i] ?? 0;
+            sum += v * v;
+            re[i] = v * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size));
+          }
+          envelope.push(Math.sqrt(sum / size));
+
+          fft(re, im);
+          const bands = new Array(BANDS).fill(0);
+          for (let k = 1; k < size / 2; k++) {
+            const hz = (k * RATE) / size;
+            const mag = Math.hypot(re[k], im[k]);
+            for (let b = 0; b < BANDS; b++) {
+              if (hz >= edges[b] && hz < edges[b + 1]) { bands[b] += mag; break; }
+            }
+          }
+          const norm = Math.hypot(...bands) || 1;
+          for (const b of bands) timbre.push(b / norm);
+        }
+
+        const envNorm = Math.hypot(...envelope) || 1;
+        const out = timbre.concat(envelope.map((v) => (v / envNorm) * 2));
+        const total = Math.hypot(...out) || 1;
+        return out.map((v) => v / total);
+      }
+
+      /** Total level, so a rebuild that is quieter or louder is caught too. */
+      function loudness(data) {
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        return Math.sqrt(sum / data.length);
+      }
+
+      /** Every voice the app can make, rendered one at a time. */
+      const VOICES = [
+        ...DESIGN_NAMES.map((name) => [`design:${name}`, (ctx) =>
+          playDesign(ctx, ctx.destination, name, 0, {
+            length: DESIGN_DEFAULT_LENGTH[name], tune: 0, gain: 1,
+          })]),
+        ...KIT_SOUNDS.map((s) => [`kit:${s.pad}`, (ctx) => drum(ctx, ctx.destination, s.pad, 0, 1)]),
+        ['pitched:piano', (ctx) => pianoSynth(ctx, ctx.destination, REF_MIDI, 0, 0.9)],
+        ['pitched:guitar', (ctx) => pluck(ctx, ctx.destination, REF_MIDI, 0, 0.85)],
+      ];
+
+      async function print(play) {
+        const ctx = new OfflineAudioContext(1, RATE * SECONDS, RATE);
+        play(ctx);
+        const buffer = await ctx.startRendering();
+        const data = buffer.getChannelData(0);
+        return { print: fingerprint(data), loudness: loudness(data) };
+      }
+
+      const voices = {};
+      for (const [name, play] of VOICES) {
+        const first = await print(play);
+        const second = await print(play);
+        voices[name] = {
+          print: first.print.map((v) => +v.toFixed(6)),
+          loudness: +first.loudness.toFixed(6),
+          // How closely the voice matches a second render of itself. Anything
+          // built on noise never repeats exactly, and this is how much of that
+          // there is, so a real change can be told from ordinary variation.
+          self: +first.print.reduce((dot, v, i) => dot + v * second.print[i], 0).toFixed(6),
+          selfLoudness: +second.loudness.toFixed(6),
+        };
+      }
+
+      document.getElementById('out').textContent = JSON.stringify(
+        { rate: RATE, seconds: SECONDS, windows: WINDOWS, bands: BANDS, voices },
+        null,
+        1,
+      );
+      document.title = 'done';
+    </script>
+  </body>
+</html>
