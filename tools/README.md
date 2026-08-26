@@ -58,7 +58,8 @@ Run the development server and open http://localhost:5173/tools/master-check.htm
 ## automation-check.html
 
 Checks that what is drawn over a layer reaches the file: the level, the
-position between the speakers, and the room around it.
+position between the speakers, the room around it, and how hard it is
+pushed.
 
 It renders a steady bed of sound on one layer and then draws shapes over it:
 nothing at all, a fade, and a dip in the middle. Then it reads back how loud
@@ -81,13 +82,50 @@ what keeps the two controls meaning the same thing. Every render in the file
 uses the same sounds, since a sound draws its noise from its own id and two
 projects built the same way would otherwise differ by a percent or two.
 
+The push cannot be measured as a level, because it is not one. The plain
+render and the pushed one come from the same sounds, so the closest a push
+could come to doing nothing is turning them up: the check fits the one scale
+that brings the plain render nearest the pushed one, takes it away, and what
+is left is exactly what the push added. That residue has to grow with the
+lane, has to sit higher up the spectrum than the sound it came from, and has
+to be nothing at all when the lane is at nothing. It is read across a stretch
+where the sound holds steady, since a push gives a quiet sound far more gain
+than a loud one and across a decay it would show mostly as an envelope that
+changed shape.
+
 Last, it renders one file per layer from a piece with a position drawn on one
-layer and a room on another, and adds them back up. They have to come to the
+layer, and a room and a push on another, and adds them back up. They have to come to the
 mixed file: a layer's room and position belong to that layer, and a set of
 files where the room appeared twice, or not at all, would be no use to
 whoever picks them up.
 
 Run the development server and open http://localhost:5173/tools/automation-check.html
+
+## shaper-check.html
+
+Records why Drive is not oversampled, which is not the usual answer.
+
+A shaper bends a sound, and bending makes harmonics. Some of them land above
+what the sample rate can hold and fold back down as tones nothing played, and
+the usual fix is to run the shaper at four times the rate. This measures what
+that is worth and what it costs, on a tone whose folded harmonics land
+between the real ones rather than on top of them.
+
+It is worth about seventy eight decibels: what folds back sits seventy two
+decibels under the harmonics without it and a hundred and forty nine with it.
+It costs a hundred and ninety two samples, which is four milliseconds, or an
+eighth of a frame. Seventy two decibels down is the noise floor of a twelve
+bit recording and nobody will hear it. Four milliseconds lands on a pushed
+sound and not on the one beside it, in a tool whose whole point is putting
+sounds on exact frames. So the delay is the one that goes.
+
+The last three checks show the other half of it. A push is a bent copy
+blended against an untouched one, and oversampling only the bent half leaves
+the two out of step: a comb filter, notches across the sound that nobody
+asked for, worst at exactly the middle settings people use. Not oversampling
+at all, the two halves add back up to the sound they came from.
+
+Run the development server and open http://localhost:5173/tools/shaper-check.html
 
 ## character-check.html
 

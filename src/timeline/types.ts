@@ -122,7 +122,7 @@ export interface AutoPoint {
 }
 
 /** Which of a layer's curves a point belongs to. */
-export type LaneName = 'level' | 'pan' | 'space';
+export type LaneName = 'level' | 'pan' | 'space' | 'drive';
 
 /**
  * The curves a layer carries, each drawn over time.
@@ -135,6 +135,7 @@ export interface Lanes {
   level: AutoPoint[];
   pan: AutoPoint[];
   space: AutoPoint[];
+  drive: AutoPoint[];
 }
 
 /** What one lane is: what it controls, how far it goes, and how it reads. */
@@ -187,6 +188,15 @@ export const LANES: readonly LaneSpec[] = [
     name: 'space',
     label: 'Space',
     about: 'How much room is around the whole layer, over time. A sequence can walk out of a booth into a hall.',
+    min: 0,
+    max: 1,
+    neutral: 0,
+    base: 'floor',
+  },
+  {
+    name: 'drive',
+    label: 'Drive',
+    about: 'How hard the whole layer is pushed, over time. Weight for a moment that has to land, taken back off afterwards.',
     min: 0,
     max: 1,
     neutral: 0,

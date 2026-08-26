@@ -1,0 +1,178 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>shaper check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Why a push is not oversampled.
+     The usual advice is to run a shaper at four times the rate, so that the
+     harmonics it makes stay where they were put instead of folding back down
+     the spectrum as tones nothing played. It costs a delay. This measures
+     both sides of that, since the answer decides how Drive is built. */
+  import { driveCurve } from '/src/audio/voice-spec.ts';
+
+  const RATE = 48000;
+  /* A tone whose folded harmonics land between the real ones rather than on
+     top of them, so the two can be told apart at all. */
+  const F = 1234;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  async function run(oversample, curve) {
+    const ctx = new OfflineAudioContext(1, RATE, RATE);
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = F;
+    const trim = ctx.createGain();
+    trim.gain.value = 0.5;
+    osc.connect(trim);
+    if (!curve) trim.connect(ctx.destination);
+    else {
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = curve;
+      shaper.oversample = oversample;
+      trim.connect(shaper);
+      shaper.connect(ctx.destination);
+    }
+    osc.start(0);
+    return (await ctx.startRendering()).getChannelData(0);
+  }
+
+  const FROM = 4000, TO = RATE - 4000;
+
+  /* How much sits at one frequency, by fitting a sine and a cosine to it.
+     Windowed, or the skirts of the strong harmonics swamp the small things
+     this is looking for: unwindowed, everything measures the leakage. */
+  function at(d, hz) {
+    let re = 0, im = 0, norm = 0;
+    const n = TO - FROM;
+    for (let i = FROM; i < TO; i++) {
+      const w = (2 * Math.PI * hz * i) / RATE;
+      const win = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i - FROM)) / n);
+      re += d[i] * win * Math.cos(w);
+      im += d[i] * win * Math.sin(w);
+      norm += win;
+    }
+    return (Math.sqrt(re * re + im * im) * 2) / norm;
+  }
+
+  /** What a bent tone put where it belongs, and what came back from above the top. */
+  function spread(d) {
+    let harmonic = 0, folded = 0;
+    // A symmetric bend makes odd harmonics and nothing else.
+    for (let k = 1; k * F < RATE / 2; k += 2) harmonic += at(d, k * F) ** 2;
+    for (let k = 3; k * F < RATE * 6; k += 2) {
+      const over = (k * F) % RATE;
+      const hz = over > RATE / 2 ? RATE - over : over;
+      if (hz < 20 || hz > RATE / 2 - 20) continue;
+      // Only where it does not land on a real harmonic anyway.
+      if (Math.abs(hz / F - Math.round(hz / F)) < 0.02) continue;
+      folded += at(d, hz) ** 2;
+    }
+    return 20 * Math.log10(Math.sqrt(folded) / Math.sqrt(harmonic));
+  }
+
+  const plainDb = spread(await run('none', driveCurve(1)));
+  const overDb = spread(await run('4x', driveCurve(1)));
+  check('oversampling does keep what folds back further down',
+    overDb < plainDb - 40, `${plainDb.toFixed(1)}dB against ${overDb.toFixed(1)}dB under the harmonics`);
+  check('and without it, what folds back is still far below anything audible',
+    plainDb < -60, `${plainDb.toFixed(1)}dB under the harmonics`);
+
+  /* And what it costs. A curve that is a straight line changes nothing, so
+     anything that comes back different is the oversampling by itself. */
+  const line = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) line[i] = (i / 1023) * 2 - 1;
+  const plain = await run('none', null);
+
+  function measure(shaped) {
+    let lag = 0, best = -Infinity;
+    for (let l = -1024; l <= 1024; l++) {
+      let sum = 0;
+      for (let i = FROM; i < TO - 1100; i++) sum += plain[i] * (shaped[i + l] ?? 0);
+      if (sum > best) { best = sum; lag = l; }
+    }
+    let rest = 0, all = 0, n = 0;
+    for (let i = FROM; i < TO - 1100; i++) {
+      const d = plain[i] - shaped[i + lag];
+      rest += d * d; all += plain[i] * plain[i]; n++;
+    }
+    return { lag, leftOver: 20 * Math.log10(Math.sqrt(rest / n) / Math.sqrt(all / n)) };
+  }
+
+  const straight = measure(await run('none', line));
+  const oversampled = measure(await run('4x', line));
+
+  check('a shaper that is not oversampled hands the sound straight back',
+    straight.lag === 0 && straight.leftOver < -100,
+    `${straight.lag} samples late, ${straight.leftOver.toFixed(1)}dB left over`);
+  check('an oversampled one hands it back late, which is what rules it out',
+    oversampled.lag > 0,
+    `${oversampled.lag} samples, which is ${((oversampled.lag / RATE) * 1000).toFixed(1)}ms, or ` +
+    `${((oversampled.lag / RATE) * 30).toFixed(2)} of a frame at 30fps`);
+  check('and it is otherwise clean, so lateness really is the whole of the cost',
+    oversampled.leftOver < -100, `${oversampled.leftOver.toFixed(1)}dB left over once lined back up`);
+
+  /*
+   * The delay is the reason, and this is what it would have cost. A push is
+   * a bent copy blended against an untouched one. Send only the bent copy
+   * through an oversampled shaper and the two are out of step: a comb filter,
+   * a row of notches across the sound that nobody asked for, worst at exactly
+   * the middle settings people use.
+   */
+  async function blend(oversample, shapeClean) {
+    const ctx = new OfflineAudioContext(1, RATE, RATE);
+    const osc = ctx.createOscillator();
+    // Rich right up to the top of the range, since a comb is worst where
+    // there is something at every frequency for it to notch out.
+    osc.type = 'sawtooth';
+    osc.frequency.value = 220;
+    const trim = ctx.createGain();
+    trim.gain.value = 0.4;
+    osc.connect(trim);
+
+    const shaper = () => {
+      const s = ctx.createWaveShaper();
+      s.curve = line;
+      s.oversample = oversample;
+      return s;
+    };
+    const clean = ctx.createGain(); clean.gain.value = 0.5;
+    const bent = ctx.createGain(); bent.gain.value = 0.5;
+    trim.connect(clean);
+    trim.connect(bent);
+
+    // Both halves get a straight line, so a blend of them is the sawtooth
+    // again and whatever it is not is what the delay cost.
+    if (oversample === null) {
+      clean.connect(ctx.destination);
+      bent.connect(ctx.destination);
+      return (osc.start(0), (await ctx.startRendering()).getChannelData(0));
+    }
+    if (shapeClean) { const f = shaper(); clean.connect(f); f.connect(ctx.destination); }
+    else clean.connect(ctx.destination);
+    const b = shaper(); bent.connect(b); b.connect(ctx.destination);
+    osc.start(0);
+    return (await ctx.startRendering()).getChannelData(0);
+  }
+
+  const saw = await blend(null, false);
+  const bare = await blend('none', false);
+  const combed = await blend('4x', false);
+  const lined = await blend('4x', true);
+  const worst = (d, lag) => {
+    let w = 0;
+    for (let i = FROM; i < TO - 1100; i++) w = Math.max(w, Math.abs(saw[i] - d[i + lag]));
+    return w;
+  };
+  check('not oversampling, the two halves of a blend add back up to the sound',
+    worst(bare, 0) < 1e-5, `largest difference ${worst(bare, 0).toExponential(2)}`);
+  check('oversampling only the bent half combs it instead',
+    worst(combed, 0) > 0.05, `largest difference ${worst(combed, 0).toFixed(3)}`);
+  check('oversampling both halves would have fixed that, at the cost of the delay',
+    worst(lined, oversampled.lag) < worst(combed, 0) / 4,
+    `largest difference ${worst(lined, oversampled.lag).toExponential(2)} against ` +
+    `${worst(combed, 0).toFixed(3)}, and ${oversampled.lag} samples late`);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>

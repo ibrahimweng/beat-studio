@@ -406,6 +406,51 @@ const MAX_DRIVE = 7;
 /** Points in the shaping curve. Enough that no step in it is audible. */
 const CURVE_POINTS = 1024;
 
+/**
+ * The shape a pushed sound is bent into.
+ *
+ * Shared with the push a whole layer can be given, so the two cannot end up
+ * being different kinds of saturation.
+ */
+export function driveCurve(amount: number): Float32Array<ArrayBuffer> {
+  const drive = 1 + Math.max(0, Math.min(1, amount)) * MAX_DRIVE;
+  const curve = new Float32Array(CURVE_POINTS);
+  const ceiling = Math.tanh(drive);
+  for (let i = 0; i < CURVE_POINTS; i++) {
+    const x = (i / (CURVE_POINTS - 1)) * 2 - 1;
+    // Scaled so full scale in is still full scale out, and everything below
+    // it is lifted towards the top rather than being squashed against it.
+    curve[i] = Math.tanh(x * drive) / ceiling;
+  }
+  return curve;
+}
+
+/**
+ * The shaper a push is made of.
+ *
+ * Deliberately not asked to work at four times the rate, which is the usual
+ * advice and is wrong here. Measured, in this browser, at forty eight
+ * thousand samples a second: four times over keeps what folds back down the
+ * spectrum a hundred and forty nine decibels under the harmonics rather than
+ * seventy two, and hands its output back a hundred and ninety two samples
+ * late, which is four milliseconds. Seventy two decibels down is the noise
+ * floor of a twelve bit recording and nobody will ever hear it. Four
+ * milliseconds is an eighth of a frame, and it lands on a pushed sound and
+ * not on the one next to it, which is a thing people do hear and, worse, a
+ * thing they would have to work around without knowing why. This is a tool
+ * for putting sounds on exact frames, so the delay is the one that has to go.
+ *
+ * It also means a bent copy and an untouched one stay in step with each
+ * other, so blending them is a blend rather than a comb filter. See
+ * shaper-check.html for the measurements.
+ */
+function driveShaper(ctx: BaseAudioContext, amount: number): WaveShaperNode {
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = driveCurve(amount);
+  shaper.oversample = 'none';
+  return shaper;
+}
+
 function buildDrive(ctx: BaseAudioContext, spec: DriveSpec): { input: AudioNode; output: AudioNode } {
   const input = ctx.createGain();
   const output = ctx.createGain();
@@ -420,25 +465,17 @@ function buildDrive(ctx: BaseAudioContext, spec: DriveSpec): { input: AudioNode;
 
   const wet = ctx.createGain();
   wet.gain.value = amount;
+  const shaper = driveShaper(ctx, amount);
   input.connect(wet);
-
-  const drive = 1 + amount * MAX_DRIVE;
-  const curve = new Float32Array(CURVE_POINTS);
-  const ceiling = Math.tanh(drive);
-  for (let i = 0; i < CURVE_POINTS; i++) {
-    const x = (i / (CURVE_POINTS - 1)) * 2 - 1;
-    // Scaled so full scale in is still full scale out, and everything below
-    // it is lifted towards the top rather than being squashed against it.
-    curve[i] = Math.tanh(x * drive) / ceiling;
-  }
-
-  const shaper = ctx.createWaveShaper();
-  shaper.curve = curve;
-  shaper.oversample = '4x';
   wet.connect(shaper);
   shaper.connect(output);
 
   return { input, output };
+}
+
+/** The same shaper, for a push drawn over a whole layer. */
+export function layerShaper(ctx: BaseAudioContext): WaveShaperNode {
+  return driveShaper(ctx, 1);
 }
 
 /** Run a node through a chain of effects and on to a destination. */
