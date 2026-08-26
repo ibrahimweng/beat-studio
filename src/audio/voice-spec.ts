@@ -785,6 +785,21 @@ function grainBuffer(
   const air = Math.max(0, Math.min(1, source.air ?? 0));
   const rise = Math.max(0.05, source.rise ?? 1);
 
+  /*
+   * How loud one grain has to be so that a thousand of them are not a
+   * thousand times louder.
+   *
+   * Grains land on top of each other, and how many are sounding at once is
+   * how long one lasts times how many arrive a second. Their phases are
+   * unrelated, so they pile up as the square root of that rather than in
+   * step, and dividing by the same square root keeps a cloud at much the
+   * same level whether it is a drizzle or a downpour. Without this the
+   * density control was also a volume control, and a thick cloud peaked at
+   * twice full scale.
+   */
+  const overlap = Math.max(1, source.density * Math.max(0.001, source.grain));
+  const each = 1 / Math.sqrt(overlap);
+
   for (let g = 0; g < count; g++) {
     const at = Math.floor(random() * length);
     // Pitch scattered in octaves rather than in Hz, so the spread sounds the
@@ -801,7 +816,7 @@ function grainBuffer(
       const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * u);
       phase += step * Math.pow(rise, u);
       const tone = source.freq > 0 ? Math.sin(phase) : 0;
-      data[at + i] += (tone * (1 - air) + (random() * 2 - 1) * air) * window;
+      data[at + i] += (tone * (1 - air) + (random() * 2 - 1) * air) * window * each;
     }
   }
 
