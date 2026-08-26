@@ -433,26 +433,6 @@ function through(
   cursor.connect(dest);
 }
 
-/**
- * A chain of effects standing in front of a destination.
- *
- * Returns the node to play into. Used where the effects belong to the placed
- * sound rather than to the voice, so the same treatment reaches a design
- * voice, a drum, a pack sound and a piano note alike, none of which are built
- * the same way underneath.
- */
-export function effectChain(
-  ctx: BaseAudioContext,
-  effects: readonly EffectSpec[],
-  dest: AudioNode,
-  seed?: number,
-): AudioNode {
-  if (!effects.length) return dest;
-  const input = ctx.createGain();
-  through(ctx, input, effects, dest, seed === undefined ? Math.random : sequence(seed));
-  return input;
-}
-
 function reverseBuffer(
   ctx: BaseAudioContext,
   seconds: number,
@@ -548,19 +528,36 @@ export function renderVoice(
   spec: VoiceSpec,
   t: number,
   seed?: number,
-): void {
+): GainNode[] {
   // One stream for the whole voice, so its layers stay in step with each
   // other however many of them there are.
   const random = seed === undefined ? Math.random : sequence(seed);
+
+  /*
+   * A separate stream for the effects.
+   *
+   * A room is built out of noise too, and seconds of it. Drawing that from
+   * the same stream as the voice meant everything after it came out of a
+   * different place in the sequence, so putting a sound in a room changed the
+   * sound rather than only what was around it: the same hit with the room
+   * turned up was a different hit. They are kept apart so the voice is the
+   * voice whatever is done to it afterwards.
+   */
+  const forEffects = seed === undefined ? Math.random : sequence(seed ^ 0x5bf03635);
 
   // Anything applied to the voice as a whole sits between every layer and the
   // destination, so the layers reach it already summed.
   let out = dest;
   if (spec.effects?.length) {
     const bus = ctx.createGain();
-    through(ctx, bus, spec.effects, dest, random);
+    through(ctx, bus, spec.effects, dest, forEffects);
     out = bus;
   }
+
+  // Handed back so a note still sounding can be let go of early. A voice has
+  // one of these per layer rather than one overall, so letting go of a note
+  // means letting go of all of them together.
+  const gains: GainNode[] = [];
 
   for (const layer of spec.layers) {
     const start = t + (layer.delay ?? 0);
@@ -581,8 +578,9 @@ export function renderVoice(
 
     const gain = ctx.createGain();
     applyCurve(gain.gain, layer.gain, start);
+    gains.push(gain);
     tail.connect(gain);
-    if (layer.effects?.length) through(ctx, gain, layer.effects, out, random);
+    if (layer.effects?.length) through(ctx, gain, layer.effects, out, forEffects);
     else gain.connect(out);
 
     for (const lfo of layer.lfo ?? []) {
@@ -590,4 +588,6 @@ export function renderVoice(
       if (target) buildLfo(ctx, target, lfo, start, layer.length);
     }
   }
+
+  return gains;
 }

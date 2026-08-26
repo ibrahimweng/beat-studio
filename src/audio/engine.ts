@@ -242,12 +242,14 @@ export class AudioEngine {
     if (!voice || sustain || !this.#ctx) return;
     this.#voices.delete(midi);
     const t = this.#ctx.currentTime;
-    try {
-      voice.gain.gain.cancelScheduledValues(t);
-      voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
-      voice.gain.gain.exponentialRampToValueAtTime(0.0006, t + 0.22);
-    } catch {
-      // A voice whose envelope already finished throws here; nothing to do.
+    for (const gain of voice.gains) {
+      try {
+        gain.gain.cancelScheduledValues(t);
+        gain.gain.setValueAtTime(gain.gain.value, t);
+        gain.gain.exponentialRampToValueAtTime(0.0006, t + 0.22);
+      } catch {
+        // A layer whose envelope already finished throws here; nothing to do.
+      }
     }
   }
 

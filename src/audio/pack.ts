@@ -38,7 +38,18 @@ const loaded = new Map<string, Map<string, VoiceSpec>>();
 
 /** Make a pack's sounds playable. Loading one over another replaces it. */
 export function registerPack(pack: Pack): void {
-  loaded.set(pack.id, new Map(pack.sounds.map((sound) => [sound.name, sound.spec])));
+  registerSounds(pack.id, pack.sounds);
+}
+
+/**
+ * Make a set of sounds playable under an id.
+ *
+ * Sounds of your own are kept this way as well as packs. Nothing that plays a
+ * sound needs to know where it came from, so a saved sound is placed, played
+ * and exported by exactly the same path as one out of a pack.
+ */
+export function registerSounds(id: string, sounds: readonly PackSound[]): void {
+  loaded.set(id, new Map(sounds.map((sound) => [sound.name, sound.spec])));
 }
 
 export function unregisterPack(id: string): void {
@@ -379,4 +390,37 @@ export function shapeSpec(base: VoiceSpec, options: VoiceOptions): VoiceSpec {
     })),
     ...(base.effects ? { effects: base.effects.map(stretchEffect(stretch)) } : {}),
   };
+}
+
+/**
+ * Read back sounds saved from the timeline.
+ *
+ * These were written by this app rather than by anyone else, but they still
+ * came off disk or out of storage, so they are checked the same way a pack
+ * is. The check is shallow on purpose: it confirms there is something to
+ * play rather than re-deriving every number, since anything past that would
+ * fail loudly when it was played rather than quietly on the way in.
+ */
+export function readMine(raw: unknown): PackSound[] {
+  if (!Array.isArray(raw)) return [];
+
+  const sounds: PackSound[] = [];
+  const seen = new Set<string>();
+
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const sound = item as Partial<PackSound>;
+    if (typeof sound.name !== 'string' || !sound.name || seen.has(sound.name)) continue;
+
+    const spec = sound.spec;
+    if (!spec || typeof spec !== 'object') continue;
+    if (!Array.isArray(spec.layers) || !spec.layers.length) continue;
+    if (!spec.layers.every((l) => l && l.source && Array.isArray(l.gain) && l.gain.length)) continue;
+    if (typeof spec.duration !== 'number' || !Number.isFinite(spec.duration)) continue;
+
+    seen.add(sound.name);
+    sounds.push({ name: sound.name, spec });
+  }
+
+  return sounds;
 }

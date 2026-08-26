@@ -224,14 +224,21 @@ export interface SessionFile {
    * somewhere else with sounds on the timeline that nothing could play.
    */
   packs?: readonly unknown[];
+  /** Sounds saved from the timeline that the project uses. */
+  mine?: readonly unknown[];
 }
 
-export function toSession(project: Project, packs: readonly unknown[] = []): SessionFile {
+export function toSession(
+  project: Project,
+  packs: readonly unknown[] = [],
+  mine: readonly unknown[] = [],
+): SessionFile {
   return {
     format: 'beat-studio-session',
     version: 1,
     project,
     ...(packs.length ? { packs } : {}),
+    ...(mine.length ? { mine } : {}),
   };
 }
 
@@ -386,7 +393,9 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
  * Read a session file. Everything is checked, because the file came off disk
  * and may be from an older version. Returns null if it is not usable.
  */
-export function fromSession(raw: unknown): { project: Project; packs: unknown[] } | null {
+export function fromSession(
+  raw: unknown,
+): { project: Project; packs: unknown[]; mine: unknown[] } | null {
   if (!raw || typeof raw !== 'object') return null;
   const file = raw as Partial<SessionFile>;
   if (file.format !== 'beat-studio-session' || !file.project) return null;
@@ -410,5 +419,9 @@ export function fromSession(raw: unknown): { project: Project; packs: unknown[] 
     cues,
   };
 
-  return { project, packs: Array.isArray(file.packs) ? file.packs : [] };
+  return {
+    project,
+    packs: Array.isArray(file.packs) ? file.packs : [],
+    mine: Array.isArray(file.mine) ? file.mine : [],
+  };
 }

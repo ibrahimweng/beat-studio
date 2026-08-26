@@ -1,8 +1,18 @@
 import type { AudioEngine } from './audio/engine.ts';
 import { renderPerSound, renderProject, renderStems, type Rendered } from './audio/render.ts';
 import type { MasterReport } from './audio/master.ts';
-import { readPack, registerPack, unregisterPack, type Pack } from './audio/pack.ts';
-import { loadPacks, savePacks } from './persist.ts';
+import {
+  readMine,
+  readPack,
+  registerPack,
+  registerSounds,
+  unregisterPack,
+  type Pack,
+  type PackSound,
+} from './audio/pack.ts';
+import { specForCue } from './audio/sources.ts';
+import { MINE_ID } from './constants.ts';
+import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { markerCsv } from './export/markers.ts';
@@ -101,6 +111,54 @@ export class SoundDesignSession {
     this.#engine = engine;
     this.#store = store;
     this.#restorePacks();
+    this.#setMine(readMine(loadMine()), false);
+  }
+
+  // ---------- sounds of your own ----------
+
+  /**
+   * Keep a sound as it is now, under a name, for good.
+   *
+   * A placed sound is a voice plus a length, a pitch, a level, a room and a
+   * push. Getting that combination right is most of the work, and until now
+   * it lived only in the one place it was placed. Saved, it becomes a sound
+   * in its own right: it appears in the picker, it can be placed anywhere,
+   * and it is there in the next project as well as this one.
+   *
+   * It is kept as a description rather than as a recording, so it is a few
+   * hundred bytes and can still be tuned and stretched after the fact.
+   */
+  saveAsMine(cue: Cue, name: string): void {
+    const clean = name.trim().slice(0, 40);
+    if (!clean) return;
+
+    // At the level it was set to, rather than the level its layer happens to
+    // be at, which belongs to the project rather than to the sound.
+    const spec = specForCue(cue, cue.gain);
+    if (!spec) {
+      this.#store.set({ status: 'that sound cannot be saved' });
+      return;
+    }
+
+    const existing = this.#store.state.mine.some((sound) => sound.name === clean);
+    const mine = existing
+      ? this.#store.state.mine.map((sound) => (sound.name === clean ? { name: clean, spec } : sound))
+      : [...this.#store.state.mine, { name: clean, spec }];
+
+    this.#setMine(mine, true);
+    this.#store.set({ status: existing ? `${clean} replaced` : `${clean} saved` });
+  }
+
+  /** Forget one. Sounds already placed from it stay where they are. */
+  removeMine(name: string): void {
+    this.#setMine(this.#store.state.mine.filter((sound) => sound.name !== name), true);
+    this.#store.set({ status: `${name} removed` });
+  }
+
+  #setMine(mine: PackSound[], persist: boolean): void {
+    registerSounds(MINE_ID, mine);
+    this.#store.set({ mine });
+    if (persist) saveMine(mine);
   }
 
   // ---------- sound packs ----------
@@ -733,9 +791,10 @@ export class SoundDesignSession {
   // ---------- session file ----------
 
   saveSession(): void {
-    // The packs go in the file too, so it opens complete somewhere else.
+    // The packs and any sounds of your own go in too, so the file opens
+    // complete somewhere else rather than with silent gaps on the timeline.
     const packs = this.#store.state.packs.map((pack) => pack.file);
-    const blob = new Blob([JSON.stringify(toSession(this.project, packs), null, 2)], {
+    const blob = new Blob([JSON.stringify(toSession(this.project, packs, this.#store.state.mine), null, 2)], {
       type: 'application/json',
     });
     const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
@@ -761,6 +820,13 @@ export class SoundDesignSession {
     // Packs first, so the sounds on the timeline have something to play with
     // by the time anything looks at them.
     for (const file of read.packs) this.#addPack(file, 'a pack in that session could not be read');
+
+    // Sounds of your own are merged rather than replaced, since the ones
+    // already here belong to you and not to the file being opened.
+    const arriving = readMine(read.mine).filter(
+      (sound) => !this.#store.state.mine.some((held) => held.name === sound.name),
+    );
+    if (arriving.length) this.#setMine([...this.#store.state.mine, ...arriving], true);
     // The video itself is not stored, so keep whichever one is loaded.
     const current = this.project;
     this.#setProject({
