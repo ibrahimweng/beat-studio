@@ -150,6 +150,40 @@ export function cueGain(project: Project, cue: Cue): number {
 }
 
 /**
+ * How far a bend goes at the ends of its range.
+ *
+ * Three, because at three a segment drawn all the way over passes through a
+ * twentieth of its span at the halfway mark, which is as bent as anything
+ * reads before it may as well be a hold, and a hold is its own thing.
+ */
+const BEND = 3;
+
+/**
+ * How far along a segment the value has come, a fraction of the way through it.
+ *
+ * The shape is `u / (u + r(1 - u))`, which is a straight line at r of one and
+ * bends away from it either side. Chosen over raising the fraction to a power,
+ * the other obvious way, because this one is symmetric: a bend of a half and a
+ * bend of minus a half are the same curve turned over, so dragging a segment
+ * up and dragging it back down again arrive where they started. It also
+ * cannot fold back on itself, whatever it is given, so a curve is always a
+ * curve and never a loop.
+ */
+export function shape(u: number, curve: AutoPoint['curve']): number {
+  if (curve === 'hold') return u >= 1 ? 1 : 0;
+  const bend = typeof curve === 'number' ? Math.max(-1, Math.min(1, curve)) : 0;
+  if (!bend) return u;
+  const r = Math.exp(bend * BEND);
+  return u / (u + r * (1 - u));
+}
+
+/** The bend that takes a segment through a given fraction at its middle. */
+export function bendFor(fraction: number): number {
+  const f = Math.max(0.02, Math.min(0.98, fraction));
+  return Math.max(-1, Math.min(1, Math.log(1 / f - 1) / BEND));
+}
+
+/**
  * What a drawn curve is worth at a moment, reading between its points.
  *
  * Held flat before the first point and after the last, which is what the
@@ -168,7 +202,8 @@ export function laneValueAt(points: readonly AutoPoint[], t: number, fallback: n
     const to = points[i];
     if (t > to.t) continue;
     const span = to.t - from.t;
-    return span <= 0 ? to.value : from.value + ((t - from.t) / span) * (to.value - from.value);
+    if (span <= 0) return to.value;
+    return from.value + shape((t - from.t) / span, to.curve) * (to.value - from.value);
   }
   return last.value;
 }
@@ -207,12 +242,45 @@ export function scheduleLane(
   if (to <= from) return;
   param.cancelScheduledValues(origin + from);
   param.setValueAtTime(map(laneValueAt(points, from, fallback)), origin + from);
-  for (const point of points) {
+
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
     if (point.t <= from || point.t > to) continue;
+
+    const previous = i > 0 ? points[i - 1] : null;
+    const curve = previous ? point.curve : undefined;
+
+    // A hold is the absence of a ramp: a parameter keeps what it was given
+    // until something else is written, so setting the value on arrival is
+    // exactly a step, with nothing in between.
+    if (curve === 'hold') {
+      param.setValueAtTime(map(point.value), origin + point.t);
+      continue;
+    }
+
+    // A bent line is not a line, and the graph can only ramp straight, so a
+    // bent segment is written as a run of short straight ones. Sixteen
+    // milliseconds each, which is finer than any movement anyone draws.
+    if (previous && typeof curve === 'number' && curve !== 0) {
+      const span = point.t - previous.t;
+      const start = Math.max(previous.t, from);
+      for (let t = start + CURVE_STEP; t < point.t; t += CURVE_STEP) {
+        const along = shape((t - previous.t) / span, curve);
+        param.linearRampToValueAtTime(
+          map(previous.value + along * (point.value - previous.value)),
+          origin + t,
+        );
+      }
+    }
+
     param.linearRampToValueAtTime(map(point.value), origin + point.t);
   }
+
   param.linearRampToValueAtTime(map(laneValueAt(points, to, fallback)), origin + to);
 }
+
+/** How often a bent stretch is written out. */
+const CURVE_STEP = 1 / 60;
 
 /** Take one point off one of a layer's curves. */
 export function removeAutoPoint(
@@ -422,9 +490,17 @@ function readAuto(raw: unknown, lane: { min: number; max: number; neutral: numbe
     points.push({
       t: Math.max(0, point.t),
       value: readNumber(point.value, lane.neutral, lane.min, lane.max),
+      ...readCurve(point.curve),
     });
   }
   return points.sort((a, b) => a.t - b.t);
+}
+
+/** Read how a point is arrived at, leaving a straight line where it is not said. */
+function readCurve(raw: unknown): { curve?: number | 'hold' } {
+  if (raw === 'hold') return { curve: 'hold' };
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw === 0) return {};
+  return { curve: Math.max(-1, Math.min(1, raw)) };
 }
 
 /**

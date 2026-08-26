@@ -82,6 +82,18 @@ what keeps the two controls meaning the same thing. Every render in the file
 uses the same sounds, since a sound draws its noise from its own id and two
 projects built the same way would otherwise differ by a percent or two.
 
+The shapes between points are checked on their own before any of it reaches
+a sound: no shape is a straight line, a hold does not move until it arrives,
+a bend never doubles back on itself, and bending up and bending down by the
+same amount are the same curve turned over, so dragging a segment up and back
+down again arrives where it started. Then the same shapes have to reach the
+file. A segment bent to hang back has to be louder for longer than a straight
+one, one bent the other way has to get out of the way sooner, and both have
+to start and finish exactly where the points are, which is read with the room
+at the end of the chain out of the way: it rings on past the last point by
+design, most of all for the shape that was loudest going into it, and that
+would otherwise be read as a level that had not reached zero.
+
 The push cannot be measured as a level, because it is not one. The plain
 render and the pushed one come from the same sounds, so the closest a push
 could come to doing nothing is turning them up: the check fits the one scale
