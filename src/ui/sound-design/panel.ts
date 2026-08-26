@@ -213,6 +213,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const gain = field('Level', 0, 1.5, 0.01, (v) => patch({ gain: v }));
   const tune = field('Tune', -24, 24, 1, (v) => patch({ tune: v }));
   const length = field('Length', 0.02, 4, 0.01, (v) => patch({ length: v }));
+  // Its own room and its own push, rather than the single reverb at the end
+  // of the chain that every sound used to have to share.
+  const space = field('Space', 0, 1, 0.01, (v) => patch({ space: v }));
+  const drive = field('Drive', 0, 1, 0.01, (v) => patch({ drive: v }));
 
   const anchorButtons: { anchor: Anchor; node: HTMLButtonElement }[] = (
     [
@@ -256,6 +260,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     gain.row,
     tune.row,
     length.row,
+    space.row,
+    drive.row,
     el('div', { class: 'setting-row__label', style: { marginTop: '10px' }, text: 'Lands so that it' }),
     el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, anchorButtons.map((a) => a.node)),
     el('div', { style: { marginTop: '10px' } }, [nudgeRow]),
@@ -533,6 +539,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(tune.out, `${selected.tune > 0 ? '+' : ''}${selected.tune}`);
         length.input.value = String(selected.length);
         setText(length.out, `${selected.length.toFixed(2)}s`);
+        space.input.value = String(selected.space);
+        setText(space.out, selected.space ? selected.space.toFixed(2) : 'dry');
+        drive.input.value = String(selected.drive);
+        setText(drive.out, selected.drive ? selected.drive.toFixed(2) : 'off');
         anchorButtons.forEach((a) => toggleClass(a.node, 'is-on', selected?.anchor === a.anchor));
         toggleClass(muteButton, 'is-on', selected.muted);
       } else {

@@ -1,0 +1,109 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>character check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* The room and the push are meant to do specific things. This checks they
+     do them, and that a sound with neither is untouched. */
+  import { playCue } from '/src/audio/sources.ts';
+  import { makeCue } from '/src/timeline/project.ts';
+  import { DESIGN_CHARACTER } from '/src/timeline/types.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  /*
+   * One cue, varied. Every call to makeCue hands out a new id, and a sound
+   * draws its noise from its id, so building it twice would give two
+   * different sounds and nothing below would mean anything.
+   */
+  const impactCue = makeCue(0, 'l', { kind: 'design', name: 'impact' });
+  const base = (over = {}) => ({ ...impactCue, space: 0, drive: 0, ...over });
+
+  async function render(cue, seconds = 4) {
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
+    playCue(ctx, ctx.destination, cue, 0, 1);
+    return (await ctx.startRendering()).getChannelData(0);
+  }
+  const peakOf = (d) => { let p = 0; for (let i = 0; i < d.length; i++) p = Math.max(p, Math.abs(d[i])); return p; };
+  const tailOf = (d) => { let last = 0; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.001) last = i; return last / RATE; };
+
+  /**
+   * How much of a sound sits above a frequency, as a share of the whole.
+   *
+   * Measured by filtering rather than by transforming, which answers the same
+   * question in one pass instead of thousands.
+   */
+  function above(data, hz) {
+    const w = (2 * Math.PI * hz) / RATE;
+    const cos = Math.cos(w), sin = Math.sin(w);
+    const alpha = sin / (2 * 0.707);
+    // A second order high pass, normalised the usual way.
+    const a0 = 1 + alpha;
+    const b0 = ((1 + cos) / 2) / a0;
+    const b1 = (-(1 + cos)) / a0;
+    const b2 = b0;
+    const a1 = (-2 * cos) / a0;
+    const a2 = (1 - alpha) / a0;
+
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0, high = 0, all = 0;
+    for (let i = 0; i < data.length; i++) {
+      const x = data[i];
+      const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1; x1 = x; y2 = y1; y1 = y;
+      high += y * y;
+      all += x * x;
+    }
+    return all > 0 ? high / all : 0;
+  }
+
+  // 1. Nothing asked for, nothing done. Sample for sample.
+  const plainA = await render(base());
+  const plainB = await render(base());
+  let same = 0;
+  for (let i = 0; i < plainA.length; i++) same = Math.max(same, Math.abs(plainA[i] - plainB[i]));
+  check('a sound with neither is unchanged run to run', same === 0, `difference ${same}`);
+
+  // 2. A room makes the sound last longer without making it louder.
+  const dry = await render(base());
+  const wet = await render(base({ space: 0.5 }));
+  check('space lengthens the tail',
+    tailOf(wet) > tailOf(dry) * 1.5,
+    `${tailOf(dry).toFixed(2)}s dry, ${tailOf(wet).toFixed(2)}s with space`);
+  check('space adds a room without thinning the sound',
+    peakOf(wet) >= peakOf(dry) * 0.98 && peakOf(wet) < peakOf(dry) * 1.5,
+    `peak ${peakOf(dry).toFixed(3)} to ${peakOf(wet).toFixed(3)}`);
+
+  // 3. Push adds harmonics above the fundamental, which is the whole point:
+  //    it is what a small speaker can actually reproduce.
+  const subCue = makeCue(0, 'l', { kind: 'design', name: 'sub' });
+  const sub = { ...subCue, space: 0, drive: 0, length: 0.9 };
+  const clean = await render(sub, 2);
+  const pushed = await render({ ...sub, drive: 0.6 }, 2);
+  const before = above(clean, 200), after = above(pushed, 200);
+  check('drive adds harmonics a small speaker can reach',
+    after > before * 1.3,
+    `${(before * 100).toFixed(1)}% above 200Hz became ${(after * 100).toFixed(1)}%`);
+  check('drive is not just a volume control',
+    peakOf(pushed) < peakOf(clean) * 1.6,
+    `peak ${peakOf(clean).toFixed(3)} to ${peakOf(pushed).toFixed(3)}`);
+
+  // 4. The bottom of each control really is nothing.
+  const zero = await render(base({ space: 0, drive: 0 }));
+  let untouched = 0;
+  for (let i = 0; i < zero.length; i++) untouched = Math.max(untouched, Math.abs(zero[i] - dry[i]));
+  check('both controls at nothing leave the voice alone', untouched === 0, `difference ${untouched}`);
+
+  // 5. A new sound starts with its voice's own character, and a click stays dry.
+  const impact = makeCue(0, 'l', { kind: 'design', name: 'impact' });
+  const click = makeCue(0, 'l', { kind: 'design', name: 'click' });
+  check('a new impact arrives with a room and some push',
+    impact.space === DESIGN_CHARACTER.impact.space && impact.drive > 0,
+    `space ${impact.space}, drive ${impact.drive}`);
+  check('a new click arrives dry, because detail has to be exact',
+    click.space === 0 && click.drive === 0, `space ${click.space}, drive ${click.drive}`);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>

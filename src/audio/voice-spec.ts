@@ -133,6 +133,16 @@ export interface ReverbSpec {
   decay: number;
   /** How much of the sound is the room, 0 to 1. */
   mix: number;
+  /**
+   * How much of the untouched sound goes through, if not `1 - mix`.
+   *
+   * A blend is right for a pack, whose sounds were written against a format
+   * that works that way. It is wrong for a control called Space: adding a
+   * room to a hit should not thin the hit, and with a blend it does, because
+   * every bit of room is a bit of the sound taken away. Setting this to 1
+   * makes the room something added rather than something traded for.
+   */
+  dry?: number;
   /** Silence before the room answers, in seconds. */
   preDelay?: number;
   /** Takes the top off the tail, 0 to 1, for a softer room. */
@@ -141,7 +151,23 @@ export interface ReverbSpec {
   roomSize?: number;
 }
 
-export type EffectSpec = ReverbSpec;
+/**
+ * Saturation, which is what "punch" actually is.
+ *
+ * Pushing a sound into a gentle curve rather than letting it stay a clean
+ * shape adds harmonics above what was there. Those harmonics are why a
+ * saturated hit still reads on a laptop speaker that cannot reproduce any of
+ * its low end, and why a sub with a little of this on it can be felt on a
+ * phone at all. It is not distortion in the sense of damage; at low amounts
+ * it is heard as weight rather than as an effect.
+ */
+export interface DriveSpec {
+  kind: 'drive';
+  /** 0 is untouched, 1 is as hard as this goes. */
+  amount: number;
+}
+
+export type EffectSpec = ReverbSpec | DriveSpec;
 
 export interface LayerSpec {
   source: SourceSpec;
@@ -308,7 +334,7 @@ function buildReverb(
   const output = ctx.createGain();
 
   const dry = ctx.createGain();
-  dry.gain.value = 1 - spec.mix;
+  dry.gain.value = spec.dry ?? 1 - spec.mix;
   input.connect(dry);
   dry.connect(output);
 
@@ -350,6 +376,46 @@ function buildReverb(
   return { input, output };
 }
 
+/** How far into the curve the hardest setting pushes. */
+const MAX_DRIVE = 7;
+/** Points in the shaping curve. Enough that no step in it is audible. */
+const CURVE_POINTS = 1024;
+
+function buildDrive(ctx: BaseAudioContext, spec: DriveSpec): { input: AudioNode; output: AudioNode } {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const amount = Math.max(0, Math.min(1, spec.amount));
+
+  // Blended rather than switched in, so the bottom of the control is silence
+  // rather than a step. At nothing it is exactly the sound that went in.
+  const dry = ctx.createGain();
+  dry.gain.value = 1 - amount;
+  input.connect(dry);
+  dry.connect(output);
+
+  const wet = ctx.createGain();
+  wet.gain.value = amount;
+  input.connect(wet);
+
+  const drive = 1 + amount * MAX_DRIVE;
+  const curve = new Float32Array(CURVE_POINTS);
+  const ceiling = Math.tanh(drive);
+  for (let i = 0; i < CURVE_POINTS; i++) {
+    const x = (i / (CURVE_POINTS - 1)) * 2 - 1;
+    // Scaled so full scale in is still full scale out, and everything below
+    // it is lifted towards the top rather than being squashed against it.
+    curve[i] = Math.tanh(x * drive) / ceiling;
+  }
+
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = curve;
+  shaper.oversample = '4x';
+  wet.connect(shaper);
+  shaper.connect(output);
+
+  return { input, output };
+}
+
 /** Run a node through a chain of effects and on to a destination. */
 function through(
   ctx: BaseAudioContext,
@@ -360,11 +426,31 @@ function through(
 ): void {
   let cursor = from;
   for (const effect of effects) {
-    const node = buildReverb(ctx, effect, random);
+    const node = effect.kind === 'drive' ? buildDrive(ctx, effect) : buildReverb(ctx, effect, random);
     cursor.connect(node.input);
     cursor = node.output;
   }
   cursor.connect(dest);
+}
+
+/**
+ * A chain of effects standing in front of a destination.
+ *
+ * Returns the node to play into. Used where the effects belong to the placed
+ * sound rather than to the voice, so the same treatment reaches a design
+ * voice, a drum, a pack sound and a piano note alike, none of which are built
+ * the same way underneath.
+ */
+export function effectChain(
+  ctx: BaseAudioContext,
+  effects: readonly EffectSpec[],
+  dest: AudioNode,
+  seed?: number,
+): AudioNode {
+  if (!effects.length) return dest;
+  const input = ctx.createGain();
+  through(ctx, input, effects, dest, seed === undefined ? Math.random : sequence(seed));
+  return input;
 }
 
 function reverseBuffer(
