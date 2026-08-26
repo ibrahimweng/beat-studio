@@ -176,12 +176,49 @@ comparing.
 
 The file is worked out rather than performed, so every sound lands on the exact
 moment you placed it and the file always starts at zero. Drop it at the head of
-your composition and it lines up.
+your composition and it lines up. Exporting the same project twice gives the
+same file.
 
-You can write one mixed file, or one file per layer. Files per layer are all
-the same length and all start at zero, so they sit on separate tracks and stay
-in sync. "Cut to video length" makes the file exactly as long as the video.
-Leave it off and any sound still ringing at the end is allowed to finish.
+Files are written at 24 bits and 48k, which is what post production expects.
+The difference is not loudness but how much room there is underneath: at 16
+bits the quietest detail sits close to the noise the format itself introduces,
+and lowering the track to fit it under a voiceover brings that noise up with
+it.
+
+Two things happen to the level before a file is written, and both can be turned
+off.
+
+"Stop it clipping" holds the loudest moments back. A hundred sounds on the same
+frame add up past what a file can hold, and the part that does not fit used to
+be cut off, which is heard as a crack on exactly the loudest moment in the
+piece. It reads a few milliseconds ahead so the reduction is already in place
+when the peak arrives, and it lets go slowly, so a hit is held rather than
+grabbed at and everything quieter is left alone.
+
+"Match loudness" brings every export to the same loudness, measured the way a
+broadcaster measures it rather than by looking at the highest peak. Two pieces
+cut together then sit the same way against picture without anyone reaching for
+a fader. Sound for picture is aimed a little below where a finished programme
+would be delivered, because it has to sit under dialogue and music.
+
+The status line says what happened, for example `WAV exported · -18.0 LUFS ·
++4.2 dB · held back 1.8 dB`.
+
+There are four ways to hand the work over.
+
+- One mixed file.
+- One file per layer. Use these to balance impacts against movement later.
+- One file per sound. Every impact in one file, every whoosh in another.
+- A marker list, which is a spreadsheet of every sound and the frame it lands
+  on, with timecode in the form editing software reads.
+
+Every file in a set is the same length and starts at zero, so they sit on
+separate tracks and stay in sync. The layers and the per sound files add back
+up to the mixed file exactly, because the level work is measured once from the
+whole thing and then applied to each file unchanged.
+
+"Cut to video length" makes the file exactly as long as the video. Leave it off
+and any sound still ringing at the end is allowed to finish.
 
 "Save session" writes your sounds and settings to a small file you can reopen
 later. The video is not stored in it, so you point at the video again when you
@@ -343,6 +380,7 @@ src/
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
+    master.ts      loudness, and holding the loudest moments back
     voice-spec.ts  what a voice is made of, and the one thing that plays it
     voices.ts      the drum kit and the pitched instruments
     design-voices.ts impacts, whooshes, risers and the rest
@@ -353,6 +391,7 @@ src/
   timeline/        the cue list, layers and timing
   video/           loading a video, following its clock, and reading its hits
   export/
+    markers.ts     a list of where every sound lands
     patch.ts       the palette, written out for other apps to play
     wav.ts         WAV encoder
     mp3.ts         MP3 encoder, loaded only when you export

@@ -42,6 +42,31 @@ Save the output before changing any voice, then run it again afterwards and
 compare. Anything that scores worse than a voice scores against itself has
 changed, and anything that does not has only moved within the noise.
 
+## master-check.html
+
+Checks the work done to a file after it is rendered and before it is written.
+
+There are three parts to that: holding the loudest moments back so a stack of
+sounds on one frame cannot clip, measuring how loud a piece actually is rather
+than how high it peaks, and bringing every export to the same loudness. The
+page tests each one against signals it builds itself, including that a set of
+layers still adds up to the mix after all of it, which is the whole point of
+doing the work once and applying it to everything.
+
+Run the development server and open http://localhost:5173/tools/master-check.html
+
+## export-check.html
+
+Checks a whole export, from a project to the bytes of the file.
+
+It builds a project that clips badly on purpose, exports it every way the app
+offers, and then reads the results back: that nothing gets past the ceiling,
+that the loudness lands where it was asked to, that the file really is 24 bit
+at 48k, that every file in a set is the same length, that the layers add back
+up to the mix, and that the marker list describes what was exported.
+
+Run the development server and open http://localhost:5173/tools/export-check.html
+
 ## wk-check.html
 
 Measures how well the exported patch survives leaving the app.

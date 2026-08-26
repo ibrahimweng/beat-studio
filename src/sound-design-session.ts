@@ -1,7 +1,9 @@
 import type { AudioEngine } from './audio/engine.ts';
-import { renderProject, renderStems } from './audio/render.ts';
+import { renderPerSound, renderProject, renderStems, type Rendered } from './audio/render.ts';
+import type { MasterReport } from './audio/master.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
+import { markerCsv } from './export/markers.ts';
 import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
@@ -25,6 +27,33 @@ import { estimateFps, loadVideoFile } from './video/loader.ts';
 import { emptyDetection, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
+
+/**
+ * The loudness every export is brought to, in LUFS.
+ *
+ * Sound for picture is not a finished mix. It sits under dialogue and music,
+ * so it is aimed a few decibels below where a programme as a whole would be
+ * delivered. What matters more than the exact number is that it is the same
+ * number every time, so two pieces cut together do not need anyone reaching
+ * for a fader.
+ */
+export const DEFAULT_TARGET_LUFS = -18;
+
+/** How a file should be written, rather than what goes in it. */
+export interface ExportSettings {
+  /** Make the file exactly as long as the video. */
+  trimToDuration: boolean;
+  /** Hold the loudest moments back instead of letting them clip. */
+  limit: boolean;
+  /** Bring the file to a set loudness, or null to leave the level alone. */
+  target: number | null;
+}
+
+export const DEFAULT_EXPORT: ExportSettings = {
+  trimToDuration: false,
+  limit: true,
+  target: DEFAULT_TARGET_LUFS,
+};
 
 /** Two suggestions closer than this are treated as one moment. */
 const MIN_GAP = 0.08;
@@ -454,54 +483,115 @@ export class SoundDesignSession {
 
   // ---------- export ----------
 
-  async exportAudio(format: ExportFormat, trimToDuration = false): Promise<void> {
-    if (!this.project.cues.length) {
-      this.#store.set({ status: 'place some sounds first' });
-      return;
-    }
-    this.pause();
-    this.#store.set({ exporting: 'rendering…' });
-
-    const settings = this.#engine.chainSettings();
-    const buffer = await renderProject(this.project, { settings, trimToDuration });
-    const stem = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
-    await this.#write(buffer, stem, format);
-    this.#store.set({ exporting: null });
+  /** One mixed file. */
+  async exportAudio(format: ExportFormat, settings: ExportSettings = DEFAULT_EXPORT): Promise<void> {
+    await this.#writeAll(format, settings, 'rendering…', (options) =>
+      renderProject(this.project, options),
+    );
   }
 
   /** One file per layer, all the same length and all starting at zero. */
-  async exportStems(format: ExportFormat, trimToDuration = false): Promise<void> {
+  async exportStems(format: ExportFormat, settings: ExportSettings = DEFAULT_EXPORT): Promise<void> {
+    await this.#writeAll(format, settings, 'rendering layers…', (options) =>
+      renderStems(this.project, options),
+    );
+  }
+
+  /** One file per sound, wherever that sound appears on the timeline. */
+  async exportPerSound(
+    format: ExportFormat,
+    settings: ExportSettings = DEFAULT_EXPORT,
+  ): Promise<void> {
+    await this.#writeAll(format, settings, 'rendering sounds…', (options) =>
+      renderPerSound(this.project, options),
+    );
+  }
+
+  /** A list of where every sound lands, for whoever picks the work up next. */
+  exportMarkers(): void {
+    if (!this.project.cues.length) {
+      this.#store.set({ status: 'place some sounds first' });
+      return;
+    }
+    const blob = new Blob([markerCsv(this.project)], { type: 'text/csv' });
+    saveBlob(blob, `${this.#stem()}-markers.csv`);
+    this.#store.set({ status: 'marker list exported' });
+  }
+
+  /** The file name everything an export writes is built from. */
+  #stem(): string {
+    return fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
+  }
+
+  async #writeAll(
+    format: ExportFormat,
+    settings: ExportSettings,
+    working: string,
+    render: (options: {
+      settings: ReturnType<AudioEngine['chainSettings']>;
+      trimToDuration: boolean;
+      master: { limit: boolean; target: number | null };
+    }) => Promise<Rendered>,
+  ): Promise<void> {
     if (!this.project.cues.length) {
       this.#store.set({ status: 'place some sounds first' });
       return;
     }
     this.pause();
-    this.#store.set({ exporting: 'rendering layers…' });
+    this.#store.set({ exporting: working });
 
-    const settings = this.#engine.chainSettings();
-    const stems = await renderStems(this.project, { settings, trimToDuration });
-    const base = fileStem(this.project.videoName?.replace(/\.[^.]+$/, '') || 'sound-design');
+    const rendered = await render({
+      settings: this.#engine.chainSettings(),
+      trimToDuration: settings.trimToDuration,
+      master: { limit: settings.limit, target: settings.target },
+    });
 
-    for (let i = 0; i < stems.length; i++) {
-      const s = stems[i];
-      this.#store.set({ exporting: `writing ${i + 1} of ${stems.length}…` });
-      await this.#write(s.buffer, `${base}-${fileStem(s.layerName)}`, format);
+    const base = this.#stem();
+    for (let i = 0; i < rendered.parts.length; i++) {
+      const part = rendered.parts[i];
+      if (rendered.parts.length > 1) {
+        this.#store.set({ exporting: `writing ${i + 1} of ${rendered.parts.length}…` });
+      }
+      const name = part.id === 'mix' ? base : `${base}-${fileStem(part.name)}`;
+      await this.#write(part.buffer, name, format);
     }
 
-    this.#store.set({ exporting: null, status: `${stems.length} layers exported` });
+    this.#store.set({ exporting: null, status: this.#said(rendered, format) });
+  }
+
+  /**
+   * What the export did, in a line.
+   *
+   * Worth saying rather than leaving to be discovered: if a piece was held
+   * back from clipping, or lifted several decibels to reach the target, that
+   * is something to know before the file goes anywhere.
+   */
+  #said(rendered: Rendered, format: ExportFormat): string {
+    const count = rendered.parts.length;
+    const what = count === 1 ? `${format.toUpperCase()} exported` : `${count} files exported`;
+    const report: MasterReport | null = rendered.report;
+    if (!report || !Number.isFinite(report.before)) return what;
+
+    const parts = [what, `${report.after.toFixed(1)} LUFS`];
+    if (Math.abs(report.gainDb) >= 0.1) {
+      parts.push(`${report.gainDb > 0 ? '+' : ''}${report.gainDb.toFixed(1)} dB`);
+    }
+    if (report.reductionDb >= 0.1) {
+      parts.push(`held back ${report.reductionDb.toFixed(1)} dB`);
+    } else if (report.wouldHaveClipped) {
+      parts.push('would have clipped');
+    }
+    return parts.join(' · ');
   }
 
   async #write(buffer: AudioBuffer, name: string, format: ExportFormat): Promise<void> {
     if (format === 'wav') {
       saveBlob(encodeWav(buffer), `${name}.wav`);
-      this.#store.set({ status: `${name}.wav exported` });
       return;
     }
     const mp3 = await encodeMp3(buffer);
-    if (mp3) {
-      saveBlob(mp3, `${name}.mp3`);
-      this.#store.set({ status: `${name}.mp3 exported` });
-    } else {
+    if (mp3) saveBlob(mp3, `${name}.mp3`);
+    else {
       saveBlob(encodeWav(buffer), `${name}.wav`);
       this.#store.set({ status: 'MP3 encoder offline — saved WAV' });
     }

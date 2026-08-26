@@ -1,0 +1,112 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>master check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  import { measureLoudness, planMaster, applyMaster, limiterEnvelope, CEILING }
+    from '/src/audio/master.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  function make(seconds, fill) {
+    const b = new AudioBuffer({ numberOfChannels: 2, length: Math.round(RATE * seconds), sampleRate: RATE });
+    for (let c = 0; c < 2; c++) fill(b.getChannelData(c), c);
+    return b;
+  }
+  const sine = (data, hz, amp, from = 0, to = data.length) => {
+    for (let i = from; i < to; i++) data[i] = Math.sin((2 * Math.PI * hz * i) / RATE) * amp;
+  };
+  const peakOf = (b) => {
+    let p = 0;
+    for (let c = 0; c < b.numberOfChannels; c++) {
+      const d = b.getChannelData(c);
+      for (let i = 0; i < d.length; i++) p = Math.max(p, Math.abs(d[i]));
+    }
+    return p;
+  };
+
+  // 1. A 1kHz tone should read close to its own RMS, since the ear weighting
+  //    the standard uses is flat around 1kHz.
+  const amp = 0.1;
+  const tone = make(3, (d) => sine(d, 1000, amp));
+  const measured = measureLoudness(tone);
+  const rmsDb = 20 * Math.log10(amp / Math.SQRT2);
+  // Two channels carrying the same signal read 3dB above one, by definition.
+  // No offset: the standard's -0.691 exists precisely to cancel what the
+  // weighting adds at 1kHz, so a tone there reads its own level. This only
+  // comes out right if the filter is right, which is what makes it a test.
+  const expected = rmsDb + 10 * Math.log10(2);
+  check('a 1kHz tone reads its own level', Math.abs(measured - expected) < 0.3,
+    `measured ${measured.toFixed(2)} LUFS, expected about ${expected.toFixed(2)}`);
+
+  // 2. Twice the level is 6 LU louder, exactly.
+  const louder = make(3, (d) => sine(d, 1000, amp * 2));
+  const step = measureLoudness(louder) - measured;
+  check('doubling the level adds 6 LU', Math.abs(step - 6.02) < 0.05, `${step.toFixed(3)} LU`);
+
+  // 3. Silence between hits must not drag the reading down, or a sparse piece
+  //    would measure quiet when the parts you hear are not.
+  const sparse = make(12, (d) => { sine(d, 1000, amp, 0, RATE * 3); });
+  const dense = make(3, (d) => sine(d, 1000, amp));
+  const gap = Math.abs(measureLoudness(sparse) - measureLoudness(dense));
+  check('silence between hits is not counted', gap < 1.0,
+    `sparse ${measureLoudness(sparse).toFixed(2)}, dense ${measureLoudness(dense).toFixed(2)}`);
+
+  // 4. Nothing may pass the ceiling once limited.
+  const hot = make(3, (d) => {
+    sine(d, 220, 0.6);
+    // A run of hits well over full scale, as a stack of sounds on one frame
+    // is, and then a passage with nothing but the quiet tone under it.
+    for (let k = 0; k < 4; k++) {
+      const at = Math.round(RATE * (0.2 + k * 0.3));
+      for (let i = at; i < at + 900; i++) d[i] += Math.sin((i - at) * 0.05) * 2.2;
+    }
+  });
+  const before = peakOf(hot);
+  const limited = applyMaster(hot, { gain: 1, envelope: limiterEnvelope(hot) });
+  const after = peakOf(limited);
+  check('nothing gets past the ceiling', after <= CEILING + 1e-6,
+    `peak ${before.toFixed(3)} became ${after.toFixed(3)}, ceiling ${CEILING}`);
+
+  // 5. It must hold the peaks rather than flatten everything.
+  const quietPart = (b, seconds) => {
+    const d = b.getChannelData(0);
+    const at = Math.round(seconds * RATE);
+    let p = 0;
+    for (let i = at; i < at + 2000; i++) p = Math.max(p, Math.abs(d[i]));
+    return p;
+  };
+  // Well clear of the last hit at 1.1s, once the limiter has let go again.
+  const kept = quietPart(limited, 2.2) / quietPart(hot, 2.2);
+  check('quiet parts are left alone', kept > 0.9, `quiet passage kept ${(kept * 100).toFixed(0)}% of its level`);
+
+  // 6. Loudness matching hits the target it was given.
+  const target = -18;
+  const plan = planMaster(tone, { limit: true, target });
+  check('the target loudness is reached', Math.abs(plan.report.after - target) < 0.5,
+    `asked for ${target}, got ${plan.report.after.toFixed(2)} LUFS`);
+
+  // 7. The point of the whole design: stems given the same plan as the mix
+  //    still add up to exactly the mixed file.
+  const layerA = make(2, (d) => sine(d, 220, 0.5));
+  const layerB = make(2, (d) => sine(d, 330, 0.5));
+  const mix = make(2, (d, c) => {
+    const a = layerA.getChannelData(c), b = layerB.getChannelData(c);
+    for (let i = 0; i < d.length; i++) d[i] = a[i] + b[i];
+  });
+  const shared = planMaster(mix, { limit: true, target: -16 });
+  const mastered = applyMaster(mix, shared);
+  const stemA = applyMaster(layerA, shared);
+  const stemB = applyMaster(layerB, shared);
+  let worst = 0;
+  for (let c = 0; c < 2; c++) {
+    const m = mastered.getChannelData(c), a = stemA.getChannelData(c), b = stemB.getChannelData(c);
+    for (let i = 0; i < m.length; i++) worst = Math.max(worst, Math.abs(m[i] - (a[i] + b[i])));
+  }
+  check('stems still add up to the mix', worst < 1e-6, `largest difference ${worst.toExponential(2)}`);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>
