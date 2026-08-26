@@ -21,7 +21,7 @@ import {
 
 /** A layer with nothing drawn on it. Fresh arrays, since layers are edited. */
 export function emptyLanes(): Lanes {
-  return { level: [], pan: [], space: [] };
+  return { level: [], pan: [], space: [], drive: [] };
 }
 
 /** Layers a new project starts with, in the order they are drawn. */
@@ -193,15 +193,25 @@ export function scheduleLane(
   origin: number,
   from: number,
   to: number,
+  /**
+   * What the drawn number is worth to the parameter, where the two are not
+   * the same thing: a push drawn as one number reaches two gains, one of
+   * which wants what is left of it.
+   *
+   * Only sound for a mapping that is a straight line, since the ramps between
+   * the points are straight. Where it curves, the lane has to be written in
+   * steps instead, as a position is.
+   */
+  map: (value: number) => number = (value) => value,
 ): void {
   if (to <= from) return;
   param.cancelScheduledValues(origin + from);
-  param.setValueAtTime(laneValueAt(points, from, fallback), origin + from);
+  param.setValueAtTime(map(laneValueAt(points, from, fallback)), origin + from);
   for (const point of points) {
     if (point.t <= from || point.t > to) continue;
-    param.linearRampToValueAtTime(point.value, origin + point.t);
+    param.linearRampToValueAtTime(map(point.value), origin + point.t);
   }
-  param.linearRampToValueAtTime(laneValueAt(points, to, fallback), origin + to);
+  param.linearRampToValueAtTime(map(laneValueAt(points, to, fallback)), origin + to);
 }
 
 /** Take one point off one of a layer's curves. */

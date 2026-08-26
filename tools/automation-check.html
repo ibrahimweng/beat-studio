@@ -219,6 +219,125 @@
   check('a room on a layer with nothing on it is silent',
     tail(silent, 0, 4) < 1e-6, tail(silent, 0, 4).toExponential(2));
 
+  // ---------- drive ----------
+
+  /*
+   * A push is not a level, so it cannot be measured as one. What it does is
+   * put harmonics above what was there, so the test plays one steady tone and
+   * reads how much of the sound is at frequencies the tone never had.
+   */
+  /*
+   * A long low tone, read across a short stretch of it.
+   *
+   * Steady on purpose. A push gives a quiet sound far more gain than a loud
+   * one, so read across a decay it would show mostly as an envelope that
+   * changed shape, which says nothing about what the push did to the sound
+   * itself. Across a stretch where the level barely moves, what is left over
+   * is the bending and only the bending.
+   */
+  const steady = {
+    ...makeCue(0.2, base.layers[0].id, { kind: 'design', name: 'sub' }),
+    length: 3.5, gain: 1, space: 0, drive: 0,
+  };
+
+  function tone(lanes, cueDrive = 0) {
+    const id = base.layers[0].id;
+    return {
+      ...base,
+      layers: base.layers.map((l) => (l.id === id ? { ...l, auto: { ...emptyLanes(), ...lanes } } : l)),
+      cues: [{ ...steady, drive: cueDrive }],
+    };
+  }
+
+  /*
+   * A push is not a level, so it cannot be measured as one.
+   *
+   * The plain render and the pushed one come from the same sounds, so the
+   * closest a push could come to doing nothing is turning them up. Fitting
+   * the one scale that brings the plain render nearest the pushed one and
+   * taking it away leaves exactly what the push added, and nothing else. That
+   * residue is what saturation is, and reading it makes no assumption about
+   * where the sound sat in the first place.
+   */
+  const WINDOW = [Math.round(0.5 * RATE), Math.round(1 * RATE)];
+
+  function added(plainBuffer, pushedBuffer) {
+    const a = plainBuffer.getChannelData(0), b = pushedBuffer.getChannelData(0);
+    const [from, to] = WINDOW;
+    let ab = 0, aa = 0;
+    for (let i = from; i < to; i++) { ab += a[i] * b[i]; aa += a[i] * a[i]; }
+    const scale = aa > 0 ? ab / aa : 0;
+    const rest = new Float32Array(to - from);
+    for (let i = from; i < to; i++) rest[i - from] = b[i] - scale * a[i];
+    return rest;
+  }
+
+  const heard = (buffer) => buffer.getChannelData(0).slice(WINDOW[0], WINDOW[1]);
+
+  function loud(samples) {
+    let sum = 0;
+    for (const v of samples) sum += v * v;
+    return Math.sqrt(sum / samples.length);
+  }
+
+  /** What share of a stretch survives a high pass, which says where it sits. */
+  function up(samples) {
+    const k = Math.exp((-2 * Math.PI * 400) / RATE);
+    let prev = 0, prevIn = 0, sum = 0;
+    for (const v of samples) {
+      prev = k * (prev + v - prevIn);
+      prevIn = v;
+      sum += prev * prev;
+    }
+    return Math.sqrt(sum / samples.length) / (loud(samples) || 1);
+  }
+
+  /** How much of what came out was not in what went in. */
+  const share = (plainBuffer, pushedBuffer) =>
+    loud(added(plainBuffer, pushedBuffer)) / loud(heard(pushedBuffer));
+
+  const plain = await render(tone({}));
+  const flatDrive = (value) => ({ drive: [{ t: 0, value }, { t: 4, value }] });
+
+  // Nothing drawn has to be the same file, to the sample: the push sits in
+  // the middle of the bus, so if it coloured anything at rest every layer
+  // with a level drawn on it would be quietly changed.
+  const noPush = await render(tone(flatDrive(0)));
+  let apart = 0;
+  for (let c = 0; c < 2; c++) {
+    const a = plain.getChannelData(c), b = noPush.getChannelData(c);
+    for (let i = 0; i < a.length; i++) apart = Math.max(apart, Math.abs(a[i] - b[i]));
+  }
+  check('a push drawn at nothing leaves the sound untouched, to the sample',
+    apart < 1e-6, `largest difference ${apart.toExponential(2)}`);
+
+  const pushed = await render(tone(flatDrive(1)));
+  const halfPushed = await render(tone(flatDrive(0.5)));
+  check('a push bends the sound rather than only turning it up',
+    share(plain, pushed) > 0.1,
+    `${(share(plain, pushed) * 100).toFixed(1)}% of what comes out was not in what went in`);
+  check('and what it adds sits above what was there',
+    up(added(plain, pushed)) > up(heard(plain)) * 1.5,
+    `the sound ${up(heard(plain)).toFixed(3)}, what the push added ${up(added(plain, pushed)).toFixed(3)}`);
+  check('more of it is more of them',
+    share(plain, halfPushed) > 0.02 && share(plain, pushed) > share(plain, halfPushed),
+    `half ${(share(plain, halfPushed) * 100).toFixed(1)}%, full ${(share(plain, pushed) * 100).toFixed(1)}%`);
+
+  // At the top the two controls are the same piece of machinery, so they have
+  // to land in the same place. Below the top they part company on purpose:
+  // the layer blends in a hard copy, a sound bends its own curve less far.
+  const onOneSound = await render(tone({}, 1));
+  check('a layer pushed all the way is the same push as a sound pushed all the way',
+    Math.abs(share(plain, pushed) / share(plain, onOneSound) - 1) < 0.05,
+    `whole layer ${(share(plain, pushed) * 100).toFixed(1)}%, one sound ${(share(plain, onOneSound) * 100).toFixed(1)}%`);
+
+  // Drawn under a level, the push has to come first: the other way round,
+  // drawing a layer quieter would push it less as well.
+  const quietPush = await render(tone({ ...flatDrive(1), level: [{ t: 0, value: 0.3 }, { t: 4, value: 0.3 }] }));
+  check('the push comes before the level, so riding one does not move the other',
+    Math.abs(share(plain, quietPush) / share(plain, pushed) - 1) < 0.05,
+    `pushed ${(share(plain, pushed) * 100).toFixed(1)}%, pushed and turned down ${(share(plain, quietPush) * 100).toFixed(1)}%`);
+
   // ---------- handing it over ----------
 
   /*
@@ -235,7 +354,13 @@
       cues,
       layers: base.layers.map((l) => {
         if (l.id === one.id) return { ...l, auto: { ...emptyLanes(), pan: [{ t: 0, value: -1 }, { t: 4, value: 1 }] } };
-        if (l.id === two.id) return { ...l, auto: { ...emptyLanes(), space: [{ t: 0, value: 0 }, { t: 4, value: 1 }] } };
+        if (l.id === two.id) {
+          return { ...l, auto: {
+            ...emptyLanes(),
+            space: [{ t: 0, value: 0 }, { t: 4, value: 1 }],
+            drive: [{ t: 0, value: 1 }, { t: 4, value: 0.2 }],
+          } };
+        }
         return l;
       }),
     };
@@ -254,7 +379,7 @@
       worst = Math.max(worst, Math.abs(m[i] - sum));
     }
   }
-  check('one file per layer still adds back up to the mix with curves drawn',
+  check('one file per layer still adds back up to the mix, a push included',
     worst < 1e-5, `${stems.parts.length} layers, largest difference ${worst.toExponential(2)}`);
 
   // ---------- reading between points ----------

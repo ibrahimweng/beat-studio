@@ -11,6 +11,7 @@ import type { PadName } from '../types.ts';
 import { designSpec } from './design-voices.ts';
 import { packSpec, shapeSpec } from './pack.ts';
 import {
+  layerShaper,
   renderVoice,
   roomImpulse,
   seedFrom,
@@ -156,14 +157,23 @@ const ROOM_SEND = 0.6;
  * through these instead.
  *
  * The level and the position are always here, because they cost four small
- * nodes and neither does anything at rest. The room is not: an impulse is two
- * seconds of noise to generate and a convolution to run for the length of the
- * piece, so it is built the first time anyone draws one and left in place
- * afterwards, its send sitting at nothing.
+ * nodes and neither does anything at rest. The room and the push are not: a
+ * room is two seconds of noise to generate and a convolution to run for the
+ * length of the piece, and a push is a shaper running at four times the rate
+ * so that what it makes does not fold back down the spectrum. Both are built
+ * the first time anyone draws one and left in place afterwards, turned down
+ * to nothing. Both are reached by connecting rather than by rewiring, so
+ * adding one cannot interrupt a sound already playing through the bus.
  */
 export interface LayerBus {
-  /** Where this layer's sounds go. Carries the level. */
+  /** Where this layer's sounds go. */
   input: GainNode;
+  /** How much of it goes round the push. One when there is no push. */
+  clean: GainNode;
+  /** How much goes through it, or null until a push is asked for. */
+  pushed: GainNode | null;
+  /** Where the two halves of the push come back together. Carries the level. */
+  level: GainNode;
   /** The two sides, which between them are where the layer sits. */
   left: GainNode;
   right: GainNode;
@@ -269,6 +279,7 @@ export function syncLayerBuses(
       buses.set(layer.id, bus);
     }
 
+    if (layer.auto.drive.length && !bus.pushed) addDrive(ctx, bus);
     if (layer.auto.space.length && !bus.send) addRoom(ctx, bus, dest);
   }
 
@@ -281,10 +292,20 @@ export function syncLayerBuses(
 }
 
 /**
- * The level, then the two sides, then back together again.
+ * The push, then the level, then the two sides, then back together again.
  *
- * The level node is held to two channels on purpose. A voice with no room of
- * its own is one channel, and a bus that took it as it came would hand the
+ * In that order because that is the order a desk is in: what shapes the sound
+ * comes before the fader that decides how much of it there is. The other way
+ * round, drawing a layer quieter would quietly push it less as well, which is
+ * a second thing happening that nobody drew.
+ *
+ * The push is a hard-driven copy of the layer blended against the untouched
+ * one, and the two halves are summed by the level node rather than by one of
+ * their own. At nothing drawn the copy is turned all the way down and what
+ * comes out is what went in, to the sample.
+ *
+ * The entry is held to two channels on purpose. A voice with no room of its
+ * own is one channel, and a bus that took it as it came would hand the
  * splitter a silent right side. Made stereo here, a sound sent nowhere in
  * particular arrives at both sides exactly as it does when there is no bus at
  * all, which is what makes drawing a curve on a layer safe.
@@ -295,19 +316,63 @@ function buildBus(ctx: BaseAudioContext, dest: AudioNode): LayerBus {
   input.channelCountMode = 'explicit';
   input.channelInterpretation = 'speakers';
 
+  const clean = ctx.createGain();
+  clean.gain.value = 1;
+
+  const level = ctx.createGain();
   const split = ctx.createChannelSplitter(2);
   const left = ctx.createGain();
   const right = ctx.createGain();
   const out = ctx.createChannelMerger(2);
 
-  input.connect(split);
+  input.connect(clean);
+  clean.connect(level);
+
+  level.connect(split);
   split.connect(left, 0);
   split.connect(right, 1);
   left.connect(out, 0, 0);
   right.connect(out, 0, 1);
   out.connect(dest);
 
-  return { input, left, right, out, send: null, nodes: [input, split, left, right, out] };
+  return {
+    input,
+    clean,
+    pushed: null,
+    level,
+    left,
+    right,
+    out,
+    send: null,
+    nodes: [input, clean, level, split, left, right, out],
+  };
+}
+
+/**
+ * Give a layer a push: a hard-driven copy of it, blended against the one that
+ * was left alone.
+ *
+ * Fixed at the hardest it goes, with the lane deciding how much of it is
+ * heard, since a shaping curve is a table rather than a number and cannot be
+ * moved while it runs. Drawn all the way up it is the same push a single
+ * sound gets at the top of its own control; below that it is a hard copy
+ * mixed in rather than a gentler bend, which is what a bus wants and is how
+ * weight is added to a mix everywhere else.
+ */
+function addDrive(ctx: BaseAudioContext, bus: LayerBus): void {
+  // Fixed at the hardest it goes, with the lane deciding how much of it is
+  // heard, since a shaping curve is a table rather than a number and cannot
+  // be changed while it runs.
+  const shaper = layerShaper(ctx);
+
+  const pushed = ctx.createGain();
+  pushed.gain.value = 0;
+  bus.input.connect(pushed);
+  pushed.connect(shaper);
+  shaper.connect(bus.level);
+
+  bus.pushed = pushed;
+  bus.nodes.push(pushed, shaper);
 }
 
 /**
@@ -361,7 +426,9 @@ export function scheduleLayerLanes(
   for (const layer of project.layers) {
     const bus = buses.get(layer.id);
     if (!bus) continue;
-    scheduleLane(bus.input.gain, layer.auto.level, 1, origin, from, to);
+    if (bus.pushed) scheduleLane(bus.pushed.gain, layer.auto.drive, 0, origin, from, to);
+    scheduleLane(bus.clean.gain, layer.auto.drive, 0, origin, from, to, (v) => 1 - v);
+    scheduleLane(bus.level.gain, layer.auto.level, 1, origin, from, to);
     schedulePan(bus.left.gain, bus.right.gain, layer.auto.pan, origin, from, to);
     if (bus.send) scheduleLane(bus.send.gain, layer.auto.space, 0, origin, from, to);
   }

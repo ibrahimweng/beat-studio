@@ -92,10 +92,14 @@
   const sub = { ...subCue, space: 0, drive: 0, length: 0.9 };
   const clean = await render(sub, 2);
   const pushed = await render({ ...sub, drive: 0.6 }, 2);
-  const before = above(clean, 200), after = above(pushed, 200);
+  const hard = await render({ ...sub, drive: 1 }, 2);
+  const before = above(clean, 200), after = above(pushed, 200), most = above(hard, 200);
   check('drive adds harmonics a small speaker can reach',
-    after > before * 1.3,
-    `${(before * 100).toFixed(1)}% above 200Hz became ${(after * 100).toFixed(1)}%`);
+    most > before * 1.6,
+    `${(before * 100).toFixed(1)}% above 200Hz became ${(most * 100).toFixed(1)}%`);
+  check('and less of it adds fewer of them',
+    after > before * 1.2 && most > after,
+    `${(before * 100).toFixed(1)}%, ${(after * 100).toFixed(1)}%, ${(most * 100).toFixed(1)}%`);
   check('drive is not just a volume control',
     peakOf(pushed) < peakOf(clean) * 1.6,
     `peak ${peakOf(clean).toFixed(3)} to ${peakOf(pushed).toFixed(3)}`);
