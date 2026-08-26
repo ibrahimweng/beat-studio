@@ -484,6 +484,47 @@
   opacity: 0.35;
 }
 
+/* The free edge, taken hold of to change how long the sound runs for. It sits
+   over the head as well as the tail, so a sound whose head fills the whole
+   block can still be trimmed; below a certain width it is hidden, since by
+   then it would leave nothing to take hold of to move the sound instead. */
+.cue__grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  border-radius: 0 var(--r-4) var(--r-4) 0;
+  /* Faintly visible at rest, so the end of a sound reads as something you can
+     take hold of rather than as somewhere the colour happens to stop. */
+  background: color-mix(in oklab, var(--ac) 30%, transparent);
+  cursor: ew-resize;
+  pointer-events: auto;
+  display: none;
+}
+
+.cue.is-tail .cue__grip {
+  right: auto;
+  left: 0;
+  border-radius: var(--r-4) 0 0 var(--r-4);
+}
+
+.cue.is-wide .cue__grip {
+  display: block;
+}
+
+.cue__grip:hover,
+.tl.is-resizing .cue.is-selected .cue__grip {
+  background: var(--ac);
+}
+
+/* Held for the whole gesture, so passing over a lane or another sound on the
+   way does not flicker the pointer through three shapes. */
+.tl.is-resizing,
+.tl.is-resizing * {
+  cursor: ew-resize;
+}
+
 .cue__label {
   font-size: 10px;
   font-weight: 500;

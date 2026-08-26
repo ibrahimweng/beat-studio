@@ -6,7 +6,7 @@ import {
   type SoundDesignSession,
 } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
-import { timecode } from '../../timeline/project.ts';
+import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
 import { DESIGN_GROUPS, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
@@ -252,7 +252,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   const gain = field('Level', 0, 1.5, 0.01, (v) => patch({ gain: v }));
   const tune = field('Tune', -24, 24, 1, (v) => patch({ tune: v }));
-  const length = field('Length', 0.02, 4, 0.01, (v) => patch({ length: v }));
+  // The same range the timeline holds an edge drag to, so the two agree.
+  const length = field('Length', MIN_LENGTH, MAX_LENGTH, 0.01, (v) => patch({ length: v }));
   // Its own room and its own push, rather than the single reverb at the end
   // of the chain that every sound used to have to share.
   const space = field('Space', 0, 1, 0.01, (v) => patch({ space: v }));

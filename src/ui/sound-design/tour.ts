@@ -32,7 +32,7 @@ const STEPS: readonly Step[] = [
   {
     target: '.tl__lanes',
     title: 'Place it on the timeline',
-    body: 'Click a lane to put the sound at that moment. Drag it to move it. The timeline is measured in time and frames, not in bars.',
+    body: 'Click a lane to put the sound at that moment. Drag it to move it, or drag its far edge to change how long it runs for. The timeline is measured in time and frames, not in bars.',
   },
   {
     target: '.tl__detect',
