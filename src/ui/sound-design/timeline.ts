@@ -62,8 +62,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const automating = new Set<string>();
   /** The drawn level for each open layer, so it can be redrawn on its own. */
   const autoLanes = new Map<string, SVGSVGElement>();
-  /** Which sound currently carries the selected mark. */
-  let selectedId: string | null = null;
+  /** Which sounds currently carry the chosen mark. */
+  let marked: readonly string[] = [];
   const laneNodes = new Map<string, HTMLElement>();
   const strip = createMotionStrip(session);
 
@@ -72,10 +72,13 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   // Marks where the video stops, so the empty space beyond it reads as empty.
   const beyond = el('div', { class: 'tl__beyond' });
   const playhead = el('div', { class: 'tl__playhead' });
+  /** The rectangle dragged across the lanes to choose several sounds. */
+  const band = el('div', { class: 'tl__band' });
+  band.style.display = 'none';
   const gutterRows = el('div', { class: 'tl__gutter-rows' });
   const gutter = el('div', { class: 'tl__gutter' });
 
-  const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, playhead]);
+  const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, band, playhead]);
   const viewport = el('div', {
     class: 'tl__viewport',
     on: {
@@ -171,6 +174,88 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   function timeAt(event: PointerEvent, lane: HTMLElement): number {
     const rect = lane.getBoundingClientRect();
     return Math.max(0, (event.clientX - rect.left) / pxPerSec);
+  }
+
+  /** Where a pointer is, in the timeline's own coordinates. */
+  function pointIn(event: PointerEvent): { x: number; y: number } {
+    const rect = content.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  /**
+   * A press on empty space, which is either placing a sound or choosing
+   * several.
+   *
+   * Which one it turns out to be is not known until the pointer either moves
+   * or comes up, so nothing happens on the way down. Clicking still places,
+   * as it always did, and dragging draws a rectangle over the sounds to
+   * choose instead.
+   */
+  function beginPress(event: PointerEvent, lane: HTMLElement, layerId: string): void {
+    const from = pointIn(event);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const adding = event.shiftKey || event.metaKey || event.ctrlKey;
+    const held = adding ? session.store.state.selection : [];
+    let dragging = false;
+
+    lane.setPointerCapture(event.pointerId);
+
+    const move = (e: PointerEvent): void => {
+      if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < 4) return;
+      dragging = true;
+
+      const to = pointIn(e);
+      const left = Math.min(from.x, to.x);
+      const top = Math.min(from.y, to.y);
+      band.style.display = '';
+      band.style.left = `${left}px`;
+      band.style.top = `${top}px`;
+      band.style.width = `${Math.abs(to.x - from.x)}px`;
+      band.style.height = `${Math.abs(to.y - from.y)}px`;
+
+      const inside = cuesWithin(left, top, left + Math.abs(to.x - from.x), top + Math.abs(to.y - from.y));
+      session.select([...new Set([...held, ...inside])]);
+    };
+
+    const end = (e: PointerEvent): void => {
+      lane.removeEventListener('pointermove', move);
+      lane.removeEventListener('pointerup', end);
+      lane.removeEventListener('pointercancel', end);
+      band.style.display = 'none';
+
+      if (dragging) return;
+      // A press that went nowhere. Placing on a layer makes it the one new
+      // sounds go on, which is what someone reaching for it meant.
+      session.setActiveLayer(layerId);
+      session.addCue(timeAt(e, lane), undefined, layerId);
+    };
+
+    lane.addEventListener('pointermove', move);
+    lane.addEventListener('pointerup', end);
+    lane.addEventListener('pointercancel', end);
+  }
+
+  /** Which sounds a rectangle covers, in the timeline's own coordinates. */
+  function cuesWithin(x1: number, y1: number, x2: number, y2: number): string[] {
+    const top = lanes.offsetTop;
+    const found: string[] = [];
+
+    for (const [id, drawn] of cueNodes) {
+      const lane = laneNodes.get(drawn.cue.layerId);
+      if (!lane) continue;
+
+      const laneTop = top + lane.offsetTop;
+      const laneBottom = laneTop + lane.offsetHeight;
+      if (laneBottom < y1 || laneTop > y2) continue;
+
+      const left = cueStart(drawn.cue) * pxPerSec;
+      const right = left + Math.max(10, cueLength(drawn.cue) * pxPerSec);
+      if (right < x1 || left > x2) continue;
+
+      found.push(id);
+    }
+    return found;
   }
 
   /** Draw every open level lane against the current zoom. */
@@ -352,11 +437,10 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         dataset: { layer: layer.id },
         on: {
           pointerdown: (event) => {
-            // Clicking empty space places the current sound here.
+            // Only empty space. A sound handles its own presses.
             if (event.target !== lane) return;
             event.preventDefault();
-            session.setActiveLayer(layer.id);
-            session.addCue(timeAt(event, lane), undefined, layer.id);
+            beginPress(event, lane, layer.id);
           },
         },
       });
@@ -618,7 +702,7 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       cueNodes.delete(id);
     }
 
-    if (selectedId) cueNodes.get(selectedId)?.node.classList.add('is-selected');
+    for (const id of marked) cueNodes.get(id)?.node.classList.add('is-selected');
   }
 
   /** The two styles that depend on the zoom. */
@@ -657,9 +741,21 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
         pointerdown: (event) => {
           event.preventDefault();
           event.stopPropagation();
-          session.select(cue.id);
-          session.audition(cue);
-          beginDrag(event, head, cue);
+
+          const chosen = session.store.state.selection;
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            session.toggleSelected(cue.id);
+            return;
+          }
+
+          // Taking hold of one that is already part of a group keeps the
+          // group and moves all of it. Taking hold of anything else starts
+          // again with that one.
+          if (!chosen.includes(cue.id)) {
+            session.select([cue.id]);
+            session.audition(cue);
+          }
+          beginDrag(event, head);
         },
       },
     }, [label]);
@@ -675,18 +771,23 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     return { node, head, label, cue };
   }
 
-  /** Drag a cue along its lane to retime it. */
-  function beginDrag(event: PointerEvent, node: HTMLElement, cue: Cue): void {
+  /**
+   * Drag along the lane to retime, taking everything chosen along.
+   *
+   * Moved by how far the pointer has come since the last movement rather than
+   * since the start, because what is being moved is a group whose shape has
+   * to survive being pushed against either end of the piece.
+   */
+  function beginDrag(event: PointerEvent, node: HTMLElement): void {
     const startX = event.clientX;
-    const startTime = cue.time;
+    let applied = 0;
     node.setPointerCapture(event.pointerId);
-    let moved = false;
 
     const move = (e: PointerEvent): void => {
-      const delta = (e.clientX - startX) / pxPerSec;
-      if (!moved && Math.abs(e.clientX - startX) < 3) return;
-      moved = true;
-      session.updateCue(cue.id, { time: Math.max(0, startTime + delta) });
+      if (Math.abs(e.clientX - startX) < 3) return;
+      const wanted = (e.clientX - startX) / pxPerSec;
+      session.moveSelection(wanted - applied);
+      applied = wanted;
     };
 
     const end = (): void => {
@@ -707,12 +808,15 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       paint(state.project);
       undo.disabled = !session.canUndo;
       redo.disabled = !session.canRedo;
-      // Only the one losing the mark and the one gaining it, rather than
+      // Only the ones losing the mark and the ones gaining it, rather than
       // every sound on the timeline on every change.
-      if (state.selectedCueId !== selectedId) {
-        if (selectedId) cueNodes.get(selectedId)?.node.classList.remove('is-selected');
-        selectedId = state.selectedCueId;
-        if (selectedId) cueNodes.get(selectedId)?.node.classList.add('is-selected');
+      if (state.selection !== marked) {
+        const now = new Set(state.selection);
+        for (const id of marked) {
+          if (!now.has(id)) cueNodes.get(id)?.node.classList.remove('is-selected');
+        }
+        for (const id of state.selection) cueNodes.get(id)?.node.classList.add('is-selected');
+        marked = state.selection;
       }
 
       const { detect } = state;

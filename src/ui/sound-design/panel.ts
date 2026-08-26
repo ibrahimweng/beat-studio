@@ -237,9 +237,17 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     };
   };
 
+  /**
+   * The sound the fields are showing.
+   *
+   * With several chosen this is the first of them, and a change reaches all
+   * of them. Showing the first rather than nothing is what makes setting six
+   * sounds to the same length a single movement.
+   */
   let selected: Cue | null = null;
+  let chosen = 0;
   const patch = (p: Partial<Cue>): void => {
-    if (selected) session.updateCue(selected.id, p);
+    if (selected) session.updateSelected(p);
   };
 
   const gain = field('Level', 0, 1.5, 0.01, (v) => patch({ gain: v }));
@@ -272,8 +280,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   }));
 
   const nudgeRow = el('div', { style: { display: 'flex', gap: '4px' } }, [
-    button({ class: 'chip chip--sm', title: 'Back one frame', on: { click: () => selected && session.nudgeCue(selected.id, -1) } }, ['−1f']),
-    button({ class: 'chip chip--sm', title: 'On one frame', on: { click: () => selected && session.nudgeCue(selected.id, 1) } }, ['+1f']),
+    button({ class: 'chip chip--sm', title: 'Back one frame', on: { click: () => session.nudgeSelection(-1) } }, ['−1f']),
+    button({ class: 'chip chip--sm', title: 'On one frame', on: { click: () => session.nudgeSelection(1) } }, ['+1f']),
     button({ class: 'chip chip--sm', title: 'Play from just before this sound', on: { click: () => selected && session.previewInContext(selected) } }, ['In context']),
   ]);
 
@@ -320,7 +328,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ['Forget'],
   );
   const deleteButton = button(
-    { class: 'chip chip--sm chip--danger', on: { click: () => selected && session.removeCue(selected.id) } },
+    { class: 'chip chip--sm chip--danger', on: { click: () => session.removeSelected() } },
     ['Delete'],
   );
 
@@ -582,7 +590,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     el: root,
 
     update(state: AppState) {
-      const { project, currentSource, selectedCueId } = state;
+      const { project, currentSource } = state;
 
       if (state.packs !== paintedPacks || state.mine !== paintedMine) {
         paintedPacks = state.packs;
@@ -613,7 +621,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         toggleClass(node as HTMLElement, 'is-on', project.layers[i]?.id === state.activeLayerId),
       );
 
-      selected = project.cues.find((c) => c.id === selectedCueId) ?? null;
+      const picked = new Set(state.selection);
+      const all = project.cues.filter((cue) => picked.has(cue.id));
+      chosen = all.length;
+      selected = all[0] ?? null;
       const has = selected !== null;
       cueBody.style.opacity = has ? '1' : '0.5';
       cueBody.style.pointerEvents = has ? '' : 'none';
@@ -623,8 +634,13 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
           selected.source.kind === 'pitched'
             ? `${selected.source.name} ${noteName((selected.source.midi ?? DEFAULT_MIDI) + selected.tune)}`
             : String(selected.source.name);
-        setText(cueTitle, label);
-        setText(cueTime, `at ${timecode(selected.time, project.fps)}`);
+        setText(cueTitle, chosen > 1 ? `${chosen} sounds` : label);
+        setText(
+          cueTime,
+          chosen > 1
+            ? `from ${timecode(all[0].time, project.fps)}, changes reach all of them`
+            : `at ${timecode(selected.time, project.fps)}`,
+        );
         gain.input.value = String(selected.gain);
         setText(gain.out, selected.gain.toFixed(2));
         tune.input.value = String(selected.tune);
@@ -637,9 +653,11 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(drive.out, selected.drive ? selected.drive.toFixed(2) : 'off');
         anchorButtons.forEach((a) => toggleClass(a.node, 'is-on', selected?.anchor === a.anchor));
         toggleClass(muteButton, 'is-on', selected.muted);
-        // Forgetting only means anything for a sound you saved yourself.
+        // Forgetting only means anything for a sound you saved yourself, and
+        // saving one only means anything when there is exactly one to save.
         const isMine = selected.source.kind === 'pack' && selected.source.pack === MINE_ID;
-        forgetButton.style.display = isMine ? '' : 'none';
+        forgetButton.style.display = isMine && chosen === 1 ? '' : 'none';
+        saveButton.style.display = chosen === 1 ? '' : 'none';
       } else {
         setText(cueTitle, 'Nothing selected');
         setText(cueTime, 'Click the timeline to place a sound.');

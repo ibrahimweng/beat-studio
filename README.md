@@ -199,6 +199,26 @@ What you draw is what comes out. It is applied while you play and written into
 every file you export, including the stems, which stay in sync with each other
 because the shape is applied to each of them the same way.
 
+### Work on several at once
+
+Shift click, or Ctrl or Cmd click, adds a sound to what you are working on and
+takes it out again. Dragging across the lanes draws a rectangle and takes
+everything it covers, and a plain click still places a sound, so nothing you
+did before has changed.
+
+Everything then applies to all of them. Dragging one moves the group and keeps
+its shape, including at either end of the piece, where holding each sound
+separately would let the ends pile up while the middle carried on. Delete
+removes them all, the arrows nudge them all, and the panel says how many are
+chosen and reaches all of them, so setting six sounds to the same length is
+one movement.
+
+Copy, cut and paste work as they do anywhere. Paste puts them at the playhead
+and keeps the gaps between them, so a rhythm copied is a rhythm pasted.
+Duplicate lays a copy out straight after the original and chooses the copy, so
+pressing it again and again lays out a run rather than a stack. All of it is
+one thing to undo.
+
 ### Getting the timing right
 
 Each sound has a setting for how it lands. "Starts on it" begins the sound on
@@ -220,6 +240,9 @@ These keys help.
 | Escape | Deselect |
 | Ctrl or Cmd and Z | Undo |
 | Ctrl or Cmd, shift and Z | Redo |
+| Ctrl or Cmd and A | Choose every sound |
+| Ctrl or Cmd and C, X, V | Copy, cut, paste |
+| Ctrl or Cmd and D | Duplicate |
 | Pad keys | Drop that drum sound at the playhead |
 
 Everything that changes the piece can be undone: placing, moving and removing
