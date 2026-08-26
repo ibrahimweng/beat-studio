@@ -1,4 +1,4 @@
-import { cueGain, cueLength, cueStart } from '../timeline/project.ts';
+import { cueGain, cueLength, cueStart, scheduleLayerLevel } from '../timeline/project.ts';
 import type { Cue, DesignName, Project } from '../timeline/types.ts';
 import type { PadName } from '../types.ts';
 import { designSpec } from './design-voices.ts';
@@ -93,13 +93,70 @@ export function playCue(
   if (spec) renderVoice(ctx, dest, spec, at, seedFrom(cue.id));
 }
 
-/** Schedule a cue against a timeline whose zero sits at `originTime`. */
+/**
+ * Schedule a cue against a timeline whose zero sits at `originTime`.
+ *
+ * `atLevel` is for hearing one sound on its own, where there is no layer to
+ * play through and so nothing carrying that layer's level over time.
+ */
 export function scheduleCue(
   ctx: BaseAudioContext,
   dest: AudioNode,
   project: Project,
   cue: Cue,
   originTime: number,
+  atLevel = 1,
 ): void {
-  playCue(ctx, dest, cue, originTime + cueStart(cue), cueGain(project, cue));
+  playCue(ctx, dest, cue, originTime + cueStart(cue), cueGain(project, cue) * atLevel);
+}
+
+/**
+ * A node for each layer whose level is drawn over time.
+ *
+ * A drawn level belongs to a moment rather than to a sound, so it cannot be
+ * folded into each cue the way a fixed level can: two sounds overlapping on
+ * the same layer have to move together. Everything on such a layer plays
+ * through one node carrying the shape instead.
+ *
+ * Layers without one are absent from the map, and their sounds go straight to
+ * the destination, so nothing is built for a project that draws nothing.
+ *
+ * Brought into line with the project rather than rebuilt, because a sound
+ * queued a moment ago is still playing through the node it was given, and
+ * replacing that node would cut it off.
+ */
+export function syncLayerBuses(
+  ctx: BaseAudioContext,
+  project: Project,
+  dest: AudioNode,
+  buses: Map<string, GainNode>,
+): void {
+  for (const layer of project.layers) {
+    if (layer.auto.length && !buses.has(layer.id)) {
+      const bus = ctx.createGain();
+      bus.connect(dest);
+      buses.set(layer.id, bus);
+    }
+  }
+
+  const wanted = new Set(project.layers.filter((l) => l.auto.length).map((l) => l.id));
+  for (const [id, bus] of buses) {
+    if (wanted.has(id)) continue;
+    bus.disconnect();
+    buses.delete(id);
+  }
+}
+
+/** Write each layer's drawn level onto its node, over a stretch of the video. */
+export function scheduleLayerLevels(
+  buses: ReadonlyMap<string, GainNode>,
+  project: Project,
+  origin: number,
+  from: number,
+  to: number,
+): void {
+  for (const layer of project.layers) {
+    const bus = buses.get(layer.id);
+    if (bus) scheduleLayerLevel(bus.gain, layer, origin, from, to);
+  }
 }

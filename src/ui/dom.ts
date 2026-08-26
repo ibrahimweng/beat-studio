@@ -79,3 +79,23 @@ export function setText(node: Element | null, text: string): void {
 export function toggleClass(node: Element | null, name: string, on: boolean): void {
   node?.classList.toggle(name, on);
 }
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * Create an SVG element.
+ *
+ * Separate from {@link el} because SVG elements have to be created against
+ * their own namespace. An `<svg>` made with createElement looks right in the
+ * document and draws nothing.
+ */
+export function svg<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number> = {},
+  children: readonly Element[] = [],
+): SVGElementTagNameMap[K] {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
+  for (const child of children) node.appendChild(child);
+  return node;
+}

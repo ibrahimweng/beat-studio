@@ -1,0 +1,85 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>automation check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* A level drawn over a layer has to reach the file, and has to move
+     everything on that layer together. */
+  import { renderProject } from '/src/audio/render.ts';
+  import { emptyProject, makeCue, layerLevelAt, updateLayer } from '/src/timeline/project.ts';
+  import { DEFAULT_CHAIN } from '/src/audio/chain.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+
+  /** A steady bed of sound on one layer, so a level change is easy to read. */
+  function project(auto, gain = 1) {
+    const p = { ...emptyProject(), duration: 4 };
+    const id = p.layers[0].id;
+    p.layers = p.layers.map((l) => (l.id === id ? { ...l, auto, gain } : l));
+    p.cues = [0, 1, 2, 3].map((t) => ({
+      ...makeCue(t, id, { kind: 'design', name: 'static' }),
+      length: 1, gain: 1, space: 0, drive: 0,
+    }));
+    return p;
+  }
+
+  async function levels(p) {
+    const r = await renderProject(p, { settings: DEFAULT_CHAIN, master: { limit: false, target: null } });
+    const d = r.parts[0].buffer.getChannelData(0);
+    // The loudness of each second, which is what a drawn level should move.
+    return [0, 1, 2, 3].map((second) => {
+      let sum = 0, n = 0;
+      for (let i = Math.round((second + 0.2) * RATE); i < Math.round((second + 0.8) * RATE); i++) {
+        sum += d[i] * d[i]; n++;
+      }
+      return Math.sqrt(sum / n);
+    });
+  }
+
+  // 1. Nothing drawn behaves as it always did.
+  const flat = await levels(project([]));
+  check('with nothing drawn the level holds steady',
+    Math.max(...flat) / Math.min(...flat) < 1.15, flat.map((v) => v.toFixed(4)).join(', '));
+
+  // 2. A fade from full to nothing is heard as one.
+  const faded = await levels(project([{ t: 0, value: 1 }, { t: 4, value: 0 }]));
+  check('a fade is heard as a fade',
+    faded[0] > faded[1] && faded[1] > faded[2] && faded[2] > faded[3],
+    faded.map((v) => v.toFixed(4)).join(', '));
+  check('the fade reaches the values that were drawn',
+    Math.abs(faded[1] / faded[0] - 0.75 / 0.98) < 0.15,
+    `second one is ${(faded[1] / faded[0]).toFixed(2)} of second zero`);
+
+  // 3. It moves everything on the layer together, including sounds that
+  //    overlap, which is why it cannot be folded into each sound.
+  // Held down across the whole of the third second rather than only touching
+  // the bottom at one instant, so the measurement sits inside the dip rather
+  // than across the ramps into and out of it.
+  const dipped = await levels(project([
+    { t: 0, value: 1 }, { t: 1.9, value: 1 }, { t: 2.1, value: 0.1 },
+    { t: 2.9, value: 0.1 }, { t: 3.1, value: 1 },
+  ]));
+  check('a dip in the middle only dips the middle',
+    dipped[2] < dipped[1] * 0.5 && dipped[3] > dipped[2] * 1.5,
+    dipped.map((v) => v.toFixed(4)).join(', '));
+
+  // 4. Drawing takes over from the fixed level rather than multiplying with it.
+  const halfFixed = await levels(project([], 0.5));
+  const drawnFull = await levels(project([{ t: 0, value: 1 }, { t: 4, value: 1 }], 0.5));
+  check('a drawn level replaces the fixed one rather than stacking with it',
+    Math.abs(drawnFull[0] / halfFixed[0] - 2) < 0.25,
+    `fixed at half ${halfFixed[0].toFixed(4)}, drawn at full ${drawnFull[0].toFixed(4)}`);
+
+  // 5. Reading a level between points is a straight line.
+  const layer = { id: 'l', name: 'x', muted: false, solo: false, gain: 1,
+                  auto: [{ t: 1, value: 0 }, { t: 3, value: 1 }] };
+  check('the level between two points is read as a straight line',
+    layerLevelAt(layer, 0) === 0 && layerLevelAt(layer, 2) === 0.5 &&
+    layerLevelAt(layer, 4) === 1 && layerLevelAt(layer, 1.5) === 0.25,
+    `${layerLevelAt(layer, 0)}, ${layerLevelAt(layer, 1.5)}, ${layerLevelAt(layer, 2)}, ${layerLevelAt(layer, 4)}`);
+
+  const failed = results.filter((r) => !r.pass);
+  document.getElementById('out').textContent = JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1);
+  document.title = 'done';
+</script></body></html>

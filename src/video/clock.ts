@@ -1,6 +1,6 @@
 import type { AudioEngine } from '../audio/engine.ts';
-import { scheduleCue } from '../audio/sources.ts';
-import { audibleCues, cueStart } from '../timeline/project.ts';
+import { scheduleCue, scheduleLayerLevels, syncLayerBuses } from '../audio/sources.ts';
+import { audibleCues, cueStart, layerLevelAt } from '../timeline/project.ts';
 import type { Cue, Project } from '../timeline/types.ts';
 
 /** How often the scheduler wakes up, in milliseconds. */
@@ -36,6 +36,8 @@ export class VideoClock {
   #timer: ReturnType<typeof setInterval> | null = null;
   /** Cues before this video time have already been queued. */
   #queuedUpTo = 0;
+  /** A node per layer whose level is drawn, rebuilt whenever we start. */
+  #buses = new Map<string, GainNode>();
 
   constructor(video: HTMLVideoElement, engine: AudioEngine, hooks: ClockHooks) {
     this.#video = video;
@@ -69,6 +71,8 @@ export class VideoClock {
     this.#video.pause();
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
+    for (const bus of this.#buses.values()) bus.disconnect();
+    this.#buses.clear();
   }
 
   /** Move to a time. Cues are not fired while scrubbing. */
@@ -83,8 +87,20 @@ export class VideoClock {
   audition(cue: Cue): void {
     const ctx = this.#engine.start();
     const project = this.#hooks.project();
+    // Nothing is playing, so there is no layer node carrying a drawn level.
+    // Reading it at this sound's own moment is what makes hearing it on its
+    // own match hearing it in place.
+    const layer = project.layers.find((l) => l.id === cue.layerId);
+    const level = layer?.auto.length ? layerLevelAt(layer, cue.time) : 1;
     // Place the timeline origin so this cue sounds now.
-    scheduleCue(ctx, this.#engine.cueDestination, project, cue, ctx.currentTime + 0.02 - cueStart(cue));
+    scheduleCue(
+      ctx,
+      this.#engine.cueDestination,
+      project,
+      cue,
+      ctx.currentTime + 0.02 - cueStart(cue),
+      level,
+    );
   }
 
   #tick(): void {
@@ -109,10 +125,24 @@ export class VideoClock {
     if (this.#queuedUpTo > videoNow + 0.5) this.#queuedUpTo = videoNow;
 
     const project = this.#hooks.project();
+
+    /*
+     * The drawn levels are written against the mapping worked out this tick,
+     * and only for the fraction of a second ahead. Writing the whole shape
+     * once when play began would let it drift away from the picture over a
+     * long piece, which is the same reason the cues themselves are queued a
+     * little at a time rather than all at once.
+     *
+     * The nodes themselves are kept and reused. Sounds queued on an earlier
+     * tick are still playing through them.
+     */
+    syncLayerBuses(ctx, project, this.#engine.cueDestination, this.#buses);
+    scheduleLayerLevels(this.#buses, project, origin, videoNow, until);
+
     for (const cue of audibleCues(project)) {
       const start = cueStart(cue);
       if (start < this.#queuedUpTo || start >= until) continue;
-      scheduleCue(ctx, this.#engine.cueDestination, project, cue, origin);
+      scheduleCue(ctx, this.#buses.get(cue.layerId) ?? this.#engine.cueDestination, project, cue, origin);
       this.#hooks.onCue(cue, origin + start);
     }
 

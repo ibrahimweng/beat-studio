@@ -178,6 +178,27 @@ a starting point and every sound can be set by hand.
 Sessions saved before these existed open sounding exactly as they did, with
 both at nothing.
 
+### Draw a level over time
+
+The "A" next to a layer's name opens its level. A layer with a level drawn
+over it fades, dips and swells across the piece rather than sitting at one
+volume, which is what a bed of rumble under a sequence actually needs: it has
+to come up as the shot opens out and get out of the way when someone speaks.
+
+Click the lane to add a point, drag a point to move it, and click a point
+twice to take it away. The level holds flat before the first point and after
+the last, and reads as a straight line between them.
+
+It moves everything on the layer together, including sounds that overlap,
+which is why it is drawn on the layer rather than set on each sound. As soon
+as anything is drawn it takes over from the layer's fixed level completely,
+rather than multiplying with it, because two things claiming to be the same
+control is how you end up unable to work out why something is quiet.
+
+What you draw is what comes out. It is applied while you play and written into
+every file you export, including the stems, which stay in sync with each other
+because the shape is applied to each of them the same way.
+
 ### Getting the timing right
 
 Each sound has a setting for how it lands. "Starts on it" begins the sound on

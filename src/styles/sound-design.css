@@ -4,6 +4,8 @@
   /* Row heights are shared by the layer names and the lanes beside them, so
      the two columns cannot slide out of line. */
   --tl-row: 30px;
+  /* Height of a layer's level lane, when it is open. */
+  --tl-auto: 46px;
   --tl-ruler: 26px;
   --tl-strip: 34px;
   --tl-gutter: 140px;
@@ -310,6 +312,75 @@
   height: var(--tl-row);
   border-bottom: 1px solid var(--line-soft);
   cursor: copy;
+}
+
+/* A layer with its level open is taller, and its name row grows to match, or
+   the two columns would stop lining up with each other. */
+.tl__lane.is-automating,
+.tl__gutter-row.is-automating {
+  height: calc(var(--tl-row) + var(--tl-auto));
+}
+
+.tl__gutter-row.is-automating {
+  align-items: flex-start;
+  padding-top: 7px;
+}
+
+/* ---------- a level drawn over time ---------- */
+
+.tl__auto {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: var(--tl-auto);
+  display: block;
+  cursor: crosshair;
+  background: color-mix(in oklab, var(--tc-fg) 3%, transparent);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Where the level is the level, so a shape can be read against something. */
+.tl__auto-unity {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.tl__auto-line {
+  fill: none;
+  stroke: var(--ac);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+/* The shape is easier to read as an area than as a line on its own. */
+.tl__auto-fill {
+  fill: var(--ac);
+  opacity: 0.12;
+  stroke: none;
+}
+
+.tl__auto-point {
+  fill: var(--bg);
+  stroke: var(--ac);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.tl__auto-point:hover {
+  fill: var(--ac);
+}
+
+.tl__auto-point.is-dragging {
+  fill: var(--ac);
+  cursor: grabbing;
+}
+
+/* Only says anything before the first point is drawn. */
+.tl__auto-hint {
+  fill: var(--txt-3);
+  font-size: 10px;
+  pointer-events: none;
 }
 
 .tl__lane.is-muted {
