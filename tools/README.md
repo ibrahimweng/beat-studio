@@ -59,9 +59,13 @@ Run the development server and open http://localhost:5173/tools/master-check.htm
 
 Checks that Space and Drive do what they say.
 
-Space should make a sound last longer without making it quieter, Drive should
-add harmonics above what was there rather than just turning the sound up, and
-both at nothing should leave the voice exactly as it was. The page renders the
+Space should leave the sound itself completely alone and add a room after it,
+Drive should add harmonics above what was there rather than just turning the
+sound up, and both at nothing should leave the voice exactly as it was.
+
+The first of those is the one worth having. It is what caught the room being
+built from the same run of noise as the voice, which meant turning Space up
+changed the hit rather than only what was around it. The page renders the
 same placed sound with and without each and measures the difference: how long
 the tail runs, how much of the sound sits above 200Hz, and whether anything at
 all changed when neither was asked for.

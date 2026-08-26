@@ -1,4 +1,4 @@
-import { BANK_KEYS, BPM_MAX, BPM_MIN, LANES, MAX_STEPS, PACKS_KEY, STORAGE_KEY } from './constants.ts';
+import { BANK_KEYS, BPM_MAX, BPM_MIN, LANES, MAX_STEPS, MINE_KEY, PACKS_KEY, STORAGE_KEY } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import type { BankKey, Banks, SavedState } from './types.ts';
 
@@ -79,6 +79,32 @@ export function savePacks(files: unknown[]): void {
 export function loadPacks(): unknown[] {
   try {
     const raw = localStorage.getItem(PACKS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sounds saved from the timeline.
+ *
+ * Written as they are, since they are already plain data. Anything unreadable
+ * is dropped by whoever reads it rather than here, so a single bad entry
+ * cannot take the rest with it.
+ */
+export function saveMine(sounds: unknown): void {
+  try {
+    localStorage.setItem(MINE_KEY, JSON.stringify(sounds));
+  } catch {
+    // Storage full or unavailable.
+  }
+}
+
+export function loadMine(): unknown[] {
+  try {
+    const raw = localStorage.getItem(MINE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];

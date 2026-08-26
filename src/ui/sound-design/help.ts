@@ -22,6 +22,7 @@ const SECTIONS: readonly Section[] = [
       ['The box at the top', 'Finds a sound by name, which matters once packs are loaded.'],
       ['Arrow keys in that box', 'Steps through what is left, playing each one, for comparing.'],
       ['Load a sound pack', 'Adds someone else’s sounds to the list. Anything written for @web-kits/audio works.'],
+      ['Save as mine', 'Keeps the selected sound as it is, under a name, for this and every other project.'],
     ],
   },
   {

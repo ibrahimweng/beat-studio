@@ -284,6 +284,22 @@ there is a box at the top of the picker to find one by name.
 Packs are remembered between sessions, and "Save session" writes them into the
 session file, so a session opens complete on another machine.
 
+### Keep a sound you made
+
+Getting a voice, a length, a pitch, a level, a room and some push to sit right
+together is most of the work of a sound, and until now that combination lived
+only in the one place you put it. "Save as mine" keeps it under a name.
+
+A saved sound appears at the top of the picker, can be placed anywhere like any
+other, and is there in your next project as well as this one. It is kept as a
+description rather than as a recording, so it is a few hundred bytes and can
+still be tuned and stretched afterwards.
+
+They are remembered between sessions and written into the session file. Opening
+a session adds any sounds it carries that you do not already have, and never
+replaces one of yours with the same name. "Forget", next to Save, removes one,
+and anything already placed from it stays where it is.
+
 ### Take the sounds with you
 
 "Export patch" writes all 37 sounds to a file in the `@web-kits/audio` format.

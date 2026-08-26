@@ -1,4 +1,4 @@
-import { KIT_SOUNDS, NAMES } from '../../constants.ts';
+import { KIT_SOUNDS, MINE_ID, NAMES } from '../../constants.ts';
 import {
   DEFAULT_EXPORT,
   DEFAULT_TARGET_LUFS,
@@ -124,6 +124,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   /* ---------- packs ---------- */
 
+  const mineSection = el('div', {});
   const packSections = el('div', {});
   const packInput = el('input', {
     type: 'file',
@@ -280,6 +281,44 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     { class: 'chip chip--sm', title: 'Silence without deleting, to compare', on: { click: () => patch({ muted: !selected?.muted }) } },
     ['Mute'],
   );
+
+  /**
+   * Keep this sound, exactly as it is now, under a name.
+   *
+   * Getting a voice, a length, a pitch, a level, a room and a push to sit
+   * right together is most of the work, and until now it lived only in the
+   * one place it was placed.
+   */
+  const saveButton = button(
+    {
+      class: 'chip chip--sm',
+      title: 'Keep this sound as it is, under a name, for this and every other project',
+      on: {
+        click: () => {
+          if (!selected) return;
+          const suggested = String(selected.source.name);
+          const name = window.prompt('Name this sound', suggested);
+          if (name !== null) session.saveAsMine(selected, name);
+        },
+      },
+    },
+    ['Save as mine'],
+  );
+
+  const forgetButton = button(
+    {
+      class: 'chip chip--sm chip--danger',
+      title: 'Forget this saved sound. Anything already placed from it stays where it is.',
+      on: {
+        click: () => {
+          if (selected?.source.kind === 'pack' && selected.source.pack === MINE_ID) {
+            session.removeMine(String(selected.source.name));
+          }
+        },
+      },
+    },
+    ['Forget'],
+  );
   const deleteButton = button(
     { class: 'chip chip--sm chip--danger', on: { click: () => selected && session.removeCue(selected.id) } },
     ['Delete'],
@@ -297,6 +336,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, anchorButtons.map((a) => a.node)),
     el('div', { style: { marginTop: '10px' } }, [nudgeRow]),
     el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [muteButton, deleteButton]),
+    el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [saveButton, forgetButton]),
   ]);
 
   // ---------- export ----------
@@ -465,6 +505,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     el('div', {}, [
       el('div', { class: 'section-title', text: 'Place' }),
       search,
+      // First, because a sound you made is the one you are most likely
+      // reaching for.
+      mineSection,
       ...designSections,
       kitSection,
       pitchedSection,
@@ -481,6 +524,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   let paintedLayers: AppState['project']['layers'] | null = null;
   let paintedPacks: AppState['packs'] | null = null;
+  let paintedMine: AppState['mine'] | null = null;
 
   /**
    * Rebuild the pack sections.
@@ -489,9 +533,25 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    * one by one. Cutting the section list back to the built in ones first is
    * what stops a removed pack's sounds going on being filtered and lit.
    */
-  function paintPacks(packs: AppState['packs']): void {
+  function paintPacks(packs: AppState['packs'], mine: AppState['mine']): void {
     sections.length = builtIn;
+    clear(mineSection);
     clear(packSections);
+
+    if (mine.length) {
+      mineSection.appendChild(
+        pickGroup(
+          `Mine · ${mine.length}`,
+          mine.map((sound) =>
+            pickButton(
+              sound.name,
+              { kind: 'pack', name: sound.name, pack: MINE_ID },
+              (c) => c.kind === 'pack' && c.pack === MINE_ID && c.name === sound.name,
+            ),
+          ),
+        ),
+      );
+    }
 
     for (const pack of packs) {
       const remove = button(
@@ -524,9 +584,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     update(state: AppState) {
       const { project, currentSource, selectedCueId } = state;
 
-      if (state.packs !== paintedPacks) {
+      if (state.packs !== paintedPacks || state.mine !== paintedMine) {
         paintedPacks = state.packs;
-        paintPacks(state.packs);
+        paintedMine = state.mine;
+        paintPacks(state.packs, state.mine);
         applyFilter();
       }
 
@@ -576,6 +637,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(drive.out, selected.drive ? selected.drive.toFixed(2) : 'off');
         anchorButtons.forEach((a) => toggleClass(a.node, 'is-on', selected?.anchor === a.anchor));
         toggleClass(muteButton, 'is-on', selected.muted);
+        // Forgetting only means anything for a sound you saved yourself.
+        const isMine = selected.source.kind === 'pack' && selected.source.pack === MINE_ID;
+        forgetButton.style.display = isMine ? '' : 'none';
       } else {
         setText(cueTitle, 'Nothing selected');
         setText(cueTime, 'Click the timeline to place a sound.');

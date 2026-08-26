@@ -69,8 +69,21 @@
   check('space lengthens the tail',
     tailOf(wet) > tailOf(dry) * 1.5,
     `${tailOf(dry).toFixed(2)}s dry, ${tailOf(wet).toFixed(2)}s with space`);
-  check('space adds a room without thinning the sound',
-    peakOf(wet) >= peakOf(dry) * 0.98 && peakOf(wet) < peakOf(dry) * 1.5,
+  /*
+   * The claim is that the direct sound is untouched, so that is what is
+   * measured. The room waits a moment before it answers, and before it does
+   * the two renders should be the same sound sample for sample. Looking at
+   * the peak of the whole thing instead cannot show this: the room is made of
+   * noise, so once it arrives it moves the total a percent either way for
+   * reasons that have nothing to do with the hit.
+   */
+  const beforeRoom = Math.floor(RATE * 0.01);
+  let touched = 0;
+  for (let i = 0; i < beforeRoom; i++) touched = Math.max(touched, Math.abs(wet[i] - dry[i]));
+  check('space leaves the sound itself untouched', touched === 0,
+    `difference over the first 10ms: ${touched}`);
+  check('space does not run away with the level',
+    peakOf(wet) < peakOf(dry) * 1.5,
     `peak ${peakOf(dry).toFixed(3)} to ${peakOf(wet).toFixed(3)}`);
 
   // 3. Push adds harmonics above the fundamental, which is the whole point:

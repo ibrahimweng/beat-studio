@@ -130,3 +130,7 @@ export const BPM_MAX = 220;
 
 export const STORAGE_KEY = 'toolcraft.st88.v2';
 export const PACKS_KEY = 'toolcraft.st88.packs';
+export const MINE_KEY = 'toolcraft.st88.mine';
+
+/** The pack sounds of your own live in, so a cue can name them like any other. */
+export const MINE_ID = 'mine';

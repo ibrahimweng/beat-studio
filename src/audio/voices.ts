@@ -1,5 +1,5 @@
 import type { PadName, Voice } from '../types.ts';
-import { flat, renderVoice, type LayerSpec, type VoiceSpec } from './voice-spec.ts';
+import { flat, renderVoice, type Curve, type LayerSpec, type VoiceSpec } from './voice-spec.ts';
 
 /**
  * Voice synthesis. Every function here is pure in the sense that matters: it
@@ -186,26 +186,25 @@ export function drum(
 }
 
 /**
- * Additive piano. Four partials over a shared envelope, with the upper ones
- * detuned slightly sharp so the tone beats the way a struck string does.
- * Returns the voice so a key-up can release it early.
+ * The note pitched voices are described at.
+ *
+ * Every other frequency in them is worked out from the note being played, so
+ * these are functions of it rather than fixed tables like the kit.
  */
-export function pianoSynth(
-  ctx: BaseAudioContext,
-  dest: AudioNode,
-  midi: number,
-  t: number,
-  vel: number,
-): Voice {
+
+/**
+ * Additive piano. Four partials over one shape, with the upper ones detuned
+ * slightly sharp so the tone beats the way a struck string does.
+ */
+export function pianoSpec(midi: number, vel: number): VoiceSpec {
   const f = midiToFreq(midi);
   // Bass notes ring longer than treble, same as a real instrument.
   const dur = Math.max(0.8, Math.min(7, 1.1 + (100 - midi) * 0.06));
-
-  const gain = ctx.createGain();
-  gain.connect(dest);
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.42 * vel, t + 0.006);
-  gain.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+  const shape: Curve = [
+    { at: 0, to: 0 },
+    { at: 0.006, to: 0.42 * vel, curve: 'linear' },
+    { at: dur, to: 0.0006, curve: 'exp' },
+  ];
 
   const partials: [number, number, OscillatorType][] = [
     [1, 1, 'triangle'],
@@ -213,68 +212,98 @@ export function pianoSynth(
     [3, 0.13, 'sine'],
     [4.02, 0.06, 'sine'],
   ];
-  for (const [h, a, type] of partials) {
-    const osc = ctx.createOscillator();
-    osc.type = type;
-    osc.frequency.value = f * h * (1 + h * 0.0004);
-    const partialGain = ctx.createGain();
-    partialGain.gain.value = a;
-    osc.connect(partialGain);
-    partialGain.connect(gain);
-    osc.start(t);
-    osc.stop(t + dur + 0.05);
-  }
 
-  // Hammer noise, so the attack has some air to it.
-  noise(ctx, dest, t, 0.028, 0.05 * vel, 'bandpass', Math.min(9000, f * 4), 1.4);
-
-  return { gain, dur };
+  return {
+    duration: dur,
+    layers: [
+      ...partials.map(([h, a, type]) => ({
+        source: { kind: 'osc' as const, type, freq: flat(f * h * (1 + h * 0.0004)) },
+        // The partial's own level folded into the shared shape, which is the
+        // same arithmetic as feeding them all through one level was.
+        gain: shape.map((point) => ({ ...point, to: point.to * a })),
+        length: dur,
+      })),
+      // Hammer noise, so the attack has some air to it.
+      {
+        source: { kind: 'noise' as const, fade: true },
+        filter: { type: 'bandpass' as BiquadFilterType, freq: flat(Math.min(9000, f * 4)), q: 1.4 },
+        gain: [{ at: 0, to: 0.05 * vel }, { at: 0.028, to: 0.0008, curve: 'exp' as const }],
+        length: 0.028,
+        overrun: KIT_OVERRUN,
+      },
+    ],
+  };
 }
 
 /**
- * Plucked string: a saw-led stack through a lowpass that closes as the note
+ * Plucked string: a saw led stack through a lowpass that closes as the note
  * decays, which is what makes it read as a pluck rather than a held pad.
  */
-export function pluck(
-  ctx: BaseAudioContext,
-  dest: AudioNode,
-  midi: number,
-  t: number,
-  vel: number,
-): void {
+export function guitarSpec(midi: number, vel: number): VoiceSpec {
   const f = midiToFreq(midi);
   const dur = 1.5;
-
-  const gain = ctx.createGain();
-  gain.connect(dest);
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.3 * vel, t + 0.005);
-  gain.gain.exponentialRampToValueAtTime(0.0006, t + dur);
-
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.setValueAtTime(Math.min(7000, f * 8), t);
-  lp.frequency.exponentialRampToValueAtTime(Math.max(400, f * 2), t + dur);
-  lp.connect(gain);
+  const shape: Curve = [
+    { at: 0, to: 0 },
+    { at: 0.005, to: 0.3 * vel, curve: 'linear' },
+    { at: dur, to: 0.0006, curve: 'exp' },
+  ];
+  const filter = {
+    type: 'lowpass' as BiquadFilterType,
+    freq: [
+      { at: 0, to: Math.min(7000, f * 8) },
+      { at: dur, to: Math.max(400, f * 2), curve: 'exp' as const },
+    ],
+  };
 
   const partials: [number, number, OscillatorType][] = [
     [1, 1, 'sawtooth'],
     [2, 0.22, 'sine'],
     [3, 0.1, 'sine'],
   ];
-  for (const [h, a, type] of partials) {
-    const osc = ctx.createOscillator();
-    osc.type = type;
-    osc.frequency.value = f * h;
-    const partialGain = ctx.createGain();
-    partialGain.gain.value = a * 0.5;
-    osc.connect(partialGain);
-    partialGain.connect(lp);
-    osc.start(t);
-    osc.stop(t + dur + 0.05);
-  }
 
-  noise(ctx, dest, t, 0.03, 0.06 * vel, 'highpass', 2400);
+  return {
+    duration: dur,
+    layers: [
+      ...partials.map(([h, a, type]) => ({
+        source: { kind: 'osc' as const, type, freq: flat(f * h) },
+        filter,
+        gain: shape.map((point) => ({ ...point, to: point.to * a * 0.5 })),
+        length: dur,
+      })),
+      {
+        source: { kind: 'noise' as const, fade: true },
+        filter: { type: 'highpass' as BiquadFilterType, freq: flat(2400) },
+        gain: [{ at: 0, to: 0.06 * vel }, { at: 0.03, to: 0.0008, curve: 'exp' as const }],
+        length: 0.03,
+        overrun: KIT_OVERRUN,
+      },
+    ],
+  };
+}
+
+/** Play a piano note. Returns the voice so a key-up can release it early. */
+export function pianoSynth(
+  ctx: BaseAudioContext,
+  dest: AudioNode,
+  midi: number,
+  t: number,
+  vel: number,
+  seed?: number,
+): Voice {
+  const spec = pianoSpec(midi, vel);
+  return { gains: renderVoice(ctx, dest, spec, t, seed), dur: spec.duration };
+}
+
+/** Play a plucked note. */
+export function pluck(
+  ctx: BaseAudioContext,
+  dest: AudioNode,
+  midi: number,
+  t: number,
+  vel: number,
+  seed?: number,
+): void {
+  renderVoice(ctx, dest, guitarSpec(midi, vel), t, seed);
 }
 
 /** Metronome click. Routed to the monitor bus so it stays out of recordings. */
