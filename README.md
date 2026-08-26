@@ -218,7 +218,16 @@ These keys help.
 | Shift and an arrow | Move the selected sound one frame |
 | Delete | Remove the selected sound |
 | Escape | Deselect |
+| Ctrl or Cmd and Z | Undo |
+| Ctrl or Cmd, shift and Z | Redo |
 | Pad keys | Drop that drum sound at the playhead |
+
+Everything that changes the piece can be undone: placing, moving and removing
+sounds, adding, renaming and removing layers, and drawing a level. A drag is
+one step rather than one per pixel, so undoing a move puts the sound back where
+it started rather than partway along. Removing a layer takes its sounds with it
+and undo brings all of them back. Opening a session starts the history again,
+since the piece has been replaced rather than edited.
 
 "In context" plays from a second before the selected sound, so you hear it in
 place rather than on its own. "Mute" silences a sound without deleting it, for

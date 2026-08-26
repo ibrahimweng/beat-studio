@@ -136,6 +136,15 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 /** Keyboard control, which differs between the two halves of the app. */
 function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
+    // Undo is checked before anything else, because it is the one shortcut
+    // that is meant to carry a modifier and would otherwise be turned away
+    // with the browser's own.
+    if (!inField(event) && session.state.mode === 'sound-design' && undoKey(event) !== null) {
+      event.preventDefault();
+      if (undoKey(event) === 'undo') soundDesign.undo();
+      else soundDesign.redo();
+      return;
+    }
     if (ignore(event)) return;
     if (session.state.mode === 'sound-design') soundDesignKey(session, soundDesign, event);
     else handleKey(session, event, true);
@@ -154,11 +163,29 @@ function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () =
   };
 }
 
-function ignore(event: KeyboardEvent): boolean {
+function inField(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
-  if (target && /input|textarea|select/i.test(target.tagName)) return true;
+  return !!target && /input|textarea|select/i.test(target.tagName);
+}
+
+function ignore(event: KeyboardEvent): boolean {
+  if (inField(event)) return true;
   // Leave browser and system shortcuts alone.
   return event.metaKey || event.ctrlKey || event.altKey;
+}
+
+/**
+ * Whether this is undo, redo, or neither.
+ *
+ * Both spellings of redo are taken, since which one is expected depends on
+ * where someone learned to use a computer.
+ */
+function undoKey(event: KeyboardEvent): 'undo' | 'redo' | null {
+  if (!event.metaKey && !event.ctrlKey) return null;
+  const key = event.key.toLowerCase();
+  if (key === 'z') return event.shiftKey ? 'redo' : 'undo';
+  if (key === 'y') return 'redo';
+  return null;
 }
 
 /**

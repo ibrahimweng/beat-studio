@@ -80,6 +80,24 @@ const MIN_REFINE_FRAMES = 3;
 /** And never more than this, so a slow machine cannot cause a long wait. */
 const MAX_REFINE_FRAMES = 12;
 
+/**
+ * How long a run of small changes still counts as one thing you did.
+ *
+ * Long enough to cover the pauses inside a drag, short enough that two
+ * deliberate moves of the same sound are two steps rather than one.
+ */
+const COALESCE_MS = 700;
+
+/** How far back it is possible to go. Projects share their parts, so this is cheap. */
+const MAX_HISTORY = 200;
+
+/** One point in the history: what the project was, and what changed it. */
+interface Step {
+  project: Project;
+  label: string;
+  at: number;
+}
+
 /** Visual feedback the timeline asks for. */
 export interface SoundDesignEffects {
   /** Move the playhead to a video time. */
@@ -103,6 +121,11 @@ export class SoundDesignSession {
   #video: HTMLVideoElement | null = null;
   #clock: VideoClock | null = null;
   #objectUrl: string | null = null;
+
+  /** What the project was, most recent last. */
+  #past: Step[] = [];
+  /** And what it was before it was undone. */
+  #future: Step[] = [];
 
   effects: SoundDesignEffects = NO_EFFECTS;
   /** Called once a video is ready, so the timeline can frame the whole clip. */
@@ -256,8 +279,84 @@ export class SoundDesignSession {
     return this.#clock?.time ?? 0;
   }
 
-  #setProject(project: Project): void {
+  /**
+   * Change the project, remembering what it was.
+   *
+   * Everything that edits the piece goes through here, which is what makes
+   * undo possible at all: the project is replaced rather than modified, so
+   * keeping the one before costs a reference and undoing is putting it back.
+   *
+   * `label` is what groups a run of small changes into one step. Dragging a
+   * sound writes a new project on every movement of the pointer, and undoing
+   * that a pixel at a time would be useless, so consecutive changes carrying
+   * the same label inside {@link COALESCE_MS} count as one.
+   *
+   * `remember` is off for changes that are not edits. Loading a video and
+   * measuring its frame rate both change the project, and neither is
+   * something anyone would expect to undo.
+   */
+  #setProject(project: Project, label = '', remember = true): void {
+    if (remember && project !== this.project) {
+      const top = this.#past[this.#past.length - 1];
+      const sameGesture = label !== '' && top?.label === label && this.#now() - top.at < COALESCE_MS;
+
+      if (sameGesture) top.at = this.#now();
+      else this.#past.push({ project: this.project, label, at: this.#now() });
+
+      if (this.#past.length > MAX_HISTORY) this.#past.shift();
+      this.#future.length = 0;
+    }
     this.#store.set({ project });
+  }
+
+  #now(): number {
+    return performance.now();
+  }
+
+  // ---------- undo ----------
+
+  get canUndo(): boolean {
+    return this.#past.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.#future.length > 0;
+  }
+
+  /** Put the piece back the way it was before the last thing you did. */
+  undo(): void {
+    this.#step(this.#past, this.#future, 'nothing to undo');
+  }
+
+  /** And forward again. */
+  redo(): void {
+    this.#step(this.#future, this.#past, 'nothing to redo');
+  }
+
+  #step(from: Step[], to: Step[], nothing: string): void {
+    const step = from.pop();
+    if (!step) {
+      this.#store.set({ status: nothing });
+      return;
+    }
+    to.push({ project: this.project, label: step.label, at: this.#now() });
+
+    // A sound that no longer exists cannot stay selected, or the panel would
+    // be editing something that is not there.
+    const selected = this.#store.state.selectedCueId;
+    const stillThere = step.project.cues.some((cue) => cue.id === selected);
+
+    this.#store.set({
+      project: step.project,
+      selectedCueId: stillThere ? selected : null,
+      status: from === this.#past ? 'undone' : 'redone',
+    });
+  }
+
+  /** Forget the history. Used where the piece is replaced rather than edited. */
+  #forgetHistory(): void {
+    this.#past.length = 0;
+    this.#future.length = 0;
   }
 
   /** Give the session the video element the interface created. */
@@ -294,11 +393,11 @@ export class SoundDesignSession {
     this.#objectUrl = loaded.url;
     // Anything found for the previous clip no longer applies.
     this.#store.set({ detect: emptyDetection() });
-    this.#setProject({
-      ...this.project,
-      duration: loaded.duration,
-      videoName: loaded.name,
-    });
+    this.#setProject(
+      { ...this.project, duration: loaded.duration, videoName: loaded.name },
+      '',
+      false,
+    );
     this.#store.set({ videoReady: true, status: `${loaded.name} loaded` });
     this.onVideoLoaded?.();
 
@@ -325,7 +424,8 @@ export class SoundDesignSession {
       const fps = await estimateFps(video);
       video.pause();
       video.currentTime = 0;
-      this.#setProject({ ...this.project, fps });
+      // Measuring the rate is not an edit, so it is not something to undo.
+      this.#setProject({ ...this.project, fps }, '', false);
       this.effects.onTime(0);
     } catch {
       // Leave the default rate in place; it can be set by hand.
@@ -431,10 +531,8 @@ export class SoundDesignSession {
       layerId ?? state.activeLayerId,
       source ?? state.currentSource,
     );
-    this.#store.set({
-      project: { ...this.project, cues: [...this.project.cues, cue] },
-      selectedCueId: cue.id,
-    });
+    this.#setProject({ ...this.project, cues: [...this.project.cues, cue] }, `place:${cue.id}`);
+    this.#store.set({ selectedCueId: cue.id });
     this.audition(cue);
     return cue;
   }
@@ -447,7 +545,9 @@ export class SoundDesignSession {
   updateCue(id: string, patch: Partial<Cue>): void {
     const bounded =
       patch.time === undefined ? patch : { ...patch, time: this.#insideVideo(patch.time) };
-    this.#setProject(updateCue(this.project, id, bounded));
+    // Labelled by what is being changed, so a drag is one step and moving the
+    // same sound again later is another.
+    this.#setProject(updateCue(this.project, id, bounded), `cue:${id}:${Object.keys(patch).join()}`);
   }
 
   /** Clamp a time to the loaded video. */
@@ -466,12 +566,12 @@ export class SoundDesignSession {
   }
 
   removeCue(id: string): void {
-    this.#setProject(removeCue(this.project, id));
+    this.#setProject(removeCue(this.project, id), `remove:${id}`);
     if (this.#store.state.selectedCueId === id) this.#store.set({ selectedCueId: null });
   }
 
   updateLayer(id: string, patch: Partial<Layer>): void {
-    this.#setProject(updateLayer(this.project, id, patch));
+    this.#setProject(updateLayer(this.project, id, patch), `layer:${id}:${Object.keys(patch).join()}`);
   }
 
   /**
@@ -486,7 +586,7 @@ export class SoundDesignSession {
   }
 
   removeAutoPoint(id: string, index: number): void {
-    this.#setProject(removeAutoPoint(this.project, id, index));
+    this.#setProject(removeAutoPoint(this.project, id, index), `level:${id}:remove`);
   }
 
   /** Add a layer and make it the one new sounds go on. */
@@ -658,7 +758,7 @@ export class SoundDesignSession {
     const cues = peaks.map((peak) =>
       makeCue(snapTime(this.project, this.#insideVideo(peak.t)), state.activeLayerId, state.currentSource),
     );
-    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] });
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'place all');
     this.#store.set({ status: `${cues.length} sounds placed` });
   }
 
@@ -843,6 +943,10 @@ export class SoundDesignSession {
       (sound) => !this.#store.state.mine.some((held) => held.name === sound.name),
     );
     if (arriving.length) this.#setMine([...this.#store.state.mine, ...arriving], true);
+    // A session replaces the piece rather than editing it, so there is
+    // nothing sensible to go back to and the history starts again.
+    this.#forgetHistory();
+
     // The video itself is not stored, so keep whichever one is loaded.
     const current = this.project;
     this.#setProject({
