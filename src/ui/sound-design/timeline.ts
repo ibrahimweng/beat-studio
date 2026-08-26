@@ -15,6 +15,14 @@ const AUTO_HEIGHT = 46;
 const MAX_LEVEL = 1.5;
 /** How near the pointer has to be to grab a point rather than add one. */
 const GRAB_RADIUS = 7;
+/**
+ * How wide a drawn sound has to be before it offers an edge to drag.
+ *
+ * Narrower than this and the handle would cover the whole of it, so taking
+ * hold to move it would be a game of chance. Zooming in brings the handle
+ * back.
+ */
+const GRIP_MIN_PX = 18;
 
 export interface TimelineView extends View {
   /** Move the playhead. Called many times a second, so it avoids the store. */
@@ -705,10 +713,12 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     for (const id of marked) cueNodes.get(id)?.node.classList.add('is-selected');
   }
 
-  /** The two styles that depend on the zoom. */
+  /** The two styles that depend on the zoom, and whether there is room to grab. */
   function placeCue(node: HTMLElement, cue: Cue): void {
+    const width = Math.max(10, cueLength(cue) * pxPerSec);
     node.style.left = `${cueStart(cue) * pxPerSec}px`;
-    node.style.width = `${Math.max(10, cueLength(cue) * pxPerSec)}px`;
+    node.style.width = `${width}px`;
+    toggleClass(node, 'is-wide', width >= GRIP_MIN_PX);
   }
 
   /** Everything else, only needed when the sound itself changed. */
@@ -724,9 +734,10 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
    * A cue is drawn as a solid head at the moment it is pinned to, with a
    * translucent tail showing how long it sounds for.
    *
-   * Only the head takes pointer events. The tail is see-through in both
-   * senses, so a long sound never stops you placing another one underneath
-   * it, which is exactly what you do when a whoosh runs beneath an impact.
+   * Only the head and the handle on its free edge take pointer events. The
+   * tail between them is see-through in both senses, so a long sound never
+   * stops you placing another one underneath it, which is exactly what you do
+   * when a whoosh runs beneath an impact.
    */
   function buildCue(cue: Cue): DrawnCue {
     const start = cueStart(cue);
@@ -760,14 +771,38 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       },
     }, [label]);
 
+    // The far end from the head, which is the end that is free to move: a
+    // sound that starts on a moment grows to the right, and one that ends on
+    // a moment reaches back to the left.
+    const grip = el('i', {
+      class: 'cue__grip',
+      title: 'Drag to change how long it sounds for',
+      on: {
+        pointerdown: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          // The stored sound rather than the one this was built from, since
+          // which edge is free depends on the anchor and that can be changed
+          // from the panel without the drawing being rebuilt.
+          const now = cueNodes.get(cue.id)?.cue;
+          if (!now) return;
+
+          if (!session.store.state.selection.includes(cue.id)) session.select([cue.id]);
+          beginResize(event, grip, now);
+        },
+      },
+    });
+
     const node = el('div', {
       class: 'cue',
       dataset: { cue: cue.id },
       style: { left: `${start * pxPerSec}px`, width: `${width}px` },
-    }, [el('i', { class: 'cue__tail' }), head]);
+    }, [el('i', { class: 'cue__tail' }), head, grip]);
 
     toggleClass(node, 'is-muted', cue.muted);
     toggleClass(node, 'is-tail', endAnchored);
+    toggleClass(node, 'is-wide', width >= GRIP_MIN_PX);
     return { node, head, label, cue };
   }
 
@@ -794,6 +829,58 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', end);
       node.removeEventListener('pointercancel', end);
+    };
+
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', end);
+    node.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Drag the free edge of a sound to change how long it sounds for.
+   *
+   * The same shape as retiming: how far the pointer has come since the last
+   * movement, handed to the session, which holds the whole group at both ends
+   * before any of it changes. Everything chosen is resized together, so
+   * trimming six footsteps at once is one gesture and one thing to undo.
+   */
+  function beginResize(event: PointerEvent, node: HTMLElement, cue: Cue): void {
+    const startX = event.clientX;
+    // A sound pinned to its end reaches back from the moment, so its free
+    // edge is on the left and dragging left is what makes it longer.
+    const direction = cue.anchor === 'end' ? -1 : 1;
+    /*
+     * Where the stored length differs from the drawn one, the drawing wins.
+     * A sound that ends on a moment near the start of the video is drawn
+     * shorter than it is, because it cannot begin before the video does, and
+     * the edge under the pointer is the drawn one. Counting that difference
+     * as already applied brings the stored length up to meet the pointer on
+     * the first movement, so the edge follows the hand from the outset
+     * instead of sitting still until the two agree.
+     */
+    let applied = cue.length - cueLength(cue);
+    const before = cue.length;
+
+    node.setPointerCapture(event.pointerId);
+    root.classList.add('is-resizing');
+
+    const move = (e: PointerEvent): void => {
+      if (Math.abs(e.clientX - startX) < 3) return;
+      const wanted = ((e.clientX - startX) / pxPerSec) * direction;
+      session.resizeSelection(wanted - applied);
+      applied = wanted;
+    };
+
+    const end = (): void => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', end);
+      node.removeEventListener('pointercancel', end);
+      root.classList.remove('is-resizing');
+
+      // Hear what it turned into. Playing it while the edge was still moving
+      // would be a stutter of half-finished lengths; once is useful.
+      const after = cueNodes.get(cue.id)?.cue;
+      if (after && after.length !== before) session.audition(after);
     };
 
     node.addEventListener('pointermove', move);

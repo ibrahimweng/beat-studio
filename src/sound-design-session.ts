@@ -26,6 +26,8 @@ import {
   cuesOnLayer,
   fromSession,
   makeCue,
+  MAX_LENGTH,
+  MIN_LENGTH,
   removeAutoPoint,
   removeCue,
   removeLayer,
@@ -631,6 +633,41 @@ export class SoundDesignSession {
   /** Move everything chosen by whole frames. */
   nudgeSelection(frames: number): void {
     this.moveSelection(frames * frameDuration(this.project));
+  }
+
+  /**
+   * Make everything chosen longer or shorter by the same amount.
+   *
+   * By an amount rather than to a length, so dragging one edge of a group
+   * keeps the differences between them: a quarter of a second, a half and a
+   * whole one stay in that relation instead of collapsing into three of the
+   * same length. The Length control is there for when you do want them equal.
+   *
+   * Held at both ends before anything changes, for the same reason moving a
+   * group is. Letting each sound stop on its own would squash the shortest
+   * against the floor while the rest carried on.
+   */
+  resizeSelection(seconds: number): void {
+    const chosen = this.selected;
+    if (!chosen.length || seconds === 0) return;
+
+    const shortest = Math.min(...chosen.map((cue) => cue.length));
+    const longest = Math.max(...chosen.map((cue) => cue.length));
+    const change = Math.max(MIN_LENGTH - shortest, Math.min(MAX_LENGTH - longest, seconds));
+    if (change === 0) return;
+
+    const sizing = new Set(chosen.map((cue) => cue.id));
+    this.#setProject(
+      {
+        ...this.project,
+        cues: this.project.cues.map((cue) =>
+          sizing.has(cue.id)
+            ? { ...cue, length: Math.max(MIN_LENGTH, Math.min(MAX_LENGTH, cue.length + change)) }
+            : cue,
+        ),
+      },
+      `resize:${[...sizing].join()}`,
+    );
   }
 
   /** Remove everything chosen. */

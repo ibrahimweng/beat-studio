@@ -39,6 +39,7 @@ const SECTIONS: readonly Section[] = [
       ['Shift and an arrow', 'Move the selected sound one frame'],
       ['Delete', 'Remove the selected sound'],
       ['Ctrl or Cmd and Z', 'Undo. Shift as well to redo.'],
+      ['Drag a sound’s far edge', 'Changes how long it sounds for. Everything chosen changes with it.'],
       ['Shift or Cmd click a sound', 'Adds it to what you are working on, or takes it out.'],
       ['Drag across the lanes', 'Draws a rectangle and takes everything it covers.'],
       ['Ctrl or Cmd and A', 'Choose every sound.'],

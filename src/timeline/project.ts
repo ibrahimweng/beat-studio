@@ -333,8 +333,9 @@ export function toSession(
  */
 const MAX_GAIN = 1.5;
 const MAX_TUNE = 24;
-const MIN_LENGTH = 0.02;
-const MAX_LENGTH = 4;
+/** Shortest and longest a sound can be told to run for. */
+export const MIN_LENGTH = 0.02;
+export const MAX_LENGTH = 4;
 
 /** A number out of a file, with a default and the range it has to sit in. */
 function readNumber(value: unknown, fallback: number, min: number, max: number): number {
