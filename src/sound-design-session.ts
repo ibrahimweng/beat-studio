@@ -137,9 +137,18 @@ export class SoundDesignSession {
     void this.#measureFps();
   }
 
+  /**
+   * Work out the frame rate from the file.
+   *
+   * Frames have to go past to be measured, so the clip runs for a moment and
+   * then returns to the start. It is silenced while that happens, and then
+   * put back to whatever it was, because whether the video's own sound is
+   * being heard is a choice the person made and not this method's to change.
+   */
   async #measureFps(): Promise<void> {
     const video = this.#video;
     if (!video) return;
+    const wasMuted = video.muted;
     try {
       video.muted = true;
       await video.play();
@@ -150,6 +159,8 @@ export class SoundDesignSession {
       this.effects.onTime(0);
     } catch {
       // Leave the default rate in place; it can be set by hand.
+    } finally {
+      video.muted = wasMuted;
     }
   }
 
