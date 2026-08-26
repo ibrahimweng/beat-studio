@@ -2,6 +2,7 @@ import type { AudioEngine } from './audio/engine.ts';
 import { renderProject, renderStems } from './audio/render.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
+import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
   addLayer,
@@ -504,6 +505,23 @@ export class SoundDesignSession {
       saveBlob(encodeWav(buffer), `${name}.wav`);
       this.#store.set({ status: 'MP3 encoder offline — saved WAV' });
     }
+  }
+
+  // ---------- the palette as a patch ----------
+
+  /**
+   * Write the palette out as a patch file.
+   *
+   * The sounds in Beat Studio have only ever existed inside Beat Studio. A
+   * patch is the `@web-kits/audio` unit of exchange: commit the file to a
+   * repository and anyone can install the whole palette with
+   * `npx @web-kits/audio add <owner>/<repo>`, play it in their own page, or
+   * read it to see how any of these sounds is put together.
+   */
+  exportPatch(): void {
+    const blob = new Blob([patchJson()], { type: 'application/json' });
+    saveBlob(blob, 'beat-studio.patch.json');
+    this.#store.set({ status: 'palette written as a patch' });
   }
 
   // ---------- session file ----------

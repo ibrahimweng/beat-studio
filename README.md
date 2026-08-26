@@ -187,6 +187,24 @@ Leave it off and any sound still ringing at the end is allowed to finish.
 later. The video is not stored in it, so you point at the video again when you
 come back.
 
+### Take the sounds with you
+
+"Export patch" writes all 37 sounds to a file in the `@web-kits/audio` format.
+Commit that file to a repository and anyone can install the whole palette with
+`npx @web-kits/audio add <owner>/<repo>`, play the sounds in their own page, or
+read the file to see how any of them is put together.
+
+The sounds are described rather than coded, which is what makes this possible.
+Each voice says what it is built from and how each part moves, and one piece of
+code turns that into sound, whether you are hearing it here or exporting it.
+
+Most of them survive the trip exactly. That format describes a sound as a graph
+of standard parts, and a few of these are not that, so those come out close
+rather than identical. Across all 37 the middle score is 0.987 and levels land
+within a tenth. The ten that come out under 0.93 are listed in
+`src/export/patch.ts` with the reason for each. `tools/README.md` says how to
+measure it again.
+
 ## What you can do
 
 ### Play an instrument
@@ -325,7 +343,8 @@ src/
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
-    voices.ts      the synthesis for each instrument
+    voice-spec.ts  what a voice is made of, and the one thing that plays it
+    voices.ts      the drum kit and the pitched instruments
     design-voices.ts impacts, whooshes, risers and the rest
     sources.ts     turning a placed sound into a played sound
     render.ts      writing the file, faster than real time
@@ -334,6 +353,7 @@ src/
   timeline/        the cue list, layers and timing
   video/           loading a video, following its clock, and reading its hits
   export/
+    patch.ts       the palette, written out for other apps to play
     wav.ts         WAV encoder
     mp3.ts         MP3 encoder, loaded only when you export
     midi.ts        MIDI file writer

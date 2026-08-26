@@ -223,6 +223,20 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     openInput,
   ]);
 
+  const paletteBody = el('div', {}, [
+    el('div', { class: 'hint', style: { marginBottom: '6px' } , text:
+      'Write all 37 sounds to a file others can install and play.' }),
+    button(
+      {
+        class: 'chip chip--sm',
+        style: { width: '100%' },
+        title: 'Write the palette as a @web-kits/audio patch file',
+        on: { click: () => session.exportPatch() },
+      },
+      ['Export patch'],
+    ),
+  ]);
+
   const root = el('aside', { class: 'inspector' }, [
     el('div', {}, [
       el('div', { class: 'section-title', text: 'Place' }),
@@ -237,6 +251,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     el('div', {}, [el('div', { class: 'section-title', text: 'Selected sound' }), cueBody]),
     el('div', {}, [el('div', { class: 'section-title', text: 'Export' }), exportBody]),
     el('div', {}, [el('div', { class: 'section-title', text: 'Session' }), sessionBody]),
+    el('div', {}, [el('div', { class: 'section-title', text: 'Palette' }), paletteBody]),
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;

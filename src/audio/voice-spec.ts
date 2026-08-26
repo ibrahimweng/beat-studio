@@ -104,6 +104,17 @@ export interface LayerSpec {
   /** Seconds after the voice starts. */
   delay?: number;
   lfo?: readonly LfoSpec[];
+  /**
+   * How long the source runs past its own length before being stopped.
+   *
+   * Housekeeping rather than anything you can hear on its own. It matters
+   * only because an exponential curve cannot reach zero, so every voice is
+   * still sounding very faintly when its length is up, and where the source
+   * stops decides how much of that faint tail survives. The drum kit has
+   * always stopped sooner than the design voices, and saying so here is what
+   * lets both keep sounding exactly as they did.
+   */
+  overrun?: number;
 }
 
 export interface VoiceSpec {
@@ -124,7 +135,7 @@ export const ratio = (semitones: number): number => Math.pow(2, semitones / 12);
 
 /** The smallest value an exponential curve can reach. */
 const FLOOR = 1e-5;
-/** Let a source run slightly past its envelope so nothing is cut mid-ramp. */
+/** Default for {@link LayerSpec.overrun}. */
 const OVERRUN = 0.05;
 
 /** Write a curve onto a parameter, starting at `t`. */
@@ -176,6 +187,7 @@ function buildSource(
   t: number,
 ): { node: AudioNode; freq: AudioParam | null } {
   const { source, length } = layer;
+  const until = t + length + (layer.overrun ?? OVERRUN);
 
   if (source.kind === 'osc') {
     const osc = ctx.createOscillator();
@@ -183,7 +195,7 @@ function buildSource(
     if (source.detune) osc.detune.value = source.detune;
     applyCurve(osc.frequency, source.freq, t);
     osc.start(t);
-    osc.stop(t + length + OVERRUN);
+    osc.stop(until);
     return { node: osc, freq: osc.frequency };
   }
 
@@ -193,7 +205,7 @@ function buildSource(
       ? reverseBuffer(ctx, length, source)
       : noiseBuffer(ctx, length, source.fade === true);
   node.start(t);
-  node.stop(t + length + OVERRUN);
+  node.stop(until);
   return { node, freq: null };
 }
 
