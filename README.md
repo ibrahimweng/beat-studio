@@ -61,6 +61,54 @@ can change it there if the measurement is wrong. The video's own sound is muted
 to start with. Turn on "Ref audio" to hear it, for example when you are working
 around a music track. It is never included in anything you export.
 
+### Moving about in the clip
+
+The row of round buttons at the top is the transport, laid out either side of
+play so that every backward control has its forward twin the same distance
+away.
+
+| Button | What it does |
+|---|---|
+| `❘◀` | Back to the start |
+| `■` | Stop, and go back to where play started rather than to the top |
+| `❘◀◀` and `▶▶❘` | The sound before or after the playhead, selected as you land on it |
+| `◀◀` and `▶▶` | Held down, run through the clip at six times speed |
+| `◀` and `▶` | One frame back or on |
+| `▶` (the large one) | Play or pause |
+| `●` | Record |
+
+Stop goes back to where play started because a stop that drops you at the top
+of a two minute clip means winding back to the part you were working on every
+time.
+
+The two skip buttons step by the moment a sound is pinned to, not by where it
+starts sounding, so a riser anchored to its end steps to the moment it arrives
+at. Whatever they land on is selected, which makes them the quickest way to
+walk through a piece and check each hit in turn.
+
+Hold rewind or fast forward and the clip runs while you hold it, at six times
+speed, and stops the moment you let go — including if you let go with the
+pointer somewhere else on the screen. It is for finding a moment by watching
+rather than by reading timecode.
+
+The playhead can also be dragged. Take hold of the small tab at the top of the
+line, or press anywhere on the ruler and drag. Doing it while the clip is
+playing scrubs, and playing picks up again from wherever you let go.
+
+### Recording what you play
+
+The round red button arms the timeline. With it on, whatever you play on the
+drums, the keys or the guitar lands on the timeline at the playhead, on the
+layer you are working on — by mouse or by keyboard, from whichever instrument
+screen you are on.
+
+It does not need the transport running. Standing still it drops everything at
+the same moment, which is a way of building a stack by hand. Running, it is a
+pass played in against the picture.
+
+This is separate from the record button on the instrument screens, which
+captures a take against the loop and has nothing to do with the timeline.
+
 ### Place sounds
 
 The timeline below the video is measured in time, not in bars. Pick a sound on
@@ -278,6 +326,15 @@ The line between the video and the timeline can be dragged. The timeline takes
 the space and the video scales down to fit whatever is left, so you can give
 most of the screen to the timeline once there are more layers than fit. Double
 click the line to put it back where it started. The size is remembered.
+
+"Window", in the bar at the top, goes further: it floats the clip in a small
+window over everything and takes the stage above the lanes out altogether, so
+all of that height goes to the timeline. It is the same window the instrument
+screens use, so it can be dragged anywhere and resized by its corner, and it
+stays where you put it between sessions. Its × puts the stage back.
+
+The window is clamped so it can never be parked over the bar on the left,
+which is the only way between screens.
 
 Layers can be added, renamed and removed. Use "+ Layer" at the bottom of the
 layer names, double click a name to change it, and the small cross removes a
@@ -517,6 +574,14 @@ The first click starts the audio engine. A browser does not allow a page to make
 sound until the person using it interacts with the page. That is why the screen
 stays covered until you click "Power up".
 
+Once a video is loaded, "Video" in the bar at the top floats the clip over the
+instrument in a small window, so you can play to the picture. Drag its strip to
+move it and its corner to resize it; it stays where you put it. The same window
+is available on the timeline, from the "Window" button there.
+
+To put what you play onto the timeline, arm the round red button on the sound
+design bar first. See "Recording what you play" above.
+
 ### Program a beat
 
 The sequencer at the bottom has 8 lanes and either 16 or 32 steps. Click a step
@@ -561,7 +626,7 @@ There are three export formats.
 | Key | What it does |
 |---|---|
 | Space | Start or stop the transport |
-| R | Start or stop recording, except while the piano is showing |
+| R | Start or stop a take, except while the piano is showing |
 | W E R T | Crash, splash, second crash, ride |
 | A S | Closed hi-hat, open hi-hat |
 | D F | Kick, second kick |
@@ -570,13 +635,21 @@ There are three export formats.
 | Z to M | Lower octave on the piano and guitar |
 | Q to U | Upper octave on the piano and guitar |
 
-R plays a note on the piano, so it only starts recording when the piano is not
-showing.
+R plays a note on the piano, so it only starts a take when the piano is not
+showing. This is the take recorder on the instrument screens, not the round red
+button on the sound design bar that puts what you play onto the timeline.
 
 ## Help
 
 The question mark at the bottom of the bar on the left opens a panel listing
-what everything does and every keyboard shortcut.
+what everything does and every keyboard shortcut, in fifteen sections covering
+both halves of the app.
+
+Beside that, every part of every screen has a small question mark of its own —
+next to Library, next to Describe, next to the transport, next to the
+sequencer, and so on. Pressing one opens the same panel scrolled to the
+section that answers it, with that section marked, so you get the answer to
+what you asked rather than the top of a long page.
 
 The first time you open the app, a short walkthrough points at each part of
 the Sound design screen in turn. You can leave it at any step and it does not come
@@ -665,6 +738,8 @@ src/
     midi.ts        MIDI file writer
     save.ts        handing a file to the browser
   ui/              one file per part of the interface
+    help.ts        the help panel, and the small "?" that opens it at a section
+    video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
   styles/          design tokens and stylesheets
 public/            files copied to the site root, which is where the icons live

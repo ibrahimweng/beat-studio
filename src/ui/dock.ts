@@ -3,6 +3,7 @@ import type { Session } from '../session.ts';
 import type { AppState } from '../store.ts';
 import type { LaneKey, Take } from '../types.ts';
 import { button, clear, el, setText, toggleClass } from './dom.ts';
+import { helpButton } from './help.ts';
 import type { View } from './view.ts';
 
 export interface DockView extends View {
@@ -46,6 +47,7 @@ export function createDock(session: Session): DockView {
   const bar = el('div', { class: 'dock__bar' }, [
     seqTab,
     takesTab,
+    helpButton('pattern', 'the sequencer and takes'),
     el('div', { class: 'dock__divider' }),
     el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
       el('div', { class: 'micro-label', style: { marginRight: '4px' }, text: 'Pattern' }),

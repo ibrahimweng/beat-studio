@@ -12,6 +12,7 @@ import {
 } from '../../timeline/types.ts';
 import { button, clear, el, setText, svg, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
+import { helpButton } from '../help.ts';
 import { createMotionStrip } from './motion-strip.ts';
 
 const MIN_PX_PER_SEC = 8;
@@ -96,7 +97,11 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const lanes = el('div', { class: 'tl__lanes' });
   // Marks where the video stops, so the empty space beyond it reads as empty.
   const beyond = el('div', { class: 'tl__beyond' });
-  const playhead = el('div', { class: 'tl__playhead' });
+  const playhead = el('div', { class: 'tl__playhead' }, [
+    // A handle wide enough to catch, since a line one pixel across is not
+    // something anybody can reliably put a pointer on.
+    el('div', { class: 'tl__playhead-grip', on: { pointerdown: scrubFrom } }),
+  ]);
   /** The rectangle dragged across the lanes to choose several sounds. */
   const band = el('div', { class: 'tl__band' });
   band.style.display = 'none';
@@ -167,9 +172,13 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
 
   const root = el('section', { class: 'tl' }, [
     el('div', { class: 'tl__bar' }, [
-      el('div', { class: 'micro-label', text: 'Timeline' }),
+      el('div', { class: 'micro-label section-title--asks' }, [
+        el('span', { text: 'Timeline' }),
+        helpButton('timeline', 'the timeline'),
+      ]),
       undo,
       redo,
+      helpButton('edit', 'editing on the timeline'),
       detectGroup,
       el('div', { class: 'dock__spacer' }),
       zoomOut,
@@ -200,6 +209,45 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     const rect = lane.getBoundingClientRect();
     return Math.max(0, (event.clientX - rect.left) / pxPerSec);
   }
+
+  /**
+   * Drag the ruler to move the playhead.
+   *
+   * On the ruler and on the playhead's own grip rather than anywhere on the
+   * lanes, because the lanes already mean something: a press there places a
+   * sound or draws a selection, and a timeline where clicking the work area
+   * also jumps the playhead is one where every misclick loses your place.
+   *
+   * The move and up are listened for on the window rather than on what was
+   * pressed, so a drag that wanders off the ruler — up into the bar, or down
+   * over the lanes — keeps scrubbing until it is let go.
+   */
+  function scrubFrom(event: PointerEvent): void {
+    event.preventDefault();
+    const wasPlaying = session.playing;
+    if (wasPlaying) session.pause();
+
+    const to = (at: PointerEvent): void => {
+      const rect = content.getBoundingClientRect();
+      session.seek(Math.max(0, (at.clientX - rect.left) / pxPerSec));
+    };
+
+    const move = (at: PointerEvent): void => to(at);
+    const up = (): void => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      // Picked up where it was put down, so scrubbing during playback is a
+      // way of moving about rather than a way of stopping.
+      if (wasPlaying) session.togglePlay();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    to(event);
+  }
+
+  ruler.addEventListener('pointerdown', scrubFrom);
 
   /** Where a pointer is, in the timeline's own coordinates. */
   function pointIn(event: PointerEvent): { x: number; y: number } {

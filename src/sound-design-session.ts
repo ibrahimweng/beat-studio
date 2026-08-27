@@ -56,6 +56,9 @@ import { emptyDetection, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
 
+/** How often a held fast forward or rewind moves the playhead. */
+const SHUTTLE_MS = 1000 / 30;
+
 /**
  * The loudness every export is brought to, in LUFS.
  *
@@ -134,6 +137,10 @@ export class SoundDesignSession {
   #store: Store;
   #video: HTMLVideoElement | null = null;
   #clock: VideoClock | null = null;
+  /** Running while fast forward or rewind is held. */
+  #shuttling: ReturnType<typeof setInterval> | null = null;
+  /** Where the playhead was when play was last pressed, for stop. */
+  #playedFrom: number | null = null;
   #objectUrl: string | null = null;
 
   /** What was copied, waiting to be put somewhere. */
@@ -477,8 +484,12 @@ export class SoundDesignSession {
 
   togglePlay(): void {
     if (!this.#clock) return;
+    // Whichever way this goes, a held fast forward is over.
+    this.stopShuttle();
     if (this.#clock.playing) this.#clock.pause();
     else {
+      // Remembered so stop can put it back, rather than dropping you at zero.
+      this.#playedFrom = this.#clock.time;
       this.#wake();
       void this.#clock.play();
     }
@@ -490,6 +501,76 @@ export class SoundDesignSession {
 
   seek(time: number): void {
     this.#clock?.seek(time);
+  }
+
+  /** Whether playing an instrument lands on the timeline. */
+  get armed(): boolean {
+    return this.#store.state.armed;
+  }
+
+  /**
+   * Stop: pause, and go back to where the playhead was before it ran.
+   *
+   * Not back to zero. Stopping and finding yourself at the top of a two
+   * minute clip means winding back to the part you were working on every
+   * time, which is what makes a stop button annoying rather than useful.
+   */
+  stop(): void {
+    const from = this.#playedFrom;
+    this.pause();
+    this.stopShuttle();
+    this.seek(from ?? 0);
+  }
+
+  /**
+   * Jump to the sound before or after the playhead, and take it.
+   *
+   * By where each sound is pinned rather than where it starts sounding: a
+   * riser anchored to its end begins well before the moment it is for, and
+   * the moment it is for is the one worth stepping between.
+   */
+  toSound(direction: -1 | 1): void {
+    const now = this.time;
+    // A hair either side, or a second press sticks on the sound just reached.
+    const edge = 1e-3;
+    const ordered = [...this.project.cues].sort((a, b) => a.time - b.time);
+    const found =
+      direction > 0
+        ? ordered.find((cue) => cue.time > now + edge)
+        : [...ordered].reverse().find((cue) => cue.time < now - edge);
+    if (!found) return;
+    this.seek(found.time);
+    this.select([found.id]);
+  }
+
+  /**
+   * Run through the clip at a multiple of speed until told to stop.
+   *
+   * Driven by the wall clock rather than by a fixed step per tick, so the
+   * speed is the speed whatever the browser is doing: a tab that drops frames
+   * shuttles the same distance, just less smoothly.
+   */
+  shuttle(rate: number): void {
+    this.stopShuttle();
+    if (!rate || !this.#clock) return;
+    this.pause();
+    let last = performance.now();
+    this.#shuttling = setInterval(() => {
+      const now = performance.now();
+      const moved = ((now - last) / 1000) * rate;
+      last = now;
+      const to = this.time + moved;
+      this.seek(to);
+      // Nothing left to run through in that direction.
+      if (to <= 0 || (this.project.duration > 0 && to >= this.project.duration)) {
+        this.stopShuttle();
+      }
+    }, SHUTTLE_MS);
+  }
+
+  stopShuttle(): void {
+    if (this.#shuttling !== null) clearInterval(this.#shuttling);
+    this.#shuttling = null;
   }
 
   /** Move by a number of frames, for landing a hit exactly. */
@@ -568,6 +649,11 @@ export class SoundDesignSession {
 
   toggleArmed(): void {
     this.#store.set({ armed: !this.#store.state.armed });
+  }
+
+  /** Float the video over everything instead of sitting it on the stage. */
+  toggleVideoWindow(): void {
+    this.#store.set({ videoWindow: !this.#store.state.videoWindow });
   }
 
   /**

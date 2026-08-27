@@ -92,7 +92,7 @@ export function createKeys(session: Session): KeysView {
     el('div', { class: 'piano__header' }, [
       el('div', { class: 'micro-label', style: { fontWeight: '500' }, text: '88‑key grand' }),
       el('div', { class: 'piano__rule' }),
-      el('div', { class: 'hint', text: 'rows Z–M and Q–P play the lit octaves' }),
+      el('div', { class: 'hint', text: 'rows Z–M and Q–U play the lit octaves' }),
     ]),
     el('div', { class: 'piano__scroller' }, [el('div', { class: 'piano__keybed' }, whites)]),
   ]);

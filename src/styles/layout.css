@@ -26,6 +26,15 @@
 .rail {
   width: 64px;
   flex: 0 0 auto;
+  /*
+   * Above the floating video window, which is at 40.
+   *
+   * The window is clamped so it cannot be dragged here in the first place,
+   * and this is the second lock on the same door: the rail is how you get
+   * between screens, so nothing may ever cover it, however it got there.
+   */
+  position: relative;
+  z-index: 50;
   background: var(--side);
   border-right: 1px solid var(--line);
   display: flex;

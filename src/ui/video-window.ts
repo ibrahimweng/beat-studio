@@ -9,6 +9,14 @@ const MIN_H = 120;
 /** How much of the window has to stay on screen, so it can always be grabbed. */
 const KEEP_ON = 48;
 
+/**
+ * How much of the left edge belongs to the rail, in pixels.
+ *
+ * Held in step with `.rail` in `layout.css` by hand, which is a small cost
+ * against the window being able to cover the app's only navigation.
+ */
+const RAIL_W = 64;
+
 interface Placed {
   x: number;
   y: number;
@@ -21,10 +29,18 @@ const DEFAULT: Placed = { x: 24, y: 96, w: 360, h: 220, open: true };
 
 export interface VideoWindow {
   el: HTMLElement;
-  /** Take the video out of its usual home and show it here. */
-  open(): void;
-  /** Put the video back and hide the window, and stop asking for it. */
+  /**
+   * Take the video out of its usual home and show it here.
+   *
+   * `remember` says whether this counts as the instrument screens asking for
+   * the window. The sound design screen opens it too, from its own setting,
+   * and that must not become an answer on the instruments' behalf.
+   */
+  open(remember?: boolean): void;
+  /** Put the video back and hide the window. */
   close(): void;
+  /** The instrument screens no longer want the window. */
+  forget(): void;
   /**
    * Hide it without giving up on it.
    *
@@ -34,7 +50,10 @@ export interface VideoWindow {
    */
   stow(): void;
   toggle(): void;
-  /** Whether the window is wanted, rather than whether it is on show. */
+  /**
+   * Whether the instrument screens want the window, rather than whether it is
+   * on show. Kept across reloads, so it comes back where and as you left it.
+   */
   readonly wanted: boolean;
   /** Whether it is on show right now. */
   readonly showing: boolean;
@@ -59,6 +78,14 @@ export function createVideoWindow(options: {
   video: HTMLVideoElement;
   /** Where the video belongs when this window is not showing it. */
   home: () => HTMLElement;
+  /**
+   * The × was pressed, as opposed to the window being stowed for a screen
+   * that does not float it.
+   *
+   * The two screens mean different things by it, and only the app knows which
+   * one is up, so the meaning is decided there rather than here.
+   */
+  onClose?: () => void;
 }): VideoWindow {
   const placed = load();
   const { video } = options;
@@ -122,7 +149,11 @@ export function createVideoWindow(options: {
     const maxH = Math.max(MIN_H, window.innerHeight - KEEP_ON);
     placed.w = Math.max(MIN_W, Math.min(maxW, placed.w));
     placed.h = Math.max(MIN_H, Math.min(maxH, placed.h));
-    placed.x = Math.max(KEEP_ON - placed.w, Math.min(window.innerWidth - KEEP_ON, placed.x));
+    // Never over the rail. It is the only way to get from one screen to
+    // another, and a window that can be parked on top of it is a window that
+    // can strand you: measured in a browser, dragging it left far enough made
+    // every rail button unclickable.
+    placed.x = Math.max(RAIL_W, Math.min(window.innerWidth - KEEP_ON, placed.x));
     placed.y = Math.max(0, Math.min(window.innerHeight - KEEP_ON, placed.y));
 
     root.style.left = `${placed.x}px`;
@@ -171,14 +202,14 @@ export function createVideoWindow(options: {
 
   // ---------- opening and closing ----------
 
-  function open(): void {
+  function open(remember = true): void {
     hold.appendChild(video);
     // The stage hides the video until a clip is loaded; in here it is the
     // whole point of the window, so it is always shown and the window itself
     // is what appears and disappears.
     video.style.display = '';
     root.style.display = '';
-    placed.open = true;
+    if (remember) placed.open = true;
     apply();
     save(placed);
   }
@@ -188,8 +219,21 @@ export function createVideoWindow(options: {
     options.home().prepend(video);
   }
 
+  /**
+   * The × was pressed.
+   *
+   * What that means is not decided here. On the instruments it means the
+   * window is not wanted; on the sound design screen it means the setting
+   * that floats the video is off, and the instruments' own answer is none of
+   * its business. Both live where that difference is known, so this only
+   * hides and says so.
+   */
   function close(): void {
     put();
+    options.onClose?.();
+  }
+
+  function forget(): void {
     placed.open = false;
     save(placed);
   }
@@ -215,6 +259,7 @@ export function createVideoWindow(options: {
     el: root,
     open,
     close,
+    forget,
     stow: put,
     toggle: () => (root.style.display === 'none' ? open() : close()),
     get wanted() {

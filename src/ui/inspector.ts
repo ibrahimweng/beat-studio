@@ -3,6 +3,7 @@ import type { AppState } from '../store.ts';
 import type { Metro } from '../types.ts';
 import { createKnob, createSliderV } from './controls.ts';
 import { button, el, setText, toggleClass } from './dom.ts';
+import { helpButton } from './help.ts';
 import { waveMark } from './icons.ts';
 import type { View } from './view.ts';
 
@@ -190,13 +191,23 @@ export function createInspector(session: Session): View {
     ]),
   ]);
 
+  /** A section heading with a small "?" that opens the help at its part. */
+  const section = (text: string, at: string, body: HTMLElement): HTMLElement =>
+    el('div', {}, [
+      el('div', { class: 'section-title section-title--asks' }, [
+        el('span', { text }),
+        helpButton(at, text.toLowerCase()),
+      ]),
+      body,
+    ]);
+
   const root = el('aside', { class: 'inspector' }, [
     header,
-    el('div', {}, [el('div', { class: 'section-title', text: 'Engine' }), engineCard]),
+    section('Engine', 'engine', engineCard),
     effects,
-    el('div', {}, [el('div', { class: 'section-title', text: 'Clock' }), clockCard]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Equalizer' }), eqCard]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Keyboard' }), keyboardCard]),
+    section('Clock', 'pattern', clockCard),
+    section('Equalizer', 'engine', eqCard),
+    section('Keyboard', 'instruments', keyboardCard),
   ]);
 
   return {

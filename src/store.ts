@@ -85,6 +85,14 @@ export interface AppState {
   mine: PackSound[];
   /** Sounds read out of a recording, and rebuilt out of the palette. */
   extract: Extraction;
+  /**
+   * The video floats in its own window rather than sitting on the stage.
+   *
+   * Only meaningful on the sound design screen, where there is a stage to
+   * choose against. On the instrument screens the window is the only way to
+   * see the clip, so it opens there whether this is on or not.
+   */
+  videoWindow: boolean;
 }
 
 /**
@@ -163,6 +171,7 @@ export function initialState(): AppState {
     packs: [],
     mine: [],
     extract: { busy: null, sounds: [], from: null },
+    videoWindow: false,
   };
 }
 

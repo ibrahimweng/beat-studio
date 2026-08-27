@@ -17,6 +17,7 @@ import {
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
+import { helpButton } from '../help.ts';
 import type { View } from '../view.ts';
 
 /** Every drum voice the engine has, not just the eight the sequencer drives. */
@@ -45,6 +46,17 @@ function noteName(midi: number): string {
  * half edits whichever cue is selected, and writes the files.
  */
 export function createSoundDesignPanel(session: SoundDesignSession): View {
+  /** A section heading with a small "?" that opens the help at its part. */
+  const heading = (
+    text: string,
+    section: string,
+    style?: Record<string, string>,
+  ): HTMLElement =>
+    el('div', { class: 'section-title section-title--asks', ...(style ? { style } : {}) }, [
+      el('span', { text }),
+      helpButton(section, text.toLowerCase()),
+    ]);
+
   // ---------- sound picker ----------
 
   /**
@@ -207,6 +219,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const librarySection = el('div', { class: 'pick-group' }, [
     el('div', { class: 'pick-group__title' }, [
       el('span', { text: 'Library' }),
+      helpButton('library', 'the library'),
       libraryCount,
     ]),
     libraryRow,
@@ -262,6 +275,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const saySection = el('div', { class: 'pick-group' }, [
     el('div', { class: 'pick-group__title' }, [
       el('span', { text: 'Made from your words' }),
+      helpButton('describe', 'describing a sound'),
       sayNote,
     ]),
     sayRow,
@@ -422,7 +436,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   ]);
 
   const heardBody = el('div', {}, [
-    el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'From a recording' }),
+    heading('From a recording', 'extract', { marginTop: '12px' }),
     heardOpen,
     heardInput,
     heardNote,
@@ -642,7 +656,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ['Add'],
   );
   const madeOf = el('div', { style: { marginTop: '10px' } }, [
-    el('div', { class: 'setting-row__label', text: 'Made of' }),
+    el('div', { class: 'setting-row__label section-title--asks' }, [
+      el('span', { text: 'Made of' }),
+      helpButton('stack', 'stacking sounds'),
+    ]),
     madeOfRow,
     stackButton,
   ]);
@@ -964,7 +981,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   const root = el('aside', { class: 'inspector' }, [
     el('div', {}, [
-      el('div', { class: 'section-title', text: 'Place' }),
+      heading('Place', 'place'),
       search,
       // First, because a sound you made is the one you are most likely
       // reaching for.
@@ -981,13 +998,13 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       heardBody,
-      el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'On layer' }),
+      heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
     ]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Selected sound' }), cueBody]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Export' }), exportBody]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Session' }), sessionBody]),
-    el('div', {}, [el('div', { class: 'section-title', text: 'Palette' }), paletteBody]),
+    el('div', {}, [heading('Selected sound', 'sound'), cueBody]),
+    el('div', {}, [heading('Export', 'export'), exportBody]),
+    el('div', {}, [heading('Session', 'export'), sessionBody]),
+    el('div', {}, [heading('Palette', 'export'), paletteBody]),
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;
