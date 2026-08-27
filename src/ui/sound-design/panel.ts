@@ -14,7 +14,7 @@ import {
   type CuePreset,
   type CueSource,
 } from '../../timeline/types.ts';
-import { CATALOGUE, search as findSounds } from '../../audio/catalogue.ts';
+import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 
@@ -170,8 +170,30 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    */
   const LIBRARY_SHOWN = 48;
 
-  /** With nothing typed, one of each voice at its own size, in the dry. */
-  const SHELF = CATALOGUE.filter((entry) => entry.id.endsWith(':mid:dry'));
+  /**
+   * With nothing typed, one of each voice, at a different size and a
+   * different place each time.
+   *
+   * One of each voice in the dry at its own size was tried first and read as
+   * forty repeats of the list of voices sitting right underneath it. Walking
+   * the two axes instead means the shelf shows what the library is — a huge
+   * thing in a cavern next to a tiny one in a room — rather than the flattest
+   * corner of it.
+   */
+  const SHELF = (() => {
+    const byVoice = new Map<string, Entry[]>();
+    for (const entry of CATALOGUE) {
+      const list = byVoice.get(entry.voice);
+      if (list) list.push(entry);
+      else byVoice.set(entry.voice, [entry]);
+    }
+    // The size steps by one and the place by two, and the place shifts again
+    // every five voices, so no two next to each other share either and all
+    // twenty five pairings have been shown by the twenty fifth voice.
+    return [...byVoice.values()].map(
+      (list, i) => list[(i % 5) * 5 + ((i * 2 + Math.floor(i / 5)) % 5)],
+    );
+  })();
 
   const libraryRow = el('div', { class: 'pick-row pick-row--scroll' });
   const libraryCount = el('span', { class: 'hint' });
