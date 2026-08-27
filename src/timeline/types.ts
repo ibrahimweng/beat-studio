@@ -86,6 +86,27 @@ export interface CueSource {
   midi?: number;
   /** Pack sources only: which loaded pack the name belongs to. */
   pack?: string;
+  /**
+   * Other sounds that play as part of this one.
+   *
+   * A stack is one sound, not several sitting on top of each other: it moves
+   * once, is stretched once, and sits in one room. Which is the point — two
+   * cues at the same moment are two things to keep lined up forever, and a
+   * boom with a metallic ring over it is one thing.
+   *
+   * One deep. A sound in here carrying its own `with` is read as the sound
+   * without it, because the alternative is a tree, and nobody putting sound
+   * to picture has ever wanted a tree.
+   */
+  with?: readonly CueSource[];
+  /**
+   * How much of this one, when it is part of another sound's stack.
+   *
+   * Meaningless anywhere else, and one when it is not given. Here because a
+   * ring over a boom is wanted at about half, and a stack with no way to say
+   * so is a stack that comes out as mush half the time.
+   */
+  mix?: number;
 }
 
 /**

@@ -208,6 +208,24 @@ export const AMOUNT: Readonly<Record<string, number>> = {
   barely: 0.3, hardly: 0.3, gently: 0.5, softly: 0.5,
 };
 
+/**
+ * Words that put one sound on top of another.
+ *
+ * The signal that a description is about two things rather than one thing
+ * described twice. "A metal door slamming" is one object and four words for
+ * it; "a boom with a metallic ring over it" is two sounds, and the only thing
+ * that says so is the "with". What comes before the joining word is the sound
+ * being made, and what comes after is what goes on top of it.
+ *
+ * All of them are in {@link FILLER} as well, and both readings are right: a
+ * joining word between two sounds joins them, and anywhere else it is a word
+ * nobody needs told about.
+ */
+export const JOINERS: readonly string[] = [
+  'with', 'over', 'under', 'underneath', 'beneath', 'atop', 'plus', 'and',
+  'behind', 'alongside', 'topped',
+];
+
 /** Words that cancel whichever dimension the next word belongs to. */
 export const NEGATORS: readonly string[] = ['no', 'not', 'without', 'none', 'zero', 'never'];
 
