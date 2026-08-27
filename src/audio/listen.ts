@@ -10,7 +10,7 @@
  * never leaves the machine — same as the video, and for the same reason.
  */
 
-/** How much of a sound has to have arrived before it counts as started. */
+/** How wide a look at the sound each measurement takes, and how far it steps. */
 const WINDOW = 1024;
 const HOP = 256;
 
@@ -36,7 +36,8 @@ const SHADOW_SHARE = 0.6;
  * rises sharply enough to be found the usual way. Measured, the whoosh in the
  * test recording was missed entirely and its loudest moment turned up as a
  * spurious event half a second late. A second, slower pass over the same
- * measurement catches them.
+ * measurement catches them — a third of a second late, which is as sharp an
+ * answer as "when did it start" has for a sound that fades up.
  */
 const SLOW_SMOOTH = 0.15;
 const SLOW_APART = 0.3;
@@ -46,8 +47,8 @@ const SLOW_REACH = 0.5;
 /**
  * The two points the decay is read from, as shares of a sound's own peak.
  *
- * Twenty and forty decibels down. Neither is where the sound stops, and that
- * is the point: the app's own length control means the moment an envelope has
+ * Six and twenty decibels down. Neither is where the sound stops, and that is
+ * the point: the app's own length control means the moment an envelope has
  * fallen to about sixty two decibels down, which is below the noise floor of
  * most recordings and cannot be measured directly. Two points that can be
  * measured give a rate, and the rate gives the rest.
@@ -78,10 +79,10 @@ export const BANDS = 20;
 /**
  * The range a fingerprint covers.
  *
- * Stopping at ten kilohertz rather than at the top of hearing, so that a
- * candidate rendered at half the usual rate can be compared with a recording
- * at the full one and the two are looking at the same thing. Everything that
- * says what a sound effect is happens below this; what is above it is air.
+ * Stopping at ten kilohertz rather than at the top of hearing. Everything that
+ * says what a sound effect is happens below this, and a recording arrives at
+ * whatever rate its file was written at, so a ceiling well under the lowest of
+ * those is what lets two sounds be compared at all.
  */
 const LOW_HZ = 40;
 const TOP_HZ = 10000;

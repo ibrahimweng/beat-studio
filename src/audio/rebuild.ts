@@ -11,11 +11,9 @@ import { nearest, PLACE_NAMES, SIZE_NAMES } from './vocabulary.ts';
  * The honest statement of what this is: a search of the palette, not a
  * transcription. Forty synthesised voices cannot reproduce an arbitrary
  * recording, and nothing here pretends otherwise — what comes back is the
- * closest thing the app can build, together with a number saying how close,
- * measured rather than asserted. A rebuild at ninety per cent is worth
- * placing. One at forty is worth hearing once and then ignoring, and the
- * whole point of showing the number is that you can tell which is which
- * without listening to all of them.
+ * closest few things the app can build, and a number saying how alike each
+ * one is. That number is not a verdict, and the note further down says why
+ * there is no verdict to give.
  *
  * What you get is editable in a way a sample never is. A rebuilt hit is a
  * voice and five numbers, so it can be lengthened, tuned, put in a different
@@ -39,10 +37,10 @@ export interface Made {
  *
  * Several rather than one, and that is not hedging. Measured against
  * recordings this app made itself — where the right answer is known — the
- * closest voice is the one that made it about a third of the time, and one of
- * the three closest about three quarters of the time. A search that is right
- * a third of the time and useful three quarters of the time should hand you
- * three and let you listen, not pick one and call it the answer.
+ * closest voice is the one that made it about a quarter of the time, and one
+ * of the three closest about three quarters of the time. A search that is
+ * right a quarter of the time and useful three quarters of the time should
+ * hand you three and let you listen, not pick one and call it the answer.
  */
 export interface Rebuilt extends Made {
   heard: Heard;
@@ -51,12 +49,14 @@ export interface Rebuilt extends Made {
 }
 
 /**
- * Candidates are rendered at half the usual rate.
+ * Candidates are rendered at the rate the app exports at.
  *
- * Fingerprints stop at ten kilohertz, so half rate holds everything either
- * side of the comparison looks at, and the search does three times as much
- * work per second for it. The sound that eventually gets placed is rendered
- * by the app at full rate like any other; this rate is only for choosing.
+ * Half rate was tried, on the reasoning that fingerprints stop at ten
+ * kilohertz so nothing either side of the comparison would notice. It is
+ * three times faster and it recovers the right voice less often, because
+ * several of the voices are built from filters that do not behave the same
+ * way with the top of the band moved. Choosing correctly is worth more here
+ * than choosing quickly.
  */
 const RATE = 48000;
 
@@ -89,8 +89,8 @@ export type Progress = (done: number, of: number) => void;
  *
  * Two passes. The first asks which of the forty voices is even the right
  * shape, at the length that was measured and nothing else changed. The second
- * takes the three that came closest and looks around them — brighter, duller,
- * drier, wetter — which is worth doing for three voices and not for forty.
+ * takes the few that came closest and looks around them — brighter, duller,
+ * drier, wetter — which is worth doing for five voices and not for forty.
  */
 export async function rebuild(
   heard: readonly Heard[],
@@ -130,18 +130,6 @@ async function one(heard: Heard): Promise<Rebuilt> {
     .map((made) => ({ ...made, match: alike(heard.print, made.print, usual) }))
     .sort((a, b) => b.match - a.match);
 
-  /*
-   * What a typical voice scores against this sound, so the number shown means
-   * something.
-   *
-   * A raw similarity is not a percentage anybody can act on: measured, a
-   * deliberately wrong voice scores eighty two and the same sound twice
-   * scores ninety nine, so a "seventy per cent match" reads as most of the way
-   * there when it is in fact below chance. Scored against the middle of the
-   * forty voices already rendered, nought is what an unrelated voice gets and
-   * one is a perfect rebuild, which is what a percentage on a screen ought to
-   * mean.
-   */
   /*
    * There is no honest way to turn this into a confidence, and three were
    * tried.
