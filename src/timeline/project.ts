@@ -524,9 +524,27 @@ function readCurve(raw: unknown): { curve?: number | 'hold' } {
  * A name no voice answers to is not worth keeping: it would draw a sound on
  * the timeline that plays nothing at all.
  */
-function readSource(raw: unknown): CueSource | null {
+function readSource(raw: unknown, stacked = false): CueSource | null {
   if (!raw || typeof raw !== 'object') return null;
   const source = raw as Partial<CueSource>;
+  if (typeof source.name !== 'string') return null;
+
+  const base = readPlainSource(source);
+  if (!base) return null;
+
+  // A stacked sound carries how much of it there is, and nothing carries a
+  // stack of its own: one deep, checked here rather than trusted, since a
+  // file can say anything.
+  const mix = stacked ? { mix: readNumber(source.mix, 1, 0, MAX_GAIN) } : {};
+  const parts = stacked || !Array.isArray(source.with)
+    ? []
+    : source.with.map((part) => readSource(part, true)).filter((p): p is CueSource => p !== null);
+
+  return { ...base, ...mix, ...(parts.length ? { with: parts } : {}) };
+}
+
+/** One sound out of a file, without whatever is stacked onto it. */
+function readPlainSource(source: Partial<CueSource>): CueSource | null {
   if (typeof source.name !== 'string') return null;
 
   if (source.kind === 'design') {

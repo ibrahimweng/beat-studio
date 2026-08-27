@@ -963,6 +963,38 @@
   margin: -2px;
 }
 
+/* What a stacked sound is made of, one row per voice in it. */
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+/* The same three columns as the sliders above, so the two blocks line up. */
+.stack-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 18px;
+  gap: 8px;
+  align-items: center;
+  min-height: 22px;
+}
+
+.stack-row__name {
+  font-size: 11px;
+  color: var(--txt-2);
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The sound itself, which is not a proportion of anything. */
+.stack-row--head .stack-row__name {
+  color: var(--txt-1);
+  font-weight: 500;
+}
+
 /* Finding one sound among several hundred, once packs are loaded. */
 .pick-search {
   width: 100%;

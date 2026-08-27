@@ -1040,12 +1040,31 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     toggleClass(node, 'is-wide', width >= GRIP_MIN_PX);
   }
 
+  /**
+   * What a cue is called on the timeline.
+   *
+   * A stacked sound says so, because a lane full of things that all read
+   * "impact" when one of them is an impact with a metallic ring over it is a
+   * lane you have to click through to understand.
+   */
+  function cueName(cue: Cue): string {
+    const on = cue.source.with?.length ?? 0;
+    return on ? `${cue.source.name} +${on}` : String(cue.source.name);
+  }
+
+  /** The whole of it, for a tooltip, where there is room to say it. */
+  function cueTitle(cue: Cue): string {
+    const on = cue.source.with ?? [];
+    const made = on.length ? `${cue.source.name} with ${on.map((p) => p.name).join(' and ')}` : cue.source.name;
+    return `${made} at ${timecode(cue.time, session.project.fps)}`;
+  }
+
   /** Everything else, only needed when the sound itself changed. */
   function restyleCue(drawn: DrawnCue, cue: Cue): void {
     toggleClass(drawn.node, 'is-muted', cue.muted);
     toggleClass(drawn.node, 'is-tail', cue.anchor === 'end');
-    drawn.head.title = `${cue.source.name} at ${timecode(cue.time, session.project.fps)}`;
-    const name = String(cue.source.name);
+    drawn.head.title = cueTitle(cue);
+    const name = cueName(cue);
     if (drawn.label.textContent !== name) drawn.label.textContent = name;
   }
 
@@ -1062,11 +1081,11 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     const start = cueStart(cue);
     const width = Math.max(10, cueLength(cue) * pxPerSec);
     const endAnchored = cue.anchor === 'end';
-    const label = el('span', { class: 'cue__label', text: String(cue.source.name) });
+    const label = el('span', { class: 'cue__label', text: cueName(cue) });
 
     const head = el('div', {
       class: 'cue__head',
-      title: `${cue.source.name} at ${timecode(cue.time, session.project.fps)}`,
+      title: cueTitle(cue),
       on: {
         pointerdown: (event) => {
           event.preventDefault();

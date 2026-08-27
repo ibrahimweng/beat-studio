@@ -614,6 +614,77 @@ export class SoundDesignSession {
    * One change to the piece rather than one per sound, so a slider moved over
    * six sounds is one thing to undo rather than six.
    */
+  /**
+   * How many sounds can be stacked into one.
+   *
+   * Four voices is already eight or more layers, and past that a stack stops
+   * being a sound made of parts and becomes a sound made of mud.
+   */
+  static readonly MAX_STACK = 3;
+
+  /**
+   * Put the armed sound on top of the ones selected.
+   *
+   * Reaching every selected sound, the same way the sliders do, so adding a
+   * metallic ring to four impacts is one movement rather than four.
+   */
+  stackArmed(): void {
+    const { currentSource } = this.#store.state;
+    // A stack is one deep, so what is armed goes on without whatever is on it.
+    const part: CueSource = { ...currentSource, mix: 1 };
+    delete (part as { with?: unknown }).with;
+
+    this.#eachSelected('stack', (source) => {
+      const on = source.with ?? [];
+      if (on.length >= SoundDesignSession.MAX_STACK) return source;
+      return { ...source, with: [...on, part] };
+    });
+  }
+
+  /** Take one of the stacked sounds off again. */
+  unstack(at: number): void {
+    this.#eachSelected(`unstack:${at}`, (source) => {
+      const on = source.with ?? [];
+      if (at < 0 || at >= on.length) return source;
+      const left = on.filter((_, i) => i !== at);
+      const next = { ...source };
+      if (left.length) next.with = left;
+      else delete next.with;
+      return next;
+    });
+  }
+
+  /** How much of one of the stacked sounds there is. */
+  setStackMix(at: number, mix: number): void {
+    const held = Math.max(0, Math.min(1, mix));
+    this.#eachSelected(`mix:${at}`, (source) => {
+      const on = source.with ?? [];
+      if (at < 0 || at >= on.length) return source;
+      return { ...source, with: on.map((part, i) => (i === at ? { ...part, mix: held } : part)) };
+    });
+  }
+
+  /**
+   * Change the source of everything selected, each from its own.
+   *
+   * Not {@link updateSelected}, which writes one value over every sound
+   * chosen: a source belongs to the sound it is on, and handing four sounds
+   * the same one would replace three of them rather than add to them.
+   */
+  #eachSelected(label: string, change: (source: CueSource) => CueSource): void {
+    const chosen = new Set(this.#store.state.selection);
+    if (!chosen.size) return;
+    this.#setProject(
+      {
+        ...this.project,
+        cues: this.project.cues.map((cue) =>
+          chosen.has(cue.id) ? { ...cue, source: change(cue.source) } : cue,
+        ),
+      },
+      `${label}:${[...chosen].join()}`,
+    );
+  }
+
   updateSelected(patch: Partial<Cue>): void {
     const chosen = new Set(this.#store.state.selection);
     if (!chosen.size) return;

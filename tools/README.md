@@ -222,6 +222,48 @@ fixed order, so it comes back differing in the last bit of a float.
 Takes about a minute and a half. Run the development server and open
 http://localhost:5173/tools/library-check.html
 
+## stack-check.html
+
+Checks that a sound made of several voices really is all of them, at a level
+that says two voices rather than twice one voice.
+
+The main claim is arithmetic rather than taste. Two voices that have nothing
+to do with each other sum incoherently, so the energy of the pair is the
+energy of each added together — and since a stack halves both to keep two
+voices about as loud as one was, what should come back in every band is half
+of each. Across six pairs it lands within a decibel, and it is nearer that sum
+than either voice on its own by ten to sixty decibels.
+
+Two measurements had to be fixed before they measured anything. The first
+version read a single DFT bin per band, which is a hopeless energy estimator:
+two unrelated sounds land anywhere from cancelling to doubling in any given
+bin, and it reported sixteen decibels of error in the arithmetic rather than
+in itself. It now takes overlapping windowed transforms and sums power across
+each band. The second was the threshold. A stacked voice draws its noise from
+further along the same stream as the one before it, so the metal inside a
+stack is a different draw of the same voice, and how much that alone moves a
+band is measured by rendering each part twice under two ids. On one pair —
+slam and wire — a redraw moves a band by six decibels, which is far more than
+the stack is out by.
+
+The level check found nothing wrong and one thing worth knowing. A voice is
+very slightly more than quadratic in its level, because the envelope curves
+end at an absolute floor rather than one scaled by the level, and an
+exponential ramp needs somewhere above zero to aim for. It is a fifth of a
+decibel. Predicting half rather than measuring what the engine actually does
+reads it as a five per cent error in the stack, which is what an earlier
+version of this page did.
+
+The rest is the rules that keep a stack simple: that it is one deep and a
+session file cannot smuggle a deeper one in, that it adds layers rather than
+replacing them, that how much of each can be set and lands where the square
+law says, that it survives a session file and a patch file, that the same
+stack comes back the same sound, and that three voices at once at the ends of
+every slider still make one.
+
+Run the development server and open
+http://localhost:5173/tools/stack-check.html
+
 ## describe-check.html
 
 Checks that a sentence comes out as a sound it could reasonably mean, and

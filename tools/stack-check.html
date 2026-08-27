@@ -1,0 +1,313 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>stack check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* A stack has to be both of the things it is made of, at a level that says
+     two voices rather than twice one voice, and it has to survive being
+     saved, written to a patch and read back. Everything here compares a
+     stack against its own parts rendered on their own, so the arithmetic is
+     checked rather than the intention. */
+  import { makeCue, toSession, fromSession, emptyProject, MIN_LENGTH } from '/src/timeline/project.ts';
+  import { playCue, specForCue } from '/src/audio/sources.ts';
+  import { toPatchSound } from '/src/export/patch.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+  const say = (t) => { document.getElementById('out').textContent = t; };
+
+  const design = (name, extra = {}) => ({ kind: 'design', name, ...extra });
+
+  /** A cue at fixed settings, so only what is stacked onto it varies. */
+  function cueFor(source, over = {}) {
+    return {
+      ...makeCue(0, 'check', source),
+      id: 'fixed', gain: 1, tune: 0, length: 1, space: 0, drive: 0, ...over,
+    };
+  }
+
+  async function render(cue, gain = 1, seconds = 2.5) {
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
+    playCue(ctx, ctx.destination, cue, 0, gain);
+    return (await ctx.startRendering()).getChannelData(0);
+  }
+
+  const peakOf = (d) => { let p = 0; for (const v of d) p = Math.max(p, Math.abs(v)); return p; };
+  const energyOf = (d) => { let e = 0; for (const v of d) e += v * v; return e; };
+
+  /** Iterative radix-2 FFT, in place, on real input. */
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = (-2 * Math.PI) / len;
+      for (let i = 0; i < n; i += len) {
+        for (let k = 0; k < len / 2; k++) {
+          const w = ang * k, wr = Math.cos(w), wi = Math.sin(w);
+          const ur = re[i + k], ui = im[i + k];
+          const vr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi;
+          const vi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+          re[i + k] = ur + vr; im[i + k] = ui + vi;
+          re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+        }
+      }
+    }
+  }
+
+  /**
+   * Energy in twenty log-spaced bands, summed over the whole sound.
+   *
+   * A band rather than a single frequency, and averaged over overlapping
+   * windows, because the question being asked is about energy and one bin of
+   * one transform is a hopeless way to measure it: two sounds that have
+   * nothing to do with each other land anywhere from cancelling to doubling
+   * in any given bin, and an earlier version of this page read that as
+   * sixteen decibels of error in the arithmetic rather than in itself.
+   */
+  const BANDS = 20;
+  const WINDOW = 8192;
+  function bands(d) {
+    const power = new Float64Array(WINDOW / 2);
+    let taken = 0;
+    for (let at = 0; at + WINDOW <= d.length; at += WINDOW / 2) {
+      const re = new Float64Array(WINDOW), im = new Float64Array(WINDOW);
+      for (let i = 0; i < WINDOW; i++) {
+        re[i] = d[at + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / WINDOW));
+      }
+      fft(re, im);
+      for (let k = 0; k < WINDOW / 2; k++) power[k] += re[k] * re[k] + im[k] * im[k];
+      taken++;
+    }
+
+    const out = new Float64Array(BANDS);
+    if (!taken) return out;
+    // 40 Hz to 16 kHz, which is everything these voices put anything into.
+    for (let b = 0; b < BANDS; b++) {
+      const from = 40 * Math.pow(400, b / BANDS);
+      const to = 40 * Math.pow(400, (b + 1) / BANDS);
+      const lo = Math.max(1, Math.round((from * WINDOW) / RATE));
+      const hi = Math.min(WINDOW / 2 - 1, Math.round((to * WINDOW) / RATE));
+      let sum = 0;
+      for (let k = lo; k <= hi; k++) sum += power[k];
+      out[b] = sum / taken;
+    }
+    return out;
+  }
+
+  /** How far apart two band readings are, in decibels, on average. */
+  function apart(x, y, floor) {
+    let sum = 0, counted = 0;
+    for (let b = 0; b < BANDS; b++) {
+      if (Math.max(x[b], y[b]) < floor) continue;
+      sum += Math.abs(10 * Math.log10(Math.max(x[b], 1e-30) / Math.max(y[b], 1e-30)));
+      counted++;
+    }
+    return counted ? sum / counted : 0;
+  }
+
+  // ---------- is a stack both of its parts ----------
+
+  say('rendering the parts…');
+
+  /*
+   * Energy adds. Two voices that have nothing to do with each other sum
+   * incoherently, so the energy of the pair is the energy of each added
+   * together — and since a stack halves each part's level to keep two voices
+   * about as loud as one was, what should come back is half of each.
+   *
+   * That is the whole claim, and it is arithmetic rather than taste: if a
+   * band of the stack holds less than half of what that band held in the
+   * parts, something was dropped.
+   */
+  const PAIRS = [
+    ['impact', 'metal'], ['sub', 'glass'], ['thud', 'shimmer'],
+    ['slam', 'wire'], ['whoosh', 'static'], ['bell', 'rumble'],
+  ];
+
+  const readings = [];
+  for (const [a, b] of PAIRS) {
+    const onlyA = bands(await render(cueFor(design(a))));
+    const onlyB = bands(await render(cueFor(design(b))));
+    const both = bands(await render(cueFor(design(a, { with: [design(b)] }))));
+
+    // Half of each, because a stack halves both to keep two voices about as
+    // loud as one was.
+    const want = onlyA.map((v, k) => 0.5 * (v + onlyB[k]));
+    // A band nothing put anything into says nothing about the arithmetic.
+    const floor = 1e-7 * Math.max(...onlyA, ...onlyB);
+
+    /*
+     * How close is close enough, measured rather than chosen.
+     *
+     * A stacked voice draws its noise from further along the same stream as
+     * the one before it, so the metal inside a stack is not the same
+     * rendering as the metal on its own — a different draw of the same voice.
+     * Rendering each part twice under two ids says how much that alone moves
+     * a band, and the sum cannot be expected to land closer than that.
+     */
+    const drawn = Math.max(
+      apart(onlyA, bands(await render(cueFor(design(a), { id: 'other' }))), floor),
+      apart(onlyB, bands(await render(cueFor(design(b), { id: 'other' }))), floor),
+    );
+
+    readings.push({
+      pair: `${a} + ${b}`,
+      toBoth: apart(both, want, floor),
+      toA: apart(both, onlyA, floor),
+      toB: apart(both, onlyB, floor),
+      drawn,
+    });
+  }
+
+  check('a stack holds what both its voices put into every band',
+    readings.every((r) => r.toBoth < Math.max(r.drawn, 0.3) * 1.5),
+    readings
+      .map((r) => `${r.pair} ${r.toBoth.toFixed(2)}dB against ${r.drawn.toFixed(2)} for a redraw`)
+      .join(' · '));
+
+  // And nearer that sum than either voice on its own, or the arithmetic could
+  // be coming out right by the two of them being alike to begin with.
+  check('and is nearer the pair than either one alone',
+    readings.every((r) => r.toBoth < r.toA && r.toBoth < r.toB),
+    readings
+      .map((r) => `${r.pair}: ${r.toBoth.toFixed(2)} against ${r.toA.toFixed(1)}/${r.toB.toFixed(1)}`)
+      .join(' · '));
+
+  // ---------- is it the right level ----------
+
+  const levels = [];
+  for (const [a, b] of PAIRS) {
+    const one = peakOf(await render(cueFor(design(a))));
+    const two = peakOf(await render(cueFor(design(a, { with: [design(b)] }))));
+    levels.push({ pair: `${a} + ${b}`, ratio: two / one });
+  }
+  const loudest = Math.max(...levels.map((l) => l.ratio));
+  check('two voices come out about as loud as one, not twice as loud',
+    loudest < 1.6,
+    `worst is ${levels.find((l) => l.ratio === loudest).pair} at ${loudest.toFixed(2)} times`);
+
+  // ---------- how much of each ----------
+
+  const full = energyOf(await render(cueFor(design('impact', { with: [design('metal')] }))));
+  const half = energyOf(await render(cueFor(design('impact', { with: [design('metal', { mix: 0.5 })] }))));
+  const none = energyOf(await render(cueFor(design('impact', { with: [design('metal', { mix: 0 })] }))));
+  /*
+   * The head turned down by hand, which is what a stack of two should leave
+   * it at — and not the same thing as half the energy of the head at full.
+   *
+   * A voice is very slightly more than quadratic in its level, because the
+   * envelope curves end at an absolute floor rather than a floor scaled by
+   * the level, and an exponential ramp needs somewhere above zero to aim for.
+   * It is a fifth of a decibel and nothing to fix, but predicting half rather
+   * than measuring the engine reads it as a five per cent error in the stack.
+   */
+  const headAlone = energyOf(await render(cueFor(design('impact')), 1 / Math.SQRT2));
+  /*
+   * A quarter of the way, not half, and that is the right answer: energy goes
+   * as the square of level, so half the level is a quarter of the energy.
+   */
+  const quarter = (half - none) / (full - none);
+  check('how much of a stacked voice there is can be set',
+    none < half && half < full && Math.abs(quarter - 0.25) < 0.03,
+    `at half, a quarter of the energy — ${(quarter * 100).toFixed(0)}%`);
+
+  check('and stacking turns the head down rather than leaving it alone',
+    Math.abs(none / headAlone - 1) < 0.001,
+    `the head in a stack of two is the head at ${(1 / Math.SQRT2).toFixed(3)}, ` +
+    `to within ${((Math.abs(none / headAlone - 1)) * 100).toFixed(3)} per cent`);
+
+  // ---------- the rules that keep it simple ----------
+
+  const deep = specForCue(
+    cueFor(design('impact', { with: [design('metal', { with: [design('bell')] })] })), 1);
+  const flat = specForCue(cueFor(design('impact', { with: [design('metal')] })), 1);
+  check('a stack inside a stack is read as the sound without it',
+    deep.layers.length === flat.layers.length,
+    `${deep.layers.length} layers either way`);
+
+  const solo1 = specForCue(cueFor(design('impact')), 1);
+  check('stacking adds layers rather than replacing them',
+    flat.layers.length > solo1.layers.length,
+    `${solo1.layers.length} alone, ${flat.layers.length} stacked`);
+
+  // ---------- does it survive being written down ----------
+
+  const project = emptyProject();
+  // On a layer the file actually has, or the cue is dropped on the way back
+  // in and this measures nothing.
+  const onLayer = project.layers[0].id;
+  const stackedCue = {
+    ...cueFor(design('impact', { with: [design('metal', { mix: 0.4 })] })),
+    layerId: onLayer,
+  };
+  const written = toSession({ ...project, cues: [stackedCue] });
+  const back = fromSession(JSON.parse(JSON.stringify(written))).project;
+  const readBack = back.cues[0]?.source;
+  check('a stack survives a session file',
+    readBack?.with?.length === 1 && readBack.with[0].name === 'metal' &&
+    readBack.with[0].mix === 0.4,
+    JSON.stringify(readBack));
+
+  const nested = fromSession(JSON.parse(JSON.stringify(toSession({
+    ...project,
+    cues: [{
+      ...cueFor(design('impact', { with: [design('metal', { with: [design('bell')] })] })),
+      layerId: onLayer,
+    }],
+  })))).project;
+  check('and a file cannot smuggle a deeper one in',
+    nested.cues[0].source.with[0].with === undefined,
+    JSON.stringify(nested.cues[0].source.with));
+
+  const patch = toPatchSound(flat);
+  check('a stack can be written to a patch file',
+    Array.isArray(patch.layers) && patch.layers.length === flat.layers.length,
+    `${patch.layers?.length} layers`);
+
+  // ---------- is it steady ----------
+
+  const twice = [
+    await render(cueFor(design('impact', { with: [design('metal')] }))),
+    await render(cueFor(design('impact', { with: [design('metal')] }))),
+  ];
+  let drift = 0;
+  for (let i = 0; i < twice[0].length; i++) drift = Math.max(drift, Math.abs(twice[0][i] - twice[1][i]));
+  check('the same stack comes back the same sound',
+    drift < 1e-6, `${drift.toExponential(2)} apart`);
+
+  // A stacked voice draws its noise from further along the same stream, so it
+  // is not the same rendering as that voice on its own. Stated here rather
+  // than discovered: what has to hold is that it is still that voice.
+  const emptyStack = await render(cueFor(design('metal', { with: [] })));
+  const metalAlone = await render(cueFor(design('metal')));
+  let sameness = 0;
+  for (let i = 0; i < metalAlone.length; i++) {
+    sameness = Math.max(sameness, Math.abs(emptyStack[i] - metalAlone[i]));
+  }
+  // To the last bit of a float, which is where a stack of oscillators summed
+  // by the graph always lands. `tools/mechanism-check.html` measures why.
+  check('a voice with an empty stack is that voice',
+    sameness < 1e-6, `${sameness.toExponential(2)} apart`);
+
+  // ---------- the corners ----------
+
+  const corners = [
+    cueFor(design('click', { with: [design('sub'), design('shimmer')] }), { length: MIN_LENGTH }),
+    cueFor(design('drone', { with: [design('rumble')] }), { length: 4, space: 1, drive: 1 }),
+    cueFor(design('impact', { with: [design('metal'), design('glass'), design('wire')] })),
+  ];
+  const cornerPeaks = [];
+  for (const cue of corners) cornerPeaks.push(peakOf(await render(cue, 1, 7)));
+  check('three at once, at the ends of the sliders, still make a sound',
+    cornerPeaks.every((p) => p > 1e-4),
+    cornerPeaks.map((p) => p.toFixed(2)).join(' · '));
+
+  const failed = results.filter((r) => !r.pass);
+  say(JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, results }, null, 1));
+  document.title = 'done';
+</script></body></html>

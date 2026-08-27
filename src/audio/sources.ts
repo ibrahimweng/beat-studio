@@ -3,6 +3,7 @@ import {
   LANES,
   type AutoPoint,
   type Cue,
+  type CueSource,
   type DesignName,
   type Layer,
   type Project,
@@ -31,31 +32,80 @@ import { guitarSpec, kitSpec, pianoSpec } from './voices.ts';
  * knowing about it.
  */
 export function specForCue(cue: Cue, gain: number): VoiceSpec | null {
-  const { source } = cue;
+  const spec = stacked(cue, gain);
+  if (!spec) return null;
+
+  // The room and the push belong to the placed sound rather than to the
+  // voice, so they go after whatever the voice brought with it — and after
+  // every voice in a stack, because a stack is one sound in one room.
+  const effects = cueEffects(cue);
+  return effects.length ? { ...spec, effects: [...(spec.effects ?? []), ...effects] } : spec;
+}
+
+/**
+ * The cue's voice, and whatever is stacked onto it, as one description.
+ *
+ * Concatenating the layers rather than mixing two rendered sounds, because a
+ * {@link VoiceSpec} is the one currency this app deals in: a stack that is
+ * still a spec can be saved as your own, written to a patch file, rendered
+ * offline and stretched by the length control without any of those knowing
+ * that stacks exist.
+ *
+ * Two consequences worth stating rather than discovering. A stacked voice
+ * draws its noise from further along the same stream as the one before it, so
+ * it is a different metal from the metal you get on its own — still a metal,
+ * and still the same one every time this cue is played, which is what
+ * matters. And a sound that carries effects of its own, meaning a pack sound
+ * with a room in it, is left out of a stack rather than mixed into one: those
+ * sit above all the layers at once, so its room would land on everything
+ * beside it, and pushing a copy down onto each layer would build a different
+ * room for each. See `tools/README.md`.
+ */
+function stacked(cue: Cue, gain: number): VoiceSpec | null {
+  const extras = cue.source.with ?? [];
+  if (!extras.length) return voiceSpec(cue.source, cue, gain);
+
+  // Equal power, so two voices together are about as loud as one was rather
+  // than twice as loud, and how much of each is what `mix` is for.
+  const share = 1 / Math.sqrt(1 + extras.length);
+  const head = voiceSpec(cue.source, cue, gain * share);
+  if (!head) return null;
+  // Its own room would land on everything stacked beside it.
+  if (head.effects?.length) return head;
+
+  const parts = [head];
+  for (const extra of extras) {
+    const part = voiceSpec(extra, cue, gain * share * (extra.mix ?? 1));
+    if (part && !part.effects?.length) parts.push(part);
+  }
+  if (parts.length === 1) return head;
+
+  return {
+    duration: Math.max(...parts.map((part) => part.duration)),
+    layers: parts.flatMap((part) => part.layers),
+  };
+}
+
+/** One sound, at the length, pitch and level the cue asks for. */
+function voiceSpec(source: CueSource, cue: Cue, gain: number): VoiceSpec | null {
   const options = { length: cueLength(cue), tune: cue.tune, gain };
 
-  let spec: VoiceSpec | null;
   if (source.kind === 'design') {
-    spec = designSpec(source.name as DesignName, options);
-  } else if (source.kind === 'kit') {
+    return designSpec(source.name as DesignName, options);
+  }
+  if (source.kind === 'kit') {
     // Kit voices have fixed shapes, so tune is applied as level only.
-    spec = kitSpec(source.name as PadName, gain);
-  } else if (source.kind === 'pack') {
+    return kitSpec(source.name as PadName, gain);
+  }
+  if (source.kind === 'pack') {
     // A pack sound arrives at one length, pitch and level. Fitting it to what
     // was asked for keeps the shape and changes only the scale, so the three
     // controls mean the same thing as they do for the voices built in here.
     const base = source.pack ? packSpec(source.pack, source.name) : null;
-    spec = base ? shapeSpec(base, options) : null;
-  } else {
-    const midi = (source.midi ?? 60) + cue.tune;
-    spec = source.name === 'guitar' ? guitarSpec(midi, gain) : pianoSpec(midi, gain);
+    return base ? shapeSpec(base, options) : null;
   }
-  if (!spec) return null;
-
-  // The room and the push belong to the placed sound rather than to the
-  // voice, so they go after whatever the voice brought with it.
-  const effects = cueEffects(cue);
-  return effects.length ? { ...spec, effects: [...(spec.effects ?? []), ...effects] } : spec;
+  const midi = (source.midi ?? 60) + cue.tune;
+  return source.name === 'guitar' ? guitarSpec(midi, gain) : pianoSpec(midi, gain);
 }
 
 /**

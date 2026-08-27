@@ -177,6 +177,41 @@ names a sound you could reasonably have meant fifteen times out of twenty, and
 every one of the five misses is a noun it had never heard. `tools/README.md`
 has the method and is straight about what that number is worth.
 
+### One sound made of several
+
+A boom with a metallic ring over it is one sound, not two. Type it that way
+and you get it that way: a joining word — with, over, under, and — between two
+things it knows is what says a description is about two sounds rather than one
+sound described twice. "A heavy metal door slamming" is one object and four
+words for it, and comes back as one voice.
+
+You can also build one by hand. With a sound selected, "Made of" lists what it
+is, and the button under it adds whatever is currently armed. Each added voice
+has a control for how much of it there is, and a cross to take it off again.
+Four voices is the most a stack holds; past that it stops being a sound made
+of parts.
+
+A stack is one sound in every way that matters. It moves once, stretches once,
+sits in one room, takes one push, and appears on the timeline as one thing,
+labelled "impact +2". Two cues at the same moment are two things to keep lined
+up forever; this is one.
+
+It works because a voice here is a description rather than a recording. Two
+voices are two lists of layers, and a stack is those lists joined — still one
+description, so it can be saved as your own, written to a patch file and
+rendered offline without any of those knowing that stacks exist.
+
+Both voices are turned down so that two together come out about as loud as one
+did, and how much of each is what the controls under "Made of" are for.
+Measured, a stack holds what both its voices put into every band to within a
+decibel. `tools/README.md` has the method, and is honest about the two
+measurements that had to be fixed before they measured anything.
+
+One thing it will not do: a sound that carries a room of its own, which means
+a pack sound with reverb written into it, is left out of a stack rather than
+mixed into one. Its room sits above all the layers at once, so it would land
+on everything beside it.
+
 ### Let it find the hits for you
 
 Click "Find hits" and Beat Studio reads the video and suggests where sounds

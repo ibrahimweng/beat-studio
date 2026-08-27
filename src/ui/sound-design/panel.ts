@@ -2,8 +2,8 @@ import { KIT_SOUNDS, MINE_ID, NAMES } from '../../constants.ts';
 import {
   DEFAULT_EXPORT,
   DEFAULT_TARGET_LUFS,
+  SoundDesignSession,
   type ExportSettings,
-  type SoundDesignSession,
 } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
@@ -272,17 +272,34 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     if (!term) return false;
 
     const reading = describe(term);
-    // A bare voice name is already a button three rows down, and building it
-    // again at the settings it already has would be two of the same thing.
-    const worth = reading.shaped && reading.suggestions.length > 0;
+    /*
+     * A bare voice name is already a button three rows down, and building it
+     * again at the settings it already has would be two of the same thing.
+     * A stack never is: two voices as one sound is not something any single
+     * button can offer, however plainly it was asked for.
+     */
+    const offer = reading.shaped
+      ? reading.suggestions
+      : reading.suggestions.filter((suggestion) => suggestion.over?.length);
+    const worth = offer.length > 0;
     if (worth) {
-      for (const suggestion of reading.suggestions) {
-        const pick = pickButton(
-          suggestion.name,
-          { kind: 'design', name: suggestion.voice },
-          () => false,
-          suggestion,
-        );
+      for (const suggestion of offer) {
+        // A description that asked for one sound made of several arrives as a
+        // stack, which the cue carries as one source with others under it.
+        const source: CueSource = {
+          kind: 'design',
+          name: suggestion.voice,
+          ...(suggestion.over?.length
+            ? {
+                with: suggestion.over.map((part) => ({
+                  kind: 'design' as const,
+                  name: part.voice,
+                  mix: part.mix,
+                })),
+              }
+            : {}),
+        };
+        const pick = pickButton(suggestion.name, source, () => false, suggestion);
         pick.node.title = suggestion.why.join(' · ');
         sayPicks.push(pick);
         sayRow.appendChild(pick.node);
@@ -454,6 +471,96 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const space = field('Space', 0, 1, 0.01, (v) => patch({ space: v }));
   const drive = field('Drive', 0, 1, 0.01, (v) => patch({ drive: v }));
 
+  /* ---------- what the selected sound is made of ---------- */
+
+  /**
+   * The stack, and the controls for it.
+   *
+   * Redrawn whenever it changes rather than kept in step piece by piece,
+   * because it is at most four rows and the alternative is a small machine
+   * for deciding which of four rows moved.
+   */
+  const madeOfRow = el('div', { class: 'stack-list' });
+  const stackButton = button(
+    {
+      class: 'chip chip--sm stack-add',
+      style: { width: '100%' },
+      title:
+        'Play the armed sound as part of this one. A stack is one sound: it ' +
+        'moves once, stretches once and sits in one room.',
+      on: { click: () => session.stackArmed() },
+    },
+    ['Add'],
+  );
+  const madeOf = el('div', { style: { marginTop: '10px' } }, [
+    el('div', { class: 'setting-row__label', text: 'Made of' }),
+    madeOfRow,
+    stackButton,
+  ]);
+
+  /** What the stack was last drawn from, so it is redrawn only when it moves. */
+  let paintedStack = '';
+
+  const paintStack = (cue: Cue | null, armed: CueSource): void => {
+    const parts = cue?.source.with ?? [];
+    const label = (source: CueSource): string =>
+      source.kind === 'pitched'
+        ? `${source.name} ${noteName(source.midi ?? DEFAULT_MIDI)}`
+        : String(source.name);
+
+    const key = cue ? `${label(cue.source)}|${parts.map((p) => `${label(p)}:${p.mix}`).join('|')}` : '';
+    if (key !== paintedStack) {
+      paintedStack = key;
+      clear(madeOfRow);
+      if (cue) {
+        // The sound itself first, with nothing to set: it is the one thing in
+        // a stack that is not a proportion of something else.
+        madeOfRow.appendChild(
+          el('div', { class: 'stack-row stack-row--head' }, [
+            el('span', { class: 'stack-row__name', text: label(cue.source) }),
+          ]),
+        );
+        parts.forEach((part, at) => {
+          const amount = el('input', {
+            class: 'range',
+            type: 'range',
+            attrs: { min: '0', max: '1', step: '0.05', 'aria-label': `how much ${label(part)}` },
+          }) as HTMLInputElement;
+          amount.value = String(part.mix ?? 1);
+          amount.addEventListener('input', () => session.setStackMix(at, Number(amount.value)));
+          madeOfRow.appendChild(
+            el('div', { class: 'stack-row' }, [
+              el('span', { class: 'stack-row__name', text: label(part) }),
+              amount,
+              button(
+                {
+                  class: 'tl__layer-btn tl__layer-btn--remove',
+                  title: `Take ${label(part)} off`,
+                  on: { click: () => session.unstack(at) },
+                },
+                ['×'],
+              ),
+            ]),
+          );
+        });
+      }
+    }
+
+    const full = parts.length >= SoundDesignSession.MAX_STACK;
+    // Adding the sound to itself is legal and pointless, so the button says
+    // what it would actually do rather than offering it.
+    const same = cue !== null && armed.kind === cue.source.kind && armed.name === cue.source.name;
+    stackButton.disabled = full || same;
+    setText(
+      stackButton,
+      full
+        ? 'Four voices is the most a stack holds'
+        : same
+          ? 'Choose another sound to add'
+          : `Add ${armed.name} to it`,
+    );
+  };
+
   const anchorButtons: { anchor: Anchor; node: HTMLButtonElement }[] = (
     [
       { anchor: 'start' as Anchor, label: 'Starts on it' },
@@ -536,6 +643,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     length.row,
     space.row,
     drive.row,
+    madeOf,
     el('div', { class: 'setting-row__label', style: { marginTop: '10px' }, text: 'Lands so that it' }),
     el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, anchorButtons.map((a) => a.node)),
     el('div', { style: { marginTop: '10px' } }, [nudgeRow]),
@@ -829,10 +937,13 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       cueBody.style.pointerEvents = has ? '' : 'none';
 
       if (selected) {
+        const on = selected.source.with ?? [];
         const label =
           selected.source.kind === 'pitched'
             ? `${selected.source.name} ${noteName((selected.source.midi ?? DEFAULT_MIDI) + selected.tune)}`
-            : String(selected.source.name);
+            : on.length
+              ? `${selected.source.name} with ${on.map((part) => part.name).join(' and ')}`
+              : String(selected.source.name);
         setText(cueTitle, chosen > 1 ? `${chosen} sounds` : label);
         setText(
           cueTime,
@@ -850,6 +961,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(space.out, selected.space ? selected.space.toFixed(2) : 'dry');
         drive.input.value = String(selected.drive);
         setText(drive.out, selected.drive ? selected.drive.toFixed(2) : 'off');
+        // Only with one chosen: four sounds can all be given the same extra,
+        // but showing one of their stacks and calling it theirs would be a lie.
+        madeOf.style.display = chosen === 1 ? '' : 'none';
+        paintStack(selected, state.currentSource);
         anchorButtons.forEach((a) => toggleClass(a.node, 'is-on', selected?.anchor === a.anchor));
         toggleClass(muteButton, 'is-on', selected.muted);
         // Forgetting only means anything for a sound you saved yourself, and

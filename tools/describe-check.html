@@ -210,6 +210,51 @@
     !excluded.includes('metal') && excluded.length > 0,
     excluded.slice(0, 4).join(', '));
 
+  // ---------- one sound made of several ----------
+
+  /*
+   * A joining word is the only thing that says a description is about two
+   * sounds rather than one sound described twice. "A metal door slamming" is
+   * one object and four words for it; "a boom with a metallic ring over it"
+   * is two, and the "with" is the whole difference.
+   */
+  const joined = describe('a huge boom with a metallic ring over it').suggestions;
+  check('a voice on each side of a joining word makes one sound of both',
+    joined[0].over?.length >= 1 && joined[0].voice === 'impact',
+    `${joined[0].name} — ${joined[0].voice} with ${joined[0].over?.map((p) => p.voice).join(', ')}`);
+
+  check('and it is offered first, since that is what was asked for',
+    joined[0].over !== undefined && joined.slice(1).every((s) => s.over === undefined),
+    `${joined.length} offered, one of them a stack`);
+
+  check('the sound before the joining word is the one being made',
+    describe('a bell over a low rumble').suggestions[0].voice === 'bell' &&
+    describe('a low rumble under a bell').suggestions[0].voice === 'rumble',
+    'the head is what comes first, whichever way round it is said');
+
+  check('a joining word with nothing named before it makes no stack',
+    describe('a big and heavy hit').suggestions.every((s) => s.over === undefined),
+    'one sound, described twice');
+
+  check('and no joining word makes no stack',
+    describe('a heavy metal door slamming').suggestions.every((s) => s.over === undefined),
+    'one object, four words for it');
+
+  // A stack is worth offering even when nothing else was said about it,
+  // because no single button anywhere in the app can make one.
+  const bare = describe('a thud with a bell').suggestions;
+  check('a stack is offered even when nothing shaped it',
+    bare[0].over?.length === 1 && bare[0].voice === 'thud',
+    bare[0].name);
+
+  check('three at most, however many are named',
+    describe('a hit with a bell and glass and metal and a wire').suggestions[0].over.length <= 2,
+    `${describe('a hit with a bell and glass and metal and a wire').suggestions[0].name}`);
+
+  check('and how much of each falls off down the stack',
+    joined[0].over.every((part, at, all) => at === 0 || part.mix <= all[at - 1].mix),
+    joined[0].over.map((p) => `${p.voice} ${p.mix}`).join(', '));
+
   // ---------- is it steady ----------
 
   const key = (r) => JSON.stringify(r.suggestions.map((s) => [s.id, s.name]));

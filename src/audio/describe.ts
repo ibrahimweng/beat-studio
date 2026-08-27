@@ -4,6 +4,7 @@ import type { CuePreset, DesignName } from '../timeline/types.ts';
 import {
   AMOUNT,
   FILLER,
+  JOINERS,
   LENGTH,
   LOUD,
   meaning,
@@ -36,10 +37,15 @@ import {
  * entirely your call.
  */
 
+/** How much of a second voice a joining word asks for, in order. */
+const STACKED_MIX: readonly number[] = [0.6, 0.45];
+
 /** One sound the description could mean, ready to arm. */
 export interface Suggestion extends CuePreset {
   name: string;
   voice: DesignName;
+  /** Voices played as part of this one, when the description asked for it. */
+  over?: readonly { voice: DesignName; mix: number }[];
   /** What in the description led here, in the order it was read. */
   why: readonly string[];
   /** How strongly the description named this voice. */
@@ -101,6 +107,9 @@ export function describe(text: string, limit = 6): Reading {
   const words = tokens(text);
   const scores = new Map<DesignName, number>();
   const named = new Map<DesignName, string[]>();
+  /** Where each voice was first mentioned, and where the joining word sits. */
+  const firstAt = new Map<DesignName, number>();
+  let joinAt = -1;
   const known: string[] = [];
   const unknown: string[] = [];
 
@@ -117,7 +126,13 @@ export function describe(text: string, limit = 6): Reading {
   let negated = false;
   const why: string[] = [];
 
-  for (const word of words) {
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index];
+    // Only between two sounds, so "a big and heavy hit" stays one sound. That
+    // is checked once the scores are in, since what is on either side is not
+    // known yet.
+    if (joinAt < 0 && JOINERS.includes(word)) joinAt = index;
+
     const said = forms(word);
     const look = (table: Readonly<Record<string, number>>): number | null => {
       for (const form of said) {
@@ -150,6 +165,7 @@ export function describe(text: string, limit = 6): Reading {
         scores.set(voice, (scores.get(voice) ?? 0) - 99);
       } else {
         scores.set(voice, (scores.get(voice) ?? 0) + hit);
+        if (!firstAt.has(voice)) firstAt.set(voice, index);
         const list = named.get(voice) ?? [];
         if (!list.includes(word)) list.push(word);
         named.set(voice, list);
@@ -218,23 +234,57 @@ export function describe(text: string, limit = 6): Reading {
     size !== null || stretch !== null || space !== null || push !== null ||
     loud !== null || tone !== 0;
 
+  const shape = { size, stretch, space, push, loud, tone };
+  const trimmed = why.filter((reason, at) => why.indexOf(reason) === at);
   const ranked = [...scores.entries()]
     .filter(([, score]) => score > 0)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, limit);
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
-  const suggestions = ranked.map(([voice, score]) => {
+  /** How a voice came to be named, for the line under the button. */
+  const because = (voice: DesignName): string => {
     const from = named.get(voice) ?? [];
-    // "Slam, from “door” and “slamming”" rather than the same claim twice,
-    // and each shaping word once however many axes it happened to move.
-    const said = from.includes(voice)
-      ? [voice]
-      : [`${voice}, from ${from.map((w) => `“${w}”`).join(' and ')}`];
-    return build(voice, score, { size, stretch, space, push, loud, tone }, [
-      ...said,
-      ...why.filter((reason, at) => why.indexOf(reason) === at),
+    // "Slam, from “door” and “slamming”" rather than the same claim twice.
+    return from.includes(voice)
+      ? voice
+      : `${voice}, from ${from.map((w) => `“${w}”`).join(' and ')}`;
+  };
+
+  const suggestions = ranked
+    .slice(0, limit)
+    .map(([voice, score]) => build(voice, score, shape, [because(voice), ...trimmed]));
+
+  /*
+   * One sound made of several, when the description asked for one.
+   *
+   * A joining word on its own is not enough: "a big and heavy hit" has an
+   * "and" in it and is one sound described twice. What makes a stack is a
+   * voice named on each side of the joining word, which is also what says
+   * which of them is the sound and which is the thing on top of it.
+   */
+  const before = ranked.filter(([voice]) => (firstAt.get(voice) ?? -1) < joinAt);
+  const after = ranked.filter(([voice]) => (firstAt.get(voice) ?? -1) > joinAt);
+  if (joinAt >= 0 && before.length && after.length) {
+    const [head, score] = before[0];
+    const over = after
+      .slice(0, STACKED_MIX.length)
+      .map(([voice], at) => ({ voice, mix: STACKED_MIX[at] }));
+    const stack = build(head, score + 1, shape, [
+      because(head),
+      `with ${over.map((part) => because(part.voice)).join(' and ')} over it`,
+      ...trimmed,
     ]);
-  });
+    // First, because somebody who wrote "with" asked for one sound.
+    suggestions.unshift({
+      ...stack,
+      over,
+      id: `${stack.id}+${over.map((p) => `${p.voice}:${p.mix}`).join('+')}`,
+      name: stack.name.replace(
+        `${head},`,
+        `${head} with ${over.map((p) => p.voice).join(' and ')},`,
+      ),
+    });
+    suggestions.length = Math.min(suggestions.length, limit);
+  }
 
   return { suggestions, unknown, known, shaped };
 }
