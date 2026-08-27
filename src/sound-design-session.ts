@@ -12,6 +12,7 @@ import {
 } from './audio/pack.ts';
 import { specForCue } from './audio/sources.ts';
 import { MINE_ID } from './constants.ts';
+import { forgetWork, keepVideo } from './keep.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -20,6 +21,7 @@ import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
   addLayer,
+  emptyProject,
   newId,
   cueLength,
   cueStart,
@@ -428,6 +430,112 @@ export class SoundDesignSession {
     // Measuring the frame rate needs frames to go past, so it runs during a
     // short muted play and then returns to the start.
     void this.#measureFps();
+
+    /*
+     * Kept so a reload opens on the picture as well as the piece.
+     *
+     * Not awaited: a large file takes a moment to write and there is nothing
+     * about the app that has to wait for it. If it will not fit, that is
+     * worth one line in the status — the timeline is kept either way, and
+     * only the clip has to be found again.
+     */
+    void keepVideo(file).then((kept) => {
+      if (!kept) {
+        this.#store.set({
+          status: `${loaded.name} is too large to keep for next time — the timeline is still kept`,
+        });
+      }
+    });
+  }
+
+  /**
+   * Put a clip back that was kept from last time.
+   *
+   * Deliberately not {@link loadVideo}: that one is somebody choosing a file,
+   * so it clears what was found for the last clip and measures the frame rate
+   * afresh. Here the piece has already been restored, carrying whatever frame
+   * rate was being worked to — corrected by hand, quite possibly — and this
+   * is the same file it was carrying it for. Measuring again would overwrite
+   * a decision that was already made.
+   */
+  async restoreVideo(file: File): Promise<boolean> {
+    const video = this.#video;
+    if (!video) return false;
+    if (this.#objectUrl) URL.revokeObjectURL(this.#objectUrl);
+
+    let loaded;
+    try {
+      loaded = await loadVideoFile(video, file);
+    } catch {
+      return false;
+    }
+
+    this.#objectUrl = loaded.url;
+    // The duration comes from the file rather than from what was written
+    // down, since the file is the one that decides how long it is.
+    this.#setProject(
+      { ...this.project, duration: loaded.duration, videoName: loaded.name },
+      '',
+      false,
+    );
+    this.#store.set({ videoReady: true });
+    this.onVideoLoaded?.();
+    return true;
+  }
+
+  /**
+   * Carry on with the piece that was being worked on.
+   *
+   * Runs before anything is on screen, so it is not an edit and there is
+   * nothing to undo back to. The clip follows separately, and later: it lives
+   * in a store that has to be waited for, and there is no reason to hold the
+   * whole app up for it when the timeline is ready now.
+   */
+  restoreProject(project: Project): void {
+    this.#setProject(project, '', false);
+    this.#forgetHistory();
+    const active = this.#store.state.activeLayerId;
+    this.#store.set({
+      activeLayerId: project.layers.some((l) => l.id === active) ? active : project.layers[0].id,
+      selection: [],
+    });
+  }
+
+  /**
+   * Start again on nothing.
+   *
+   * Throws the piece away, and the kept copy of it with it, which is the
+   * whole point: anything short of that and the next reload brings back what
+   * was just cleared. What is kept on purpose across projects — the packs,
+   * the sounds you saved, the patterns on the instruments — is left alone,
+   * because starting a new piece is not the same as forgetting your own
+   * sounds.
+   */
+  async newProject(): Promise<void> {
+    this.pause();
+    this.stopShuttle();
+    if (this.#objectUrl) URL.revokeObjectURL(this.#objectUrl);
+    this.#objectUrl = null;
+    if (this.#video) {
+      this.#video.removeAttribute('src');
+      this.#video.load();
+    }
+
+    await forgetWork();
+
+    const project = emptyProject();
+    this.#setProject(project, '', false);
+    this.#forgetHistory();
+    this.#store.set({
+      videoReady: false,
+      selection: [],
+      activeLayerId: project.layers[0].id,
+      detect: emptyDetection(),
+      extract: { busy: null, sounds: [], from: null },
+      armed: false,
+      videoWindow: false,
+      status: 'new project',
+    });
   }
 
   /**

@@ -61,6 +61,35 @@ can change it there if the measurement is wrong. The video's own sound is muted
 to start with. Turn on "Ref audio" to hear it, for example when you are working
 around a music track. It is never included in anything you export.
 
+### It is still there when you come back
+
+The piece is kept as you work. Refresh the page, close the tab, come back
+tomorrow: it opens on what you left, with the sounds where you put them, the
+layers you made, the curves you drew and the frame rate you set.
+
+The clip comes back with it. It is kept beside the timeline in this browser,
+so you do not have to go and find the file again. Like the video itself,
+nothing about this leaves your machine.
+
+There is nothing to press. Writing happens as you work, a moment after the
+edits stop, and again the instant the page is closed or hidden, so the last
+thing you did is in there too.
+
+"New project", under Session on the right, is the only thing that clears it.
+It asks first and says what it is throwing away. What is kept on purpose
+between projects — the sounds you saved, the packs you loaded, the patterns
+on the instruments — is left alone, because starting a new piece is not the
+same as forgetting your own sounds.
+
+Two things are worth knowing. A very long clip can be larger than the browser
+will store, and when that happens it says so in the timeline bar: the piece is
+kept either way, and only the clip has to be loaded again. And a browser
+clearing its own storage can take the clip and leave the piece, in which case
+the timeline comes back on its own and asks for the clip.
+
+"Save session" is still there, and still worth using: it writes a file, which
+is how a piece moves to another machine or outlives this browser.
+
 ### Moving about in the clip
 
 The row of round buttons at the top is the transport, laid out either side of
@@ -614,6 +643,11 @@ Two settings change how recording works.
 
 ### Save your work
 
+Your patterns, your tempo, the sounds you saved and the packs you loaded are
+all kept in the browser, as is whatever is on the timeline. Takes are not:
+they are recorded audio, and they last as long as the page does, so export the
+ones you want to keep.
+
 There are three export formats.
 
 - WAV is the recorded audio, uncompressed.
@@ -709,6 +743,7 @@ src/
   constants.ts     lanes, pad mapping, chords, tuning, the starter pattern
   pattern.ts       creating and editing patterns
   persist.ts       reading and writing saved state
+  keep.ts          keeping the piece and its clip between visits
   types.ts         shared types
   sound-design-session.ts every action the sound design screen can perform
   audio/

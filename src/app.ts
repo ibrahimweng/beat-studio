@@ -10,6 +10,7 @@ import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
 import { createSoundDesignBar } from './ui/sound-design/bar.ts';
 import { createDivider } from './ui/sound-design/divider.ts';
+import { flushProject, heldProject, heldVideo, keepProject } from './keep.ts';
 import { createHelp } from './ui/help.ts';
 import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
 import { createVideoStage } from './ui/sound-design/stage.ts';
@@ -194,10 +195,68 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     mount(state);
     placeVideo(state);
     for (const view of views) view.update(state, previous);
+    /*
+     * Keep the piece whenever it changes, so a reload picks it up again.
+     *
+     * Here rather than inside the session, because this is the one place
+     * every change to the project arrives — an edit, an undo, a session file
+     * opened, a clip loaded — and hooking each of those separately is how one
+     * of them ends up not being kept.
+     */
+    if (previous && state.project !== previous.project) keepProject(state.project);
   };
+
+  /*
+   * Carry on from wherever the last visit left off.
+   *
+   * Before anything subscribes, so the timeline is drawn once, with the work
+   * already on it, rather than drawn empty and then filled in — and so the
+   * piece just read back is not immediately written out again as if it were
+   * an edit. The clip cannot come with it: it lives in a store that has to be
+   * waited for, so it follows a moment later.
+   */
+  const kept = heldProject();
+  if (kept) soundDesign.restoreProject(kept);
 
   const unsubscribe = session.store.subscribe((state, previous) => render(state, previous));
   render(session.state, null);
+
+  if (kept?.videoName) {
+    void heldVideo().then(async (file) => {
+      if (!file) {
+        session.store.set({
+          status: `${kept.videoName} was not kept — load it again to see the picture`,
+        });
+        return;
+      }
+      const back = await soundDesign.restoreVideo(file);
+      session.store.set({
+        status: back
+          ? `carrying on with ${kept.cues.length} sound${kept.cues.length === 1 ? '' : 's'}`
+          : `${file.name} would not load — load it again to see the picture`,
+      });
+    });
+  } else if (kept) {
+    session.store.set({
+      status: `carrying on with ${kept.cues.length} sound${kept.cues.length === 1 ? '' : 's'}`,
+    });
+  }
+
+  /*
+   * Write anything still waiting before the page goes.
+   *
+   * `pagehide` rather than `beforeunload`, which phones do not reliably fire,
+   * and `visibilitychange` as well because a tab that is switched away from
+   * may never come back. Both are the exact moment the settling delay in
+   * `keep.ts` would otherwise lose the last edit — and a reload is the case
+   * this is all here for.
+   */
+  const onLeaving = (): void => flushProject();
+  const onHidden = (): void => {
+    if (document.visibilityState === 'hidden') flushProject();
+  };
+  window.addEventListener('pagehide', onLeaving);
+  document.addEventListener('visibilitychange', onHidden);
 
   const detachKeyboard = attachKeyboard(session, soundDesign);
   const stopMeters = startMeterLoop(session, stage, mixer);
@@ -206,6 +265,10 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     detachKeyboard();
     stopMeters();
     unsubscribe();
+    window.removeEventListener('pagehide', onLeaving);
+    document.removeEventListener('visibilitychange', onHidden);
+    // Anything the settling delay was still holding on to.
+    flushProject();
     tour.close();
     help.close();
     // The help listens on the document for the small "?" buttons, which

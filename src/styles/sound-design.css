@@ -1174,3 +1174,19 @@
 .pick-group:hover .pick-group__title .tl__layer-btn--remove {
   opacity: 1;
 }
+
+/*
+ * What the app has to say, in the timeline bar.
+ *
+ * Quiet, and allowed to run out of room rather than pushing the zoom controls
+ * about: a message is worth reading and never worth breaking the bar for.
+ */
+.tl__status {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin-right: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
