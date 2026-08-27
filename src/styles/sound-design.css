@@ -995,6 +995,69 @@
   font-weight: 500;
 }
 
+/* Sounds pulled out of a recording: one row each, three ways of making it. */
+.heard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  /* Long enough to work through, short enough that the panel is still a
+     panel: a busy minute of audio can be forty of these. */
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.heard-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: start;
+}
+
+.heard-row__at {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-3);
+  padding-top: 5px;
+}
+
+/*
+ * One offer per line rather than three across.
+ *
+ * These names run long — "impact with slam, close" — and three of them side
+ * by side in a panel this wide wrap into a block nobody can read down. In a
+ * column the closest is on top, the name is on the left and the number on the
+ * right, and the three line up to be compared.
+ */
+.heard-row__ways {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cell.pick.heard-way {
+  width: 100%;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.heard-way > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heard-way__match {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-3);
+}
+
 /* Finding one sound among several hundred, once packs are loaded. */
 .pick-search {
   width: 100%;

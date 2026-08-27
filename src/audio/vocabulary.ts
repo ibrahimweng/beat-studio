@@ -226,6 +226,46 @@ export const JOINERS: readonly string[] = [
   'behind', 'alongside', 'topped',
 ];
 
+/**
+ * What to call a sound that landed somewhere on each axis.
+ *
+ * The other direction from the tables above: those turn a word into a number,
+ * these turn a number back into a word. Shared, because a sound built from a
+ * description and a sound rebuilt from a recording have to be named the same
+ * way or the library, the describer and the extractor will each invent their
+ * own vocabulary for the same thing.
+ */
+export const SIZE_NAMES: readonly { at: number; word: string }[] = [
+  { at: 0.85, word: 'tiny' },
+  { at: 0.5, word: 'small' },
+  { at: -0.35, word: '' },
+  { at: -0.75, word: 'large' },
+  { at: -1, word: 'huge' },
+];
+export const PLACE_NAMES: readonly { at: number; word: string }[] = [
+  { at: 0.08, word: 'dry' },
+  { at: 0.3, word: 'close' },
+  { at: 0.6, word: 'room' },
+  { at: 0.88, word: 'hall' },
+  { at: 1, word: 'cavern' },
+];
+export const LOUD_NAMES: readonly { at: number; word: string }[] = [
+  { at: 0.35, word: 'faint' },
+  { at: 0.6, word: 'quiet' },
+  { at: 1.1, word: '' },
+  { at: 1.3, word: 'loud' },
+  { at: 1.5, word: 'blaring' },
+];
+
+/** The word for wherever a value landed on one of those axes. */
+export function nearest(names: readonly { at: number; word: string }[], value: number): string {
+  const downwards = names[0].at > names[names.length - 1].at;
+  for (const step of names) {
+    if (downwards ? value >= step.at : value <= step.at) return step.word;
+  }
+  return names[names.length - 1].word;
+}
+
 /** Words that cancel whichever dimension the next word belongs to. */
 export const NEGATORS: readonly string[] = ['no', 'not', 'without', 'none', 'zero', 'never'];
 

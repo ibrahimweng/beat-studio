@@ -7,11 +7,15 @@ import {
   JOINERS,
   LENGTH,
   LOUD,
+  LOUD_NAMES,
   meaning,
+  nearest,
   NEGATORS,
   PLACE,
+  PLACE_NAMES,
   PUSH,
   SIZE,
+  SIZE_NAMES,
   SYNONYMS,
   TONE,
 } from './vocabulary.ts';
@@ -67,29 +71,6 @@ export interface Reading {
 const SIZE_BEND = 0.8;
 const UP_SEMITONES = 19;
 const DOWN_SEMITONES = 14;
-
-/** Names for the ends of each axis, so a suggestion can be called something. */
-const SIZE_NAMES: readonly { at: number; word: string }[] = [
-  { at: 0.85, word: 'tiny' },
-  { at: 0.5, word: 'small' },
-  { at: -0.35, word: '' },
-  { at: -0.75, word: 'large' },
-  { at: -1, word: 'huge' },
-];
-const PLACE_NAMES: readonly { at: number; word: string }[] = [
-  { at: 0.08, word: 'dry' },
-  { at: 0.3, word: 'close' },
-  { at: 0.6, word: 'room' },
-  { at: 0.88, word: 'hall' },
-  { at: 1, word: 'cavern' },
-];
-const LOUD_NAMES: readonly { at: number; word: string }[] = [
-  { at: 0.35, word: 'faint' },
-  { at: 0.6, word: 'quiet' },
-  { at: 1.1, word: '' },
-  { at: 1.3, word: 'loud' },
-  { at: 1.5, word: 'blaring' },
-];
 
 /** Two word entries, matched as a pair before the words are read singly. */
 const PHRASES: ReadonlySet<string> = new Set(
@@ -411,16 +392,6 @@ function forms(word: string): string[] {
   if (word.endsWith('ing') && word.length > 5) undouble(word.slice(0, -3));
   if (word.endsWith('ed') && word.length > 4) undouble(word.slice(0, -2));
   return out;
-}
-
-/** The word for wherever a value landed on an axis. */
-function nearest(names: readonly { at: number; word: string }[], value: number): string {
-  for (const step of names) {
-    if (names[0].at > names[names.length - 1].at ? value >= step.at : value <= step.at) {
-      return step.word;
-    }
-  }
-  return names[names.length - 1].word;
 }
 
 function clamp(value: number, low: number, high: number): number {

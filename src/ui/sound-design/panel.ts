@@ -102,6 +102,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         toggleClass(pick.node, 'is-on', pick.chosen(armed.source, armed.preset));
       }
     }
+    for (const way of heardWays) {
+      toggleClass(way.node, 'is-on', armed.preset?.id === way.id);
+    }
   }
 
   const pickButton = (
@@ -349,6 +352,152 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     },
     ['Load a sound pack'],
   );
+
+  /* ---------- out of a recording ---------- */
+
+  /**
+   * Sounds pulled out of a file and rebuilt from the palette.
+   *
+   * Three offers per sound rather than one answer, and no verdict on which is
+   * right. The app cannot tell a good rebuild from a hopeless one — measured,
+   * a recording of its own work scores between seventy three and ninety six,
+   * and a sound it has no way of making scores between seventy and seventy
+   * six — so it puts three in front of you, plays whichever you touch, and
+   * leaves the choosing to ears.
+   */
+  const heardList = el('div', { class: 'heard-list' });
+  const heardNote = el('div', { class: 'hint' });
+  /**
+   * The offers on screen, so the one that is armed can be lit.
+   *
+   * Kept apart from the picker's own sections because these are not sounds to
+   * choose between by name — the search box has nothing to say about them,
+   * and filtering them would hide the one you were listening to.
+   */
+  const heardWays: { node: HTMLElement; id: string }[] = [];
+
+  const heardInput = el('input', {
+    type: 'file',
+    style: { display: 'none' },
+    attrs: { accept: 'audio/*,video/*' },
+    on: {
+      change: (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        const file = input.files?.[0];
+        if (file) void session.extractFrom(file);
+        input.value = '';
+      },
+    },
+  }) as HTMLInputElement;
+
+  const heardOpen = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title:
+        'Find the separate sounds in an audio or video file and rebuild each ' +
+        'one out of these voices. Nothing is uploaded. What comes back is ' +
+        'editable — a voice and five numbers — rather than a recording.',
+      on: { click: () => heardInput.click() },
+    },
+    ['Take sounds out of a recording'],
+  );
+
+  const heardPlaceAll = button(
+    {
+      class: 'chip chip--sm',
+      style: { flex: '1 1 0' },
+      title: 'Put the closest of each where it was in the recording',
+      on: { click: () => session.placeAllExtracted() },
+    },
+    ['Place them all'],
+  );
+  const heardClear = button(
+    { class: 'chip chip--sm', on: { click: () => session.clearExtracted() } },
+    ['Forget'],
+  );
+  const heardActions = el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [
+    heardPlaceAll,
+    heardClear,
+  ]);
+
+  const heardBody = el('div', {}, [
+    el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'From a recording' }),
+    heardOpen,
+    heardInput,
+    heardNote,
+    heardList,
+    heardActions,
+  ]);
+
+  /** What the list was last drawn from, so it is redrawn only when it moves. */
+  let paintedHeard: AppState['extract'] | null = null;
+
+  const paintHeard = (extract: AppState['extract'], project: AppState['project']): void => {
+    if (extract === paintedHeard) return;
+    paintedHeard = extract;
+
+    setText(
+      heardNote,
+      extract.busy
+        ? extract.busy
+        : extract.sounds.length
+          ? `${extract.sounds.length} sounds from ${extract.from}. ` +
+            'The number is how alike, not how good — listen.'
+          : '',
+    );
+    heardActions.style.display = extract.sounds.length ? 'flex' : 'none';
+
+    clear(heardList);
+    heardWays.length = 0;
+    for (const sound of extract.sounds) {
+      const ways = [sound, ...sound.also];
+      heardList.appendChild(
+        el('div', { class: 'heard-row' }, [
+          el('span', {
+            class: 'heard-row__at',
+            text: timecode(sound.heard.at, project.fps),
+            title: `${sound.heard.length.toFixed(2)}s long`,
+          }),
+          el(
+            'div',
+            { class: 'heard-row__ways' },
+            ways.map((way, at) => {
+              const node = button(
+                {
+                  class: 'cell pick heard-way',
+                  title:
+                    `${way.name} — ${(way.match * 100).toFixed(0)}% alike. ` +
+                    (at ? 'Another way of making it.' : 'The closest one found.'),
+                  on: { click: () => session.chooseMade(way) },
+                },
+                [
+                  // Just the voices on the button. The full name, the size and
+                  // the room are in the tooltip: three of these have to sit in
+                  // a column narrow enough to leave room for the number, and
+                  // what tells them apart is which voices they are made of.
+                  el('span', {
+                    text: [way.source.name, ...(way.source.with ?? []).map((part) => part.name)].join(' + '),
+                  }),
+                  el('span', { class: 'heard-way__match', text: `${(way.match * 100).toFixed(0)}` }),
+                ],
+              );
+              heardWays.push({ node, id: way.preset.id });
+              return node;
+            }),
+          ),
+          button(
+            {
+              class: 'chip chip--sm',
+              title: 'Put the closest one where it was in the recording',
+              on: { click: () => session.placeMade(sound.heard.at, sound) },
+            },
+            ['Place'],
+          ),
+        ]),
+      );
+    }
+  };
 
   /** Filter, which is what makes several hundred sounds usable at all. */
   const search = el('input', {
@@ -831,6 +980,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       pitchedSection,
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
+      heardBody,
       el('div', { class: 'section-title', style: { marginTop: '12px' }, text: 'On layer' }),
       layerRow,
     ]),
@@ -910,6 +1060,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         applyFilter();
       }
 
+      paintHeard(state.extract, project);
       paintChosen();
 
       if (project.layers !== paintedLayers) {

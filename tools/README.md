@@ -222,6 +222,74 @@ fixed order, so it comes back differing in the last bit of a float.
 Takes about a minute and a half. Run the development server and open
 http://localhost:5173/tools/library-check.html
 
+## listen-check.html
+
+Checks that sounds can be pulled out of a recording, against ground truth
+that exists because the recording is made here: eight known voices at eight
+known moments, at known settings.
+
+Finding them works. All eight are found with nothing invented, the ones with
+an attack land within thirteen milliseconds — under half a frame — and seven
+of the eight lengths come back within a third or fifty milliseconds. The one
+that does not is the whoosh, which fades up rather than starting, and is found
+a third of a second late. That is reported rather than smoothed over: a sound
+with no attack has no sharp answer to "when did it start", which is why the
+app anchors risers and swells to their end rather than their beginning.
+
+Four things had to be fixed before any of it worked, and each of them was
+found by this page rather than by reading the code.
+
+Onsets were over-detected. A hit is rarely one rise — a body arrives and a
+brighter part of it follows — so a sound now casts a shadow over the next
+three hundred milliseconds, inside which a rise has to be a decent fraction of
+the one before it to count. Five spurious events became none.
+
+Lengths were read at a single threshold, twenty two decibels down, which
+returns a third of the true length for anything that decays. Two thresholds
+give a rate and the rate gives the rest, and they are read early — six and
+twenty decibels down — because a sound in a room stops being the sound and
+starts being the room somewhere after that. Reading late measured the room and
+returned three times the length for anything reverberant.
+
+The two sides were printed over spans decided differently: a recording from
+its onset to where its envelope ended, a candidate over its whole render
+buffer. A fingerprint divides whatever it is given into eight slices, so that
+put every slice out of step, and a recording of this app's own metal came back
+as a bell. One function now decides both.
+
+And the similarity itself was a plain dot product of two lists of non-negative
+numbers, which is high for almost any pair. It gave ninety seven per cent for
+the same sound twice, fifty nine for a deliberately wrong voice, and ninety
+five for a sound the app has no way of making. It is now compared in logs,
+with the average of the whole palette taken out first — without that, every
+voice scores about ninety per cent against every other one, because they are
+all sounds.
+
+**There is no honest confidence number, and three were tried.** The similarity
+barely separates: a recording of a sound this app made scores between seventy
+three and ninety six, and a sound it has no way of making scores between
+seventy and seventy six. Rescaling between a typical voice and a perfect one
+put the impossible sounds at seventy per cent. Scoring how far the winner
+stood above the other thirty nine put them at seventy two, the same as
+everything else. So the feature does not claim one: it offers three ways of
+making each sound and says the number is a similarity rather than a verdict.
+
+That is founded on the measurement that matters. The voice that actually made
+a sound is the closest one about a quarter of the time, and among the three
+offered six times out of eight. A search that is right a quarter of the time
+and useful three quarters of the time should hand you three and let you
+listen.
+
+The last section is the honest one. Everything else is the app listening to
+itself, which is the only way to have ground truth and is also the easiest
+possible case. Four sounds are built out of things the palette has no voice
+for — a swept sine, a square wave, a resonant pair, a slow bowed swell — and
+what they score is a fairer guess at what a recording off a hard drive would
+score. There is no threshold on them; the numbers are printed.
+
+Takes about a minute. Run the development server and open
+http://localhost:5173/tools/listen-check.html
+
 ## stack-check.html
 
 Checks that a sound made of several voices really is all of them, at a level
