@@ -501,9 +501,44 @@
   left: 0;
   width: 1px;
   background: var(--ac);
+  /* The line itself is see-through to the pointer so it never gets in the way
+     of the lanes underneath. Only its grip, up on the ruler, takes events. */
   pointer-events: none;
-  z-index: 4;
+  z-index: 6;
   will-change: transform;
+}
+
+/*
+ * The handle that drags the playhead.
+ *
+ * A line one pixel wide is not something anybody can put a pointer on, so the
+ * part you grab is a wider tab sitting in the ruler, where there is nothing
+ * else to hit.
+ */
+.tl__playhead-grip {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 13px;
+  height: var(--tl-ruler);
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+
+.tl__playhead-grip::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--ac);
+}
+
+/* Dragging anywhere along the ruler moves the playhead too. */
+.tl__ruler {
+  cursor: ew-resize;
 }
 
 /* ---------- cues ---------- */
@@ -993,6 +1028,56 @@
 .stack-row--head .stack-row__name {
   color: var(--txt-1);
   font-weight: 500;
+}
+
+/*
+ * The small "?" that sits beside a heading.
+ *
+ * Deliberately quiet: there is one next to every section, and a screen with a
+ * dozen bright question marks on it reads as a screen that needs explaining.
+ * It comes up on hover and on focus, and is always reachable by keyboard.
+ */
+.help-dot {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--txt-3);
+  font-size: 9px;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  cursor: help;
+  opacity: 0.45;
+  flex: 0 0 auto;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.help-dot:hover,
+.help-dot:focus-visible {
+  opacity: 1;
+  color: var(--ac);
+  border-color: var(--ac-line);
+}
+
+/* A heading with a "?" beside it, rather than the "?" pushing it about. */
+.section-title--asks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The section a "?" asked about, so it is obvious which one answered. */
+.help__section.is-asked .section-title {
+  color: var(--ac);
+}
+
+.help__section.is-asked {
+  border-left: 2px solid var(--ac-line);
+  padding-left: 10px;
+  margin-left: -12px;
 }
 
 /* Sounds pulled out of a recording: one row each, three ways of making it. */

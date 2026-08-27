@@ -479,6 +479,52 @@ development server and open http://localhost:5173/tools/wk-check.html
 `src/export/patch.ts`, next to the reason for each one. Run it again after
 changing a voice or the conversion, and update those numbers.
 
+## Checking the transport, the playhead and record
+
+There is no page for these three. Everything else in this folder measures the
+audio, which can be rendered offline with nothing on screen; the transport
+needs a real video element, a real clock and a real pointer, so it is checked
+in a browser instead. What follows is what was checked and what it should do,
+so it can be checked the same way again.
+
+Load a clip on the sound design screen, then:
+
+- **Before a clip is loaded** every round button except play is dark. There is
+  nothing to stop, step through or run past.
+- **Play, then stop.** The playhead goes back to where play started, not to
+  zero. Press stop again and it stays there.
+- **The two skip buttons** move to the next sound placed either side of the
+  playhead and select it as they land. With no sounds placed they are dark.
+  With the playhead exactly on a sound, one press moves off it rather than
+  sticking.
+- **Hold fast forward** and the clock runs on at six times speed — about three
+  seconds of clip a second. Let go anywhere on the screen, including off the
+  button, and it stops at once. Measured: a three minute clip ran 0:00:27 to
+  0:03:00 while held, and stopped on release.
+- **Drag the ruler.** The playhead follows the pointer. Doing it while playing
+  scrubs, and playing resumes from where you let go.
+- **Drag the small tab** at the top of the playhead. Same thing, with
+  something big enough to take hold of — the line itself is one pixel wide and
+  passes pointer events through to the lanes underneath.
+- **Record.** Arm it, go to the drums, hit some pads: each one lands on the
+  timeline at the playhead. The keys and the guitar do the same. Disarm it and
+  playing places nothing. Unarmed play placing nothing is the half worth
+  checking, because a capture hook that fires when it should not is silent
+  until the timeline fills up with things nobody asked for.
+
+The floating video window is worth two checks of its own, both of which have
+been wrong at some point:
+
+- **It must never cover the bar on the left.** That bar is the only way
+  between screens, so a window parked over it strands you on whichever screen
+  you are on. It is clamped at 64 pixels, and the bar is also lifted above it,
+  which is two locks on the same door.
+- **The × means different things on different screens.** On the timeline it
+  turns the Window setting off and gives the stage back. On the instruments
+  there is no stage, so it means the window is not wanted until the Video chip
+  asks for it again. Shutting it on one screen must not answer for the other:
+  check that shutting it on the timeline still leaves the drums showing it.
+
 ## make-icons.mjs
 
 Draws the site icons.

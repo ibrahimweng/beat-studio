@@ -6,6 +6,7 @@ import { encodeMidi } from './export/midi.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { encodeWav } from './export/wav.ts';
+import type { CueSource } from './timeline/types.ts';
 import { blankPattern, seedPattern, togglePatternStep } from './pattern.ts';
 import { loadSaved, saveState } from './persist.ts';
 import { Store, clampBpm, initialState } from './store.ts';
@@ -226,12 +227,28 @@ export class Session {
 
   // ---------- playing ----------
 
+  /**
+   * Told about every note and hit as it is played, or null when nobody is.
+   *
+   * Here rather than at each of the four places a note can come from — two
+   * keyboard paths and two on-screen ones — because anything watching wants
+   * all of them and would otherwise have to be wired into each. What listens
+   * to it is the timeline's record button: armed, whatever you play lands.
+   */
+  #played: ((source: CueSource) => void) | null = null;
+
+  /** Have something told about each note and hit, or pass null to stop. */
+  capture(listener: ((source: CueSource) => void) | null): void {
+    this.#played = listener;
+  }
+
   hitPad(pad: PadName): void {
     this.engine.start();
     const now = this.engine.now();
     this.engine.drum(pad, now + 0.004, 1);
     this.recorder.log(PAD_MIDI[pad] ?? 38, now, 0.12, 1, 9);
     this.effects.flashPad(pad);
+    this.#played?.({ kind: 'kit', name: pad });
   }
 
   playNote(midi: number, kind: NoteKind = 'piano'): void {
@@ -247,6 +264,11 @@ export class Session {
       kind === 'guitar' ? 1 : 0,
     );
     this.effects.flashKey(midi);
+    this.#played?.({
+      kind: 'pitched',
+      name: kind === 'guitar' ? 'guitar' : 'piano',
+      midi,
+    });
   }
 
   releaseNote(midi: number): void {

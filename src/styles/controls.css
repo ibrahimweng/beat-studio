@@ -108,8 +108,47 @@
   cursor: pointer;
 }
 
-.round-btn:hover {
+.round-btn:hover:not(:disabled) {
   border-color: var(--ac-line);
+}
+
+/* Nothing loaded, or nothing to step to: say so rather than doing nothing. */
+.round-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.round-btn__glyph {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--txt-2);
+  font-family: inherit;
+  /* Skip and shuttle are two or three separate characters standing in for one
+     mark, so they are pulled together to read as one. The negative margin
+     gives back the space the last character's letter-spacing added, which
+     would otherwise sit the glyph a shade left of the middle. */
+  letter-spacing: -1px;
+  margin-right: -1px;
+  white-space: nowrap;
+}
+
+/*
+ * Record, which is red only when it is on.
+ *
+ * A record button that is always red reads as recording, and this one sits in
+ * a bar you look at the whole time. Dark until armed, then unmistakable.
+ */
+.round-btn--rec .round-btn__glyph {
+  font-size: 13px;
+}
+
+.round-btn--rec.is-on {
+  border-color: var(--rec);
+  background: color-mix(in srgb, var(--rec) 18%, var(--panel));
+}
+
+.round-btn--rec.is-on .round-btn__glyph {
+  color: var(--rec);
 }
 
 .round-btn__stop {

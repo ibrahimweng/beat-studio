@@ -2,6 +2,7 @@ import { TITLES } from '../constants.ts';
 import type { Session } from '../session.ts';
 import type { AppState } from '../store.ts';
 import { button, el, setText, toggleClass } from './dom.ts';
+import { helpButton } from './help.ts';
 import type { View } from './view.ts';
 
 /** Title, step count, tempo, transport and the two export buttons. */
@@ -9,7 +10,11 @@ export function createTopbar(
   session: Session,
   options: { onToggleVideo: () => void; hasVideo: () => boolean } ,
 ): View {
-  const title = el('div', { class: 'topbar__title', text: TITLES.drums });
+  const titleText = el('span', { text: TITLES.drums });
+  const title = el('div', { class: 'topbar__title section-title--asks' }, [
+    titleText,
+    helpButton('instruments', 'this instrument'),
+  ]);
   const stepsLabel = el('span', { text: '16 steps' });
   const bpmValue = el('div', { class: 'stepper__value', text: '92' });
 
@@ -55,15 +60,19 @@ export function createTopbar(
 
   // Only worth offering once a clip is loaded, since there would be nothing
   // to show. It is hidden rather than disabled: a button that can never do
-  // anything is clutter, not information.
-  const watch = button(
-    {
-      class: 'chip',
-      title: 'Show or hide the video while you play',
-      on: { click: () => options.onToggleVideo() },
-    },
-    ['Video'],
-  );
+  // anything is clutter, not information. Its "?" goes with it, so there is
+  // never a question mark standing next to nothing.
+  const watch = el('div', { class: 'section-title--asks' }, [
+    button(
+      {
+        class: 'chip',
+        title: 'Show or hide the video while you play',
+        on: { click: () => options.onToggleVideo() },
+      },
+      ['Video'],
+    ),
+    helpButton('video', 'the video window'),
+  ]);
 
   const root = el('header', { class: 'topbar' }, [
     title,
@@ -91,7 +100,7 @@ export function createTopbar(
     el: root,
     update(state: AppState) {
       watch.style.display = options.hasVideo() ? '' : 'none';
-      setText(title, TITLES[state.view]);
+      setText(titleText, TITLES[state.view]);
       setText(stepsLabel, `${state.steps} steps`);
       setText(bpmValue, String(state.bpm));
       toggleClass(play, 'is-playing', state.playing);

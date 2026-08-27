@@ -1,6 +1,7 @@
 import type { Session } from '../session.ts';
 import { createSliderH } from './controls.ts';
 import { el, setText } from './dom.ts';
+import { helpButton } from './help.ts';
 import type { View } from './view.ts';
 
 export interface MixerView extends View {
@@ -45,10 +46,11 @@ export function createMixer(session: Session): MixerView {
     ]),
     el('div', { class: 'mixer__meters' }, [left.row, right.row]),
     el('div', { class: 'mixer__map' }, [
+      helpButton('engine', 'the mix and the meters'),
       el('div', { class: 'micro-label', style: { whiteSpace: 'nowrap', flex: '0 0 auto' }, text: 'Pad map' }),
       el('div', {
         class: 'mixer__map-keys',
-        text: 'W E R T cymbals · A S hats · D F kicks · G H toms · J snare · K floor',
+        text: 'W E R T cymbals · A S hats · D F kicks · G H L toms · J snare · K floor',
       }),
     ]),
   ]);

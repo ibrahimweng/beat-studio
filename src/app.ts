@@ -10,7 +10,7 @@ import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
 import { createSoundDesignBar } from './ui/sound-design/bar.ts';
 import { createDivider } from './ui/sound-design/divider.ts';
-import { createHelp } from './ui/sound-design/help.ts';
+import { createHelp } from './ui/help.ts';
 import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
 import { createVideoStage } from './ui/sound-design/stage.ts';
 import { createVideoWindow } from './ui/video-window.ts';
@@ -30,6 +30,20 @@ import type { View } from './ui/view.ts';
 export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): () => void {
   const session = new Session(options);
   const soundDesign = new SoundDesignSession(session.engine, session.store);
+
+  /*
+   * With the timeline armed, whatever is played lands on it.
+   *
+   * Caught at the one place every note and hit passes through, so the drums,
+   * the keys and the guitar are all covered, by keyboard and by mouse alike,
+   * without four separate wires. Only from the instrument screens: on the
+   * timeline a pad key already places its own sound, and capturing there as
+   * well would put down two.
+   */
+  session.capture((source) => {
+    const state = session.store.state;
+    if (state.armed && state.mode === 'play') soundDesign.addCueAtPlayhead(source);
+  });
 
   const tour = createTour();
   const help = createHelp({ onReplayTour: () => tour.start() });
@@ -53,6 +67,21 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const videoWindow = createVideoWindow({
     video: videoStage.video,
     home: () => videoStage.el,
+    /*
+     * What the × means depends on where it was pressed.
+     *
+     * On the sound design screen it is the same statement as turning the
+     * Window toggle off, and it has to be, or the next render would open it
+     * again. On the instruments there is no toggle and no stage: it means
+     * the window itself is not wanted, until the Video chip asks for it.
+     */
+    onClose: () => {
+      if (session.store.state.mode === 'sound-design') {
+        session.store.set({ videoWindow: false });
+      } else {
+        videoWindow.forget();
+      }
+    },
   });
   const timeline = createTimeline(soundDesign);
   const soundDesignPanel = createSoundDesignPanel(soundDesign);
@@ -73,35 +102,48 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
   root.appendChild(shell);
 
-  let mounted: 'play' | 'sound-design' | null = null;
+  /**
+   * What is currently on screen: the mode, and whether the video is floating.
+   *
+   * Both, because the timeline screen has two layouts — one with the stage
+   * above it and one without — and swapping between them is the same
+   * re-mount as swapping screens.
+   */
+  let mounted = '';
   let aside: HTMLElement | null = null;
 
-  /** Swap the whole middle column and the right panel when the mode changes. */
-  const mount = (mode: 'play' | 'sound-design'): void => {
-    if (mounted === mode) return;
-    mounted = mode;
+  /** Swap the whole middle column and the right panel when the layout changes. */
+  const mount = (state: AppState): void => {
+    const mode = state.mode;
+    const floating = mode === 'play' || state.videoWindow;
+    const key = `${mode}:${floating}`;
+    if (mounted === key) return;
+    const before = mounted;
+    mounted = key;
 
     // Leaving the sound design screen stops its clock, the same way arriving
     // at it stops the instrument transport. The browser pauses a video that
     // has been taken out of the page, but the scheduler behind it would carry
     // on running and the transport would still read as playing.
-    if (mode === 'play') soundDesign.pause();
+    if (mode === 'play' && !before.startsWith('play')) soundDesign.pause();
 
-    // The video is one element shared by both screens, so leaving the sound
-    // design screen hands it to the floating window and coming back takes it
-    // home again. It is only worth showing once a clip has been loaded.
-    if (mode === 'play') {
-      if (soundDesign.store.state.videoReady && videoWindow.wanted) videoWindow.open();
-    } else {
-      videoWindow.stow();
-    }
-
+    /*
+     * The stage comes out when the video is floating.
+     *
+     * There is one video element and two places it can be. On the instrument
+     * screens the floating window is the only one there is. On the timeline
+     * it is a choice, and choosing the window means the stage above the lanes
+     * is not just empty but gone, so the height it was using goes to the
+     * timeline — which is the reason to want the window here at all.
+     */
     main.replaceChildren(
       ...(mode === 'play'
         ? [topbar.el, stage.el, dock.el, mixer.el]
-        : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
+        : floating
+          ? [soundDesignBar.el, timeline.el]
+          : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
     );
-    if (mode === 'sound-design') divider.refresh();
+    if (mode === 'sound-design' && !floating) divider.refresh();
 
     const next = mode === 'play' ? inspector.el : soundDesignPanel.el;
     if (aside) shell.replaceChild(next, aside);
@@ -130,15 +172,27 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     hidePlayhead: () => dock.hidePlayhead(),
   };
 
+  /**
+   * Put the video wherever it belongs for the screen and the setting.
+   *
+   * Run on every state change rather than only when the screens swap, so a
+   * clip loaded while the instruments are already up brings the window with
+   * it, and so the toggle on the timeline bar takes effect at once. The
+   * mounting above has already happened, which matters: stowing the video
+   * into a stage that is not on the page yet would put it nowhere.
+   */
+  const placeVideo = (state: AppState): void => {
+    const onPlay = state.mode === 'play';
+    const floating = onPlay ? videoWindow.wanted : state.videoWindow;
+    // Opened from the timeline's own setting, which says nothing about
+    // whether the instrument screens want the window when you get there.
+    if (state.videoReady && floating) videoWindow.open(onPlay);
+    else videoWindow.stow();
+  };
+
   const render = (state: AppState, previous: AppState | null): void => {
-    mount(state.mode);
-    // A clip loaded while the instruments are already on screen should bring
-    // the window with it, rather than waiting for the next time the screens
-    // are swapped.
-    const ready = soundDesign.store.state.videoReady;
-    if (state.mode === 'play' && ready && videoWindow.wanted && !videoWindow.showing) {
-      videoWindow.open();
-    }
+    mount(state);
+    placeVideo(state);
     for (const view of views) view.update(state, previous);
   };
 
@@ -154,6 +208,10 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     unsubscribe();
     tour.close();
     help.close();
+    // The help listens on the document for the small "?" buttons, which
+    // would outlive the app's own tree unless it is told to let go.
+    help.destroy();
+    soundDesign.stopShuttle();
     soundDesign.dispose();
     session.dispose();
   };
