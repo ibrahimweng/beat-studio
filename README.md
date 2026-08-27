@@ -212,6 +212,41 @@ a pack sound with reverb written into it, is left out of a stack rather than
 mixed into one. Its room sits above all the layers at once, so it would land
 on everything beside it.
 
+### Take sounds out of a recording
+
+Drop in an audio or video file and Beat Studio finds the separate sounds in it
+and rebuilds each one out of these voices. Nothing is uploaded: the browser
+decodes it, the app measures it, and it never leaves your machine.
+
+What comes back is editable in a way a sample never is. A rebuilt hit is a
+voice and five numbers, so it can be lengthened, tuned, put in a different
+room, pushed and stacked — none of which a recording of it would allow. "Place
+them all" puts each one where it was in the file, so a reference track comes
+back as a timeline you can work on.
+
+Being straight about what this is and is not.
+
+Finding the sounds works well. Measured against a recording built out of eight
+known voices at known moments, all eight are found with nothing invented, and
+the ones with an attack land within thirteen milliseconds — under half a
+frame. A sound that fades up rather than starting, like a whoosh, is found
+about a third of a second late, because it has no attack to find.
+
+Rebuilding them is a search of the palette, not a transcription. Forty
+synthesised voices cannot reproduce an arbitrary recording. The voice that
+actually made a sound comes out closest about a quarter of the time, and is
+among the three offered about three quarters of the time — so the app offers
+three, plays whichever you touch, and leaves the choosing to your ears.
+
+**It cannot tell you whether a rebuild is any good.** The number beside each
+offer is how alike the two are, and it is shown because it is real, not
+because it is a verdict: a recording of a sound this app made itself scores
+between seventy three and ninety six, and a sound it has no way of making
+scores between seventy and seventy six. Those ranges overlap, so a middling
+number tells you very little. Three ways of computing a confidence were tried
+and none of them separated a good rebuild from a hopeless one, which is why
+there are three offers instead of one answer. `tools/README.md` has all of it.
+
 ### Let it find the hits for you
 
 Click "Find hits" and Beat Studio reads the video and suggests where sounds
@@ -614,6 +649,8 @@ src/
     catalogue.ts   a thousand named sounds over those voices
     vocabulary.ts  the words the app knows, and what each one means
     describe.ts    turning a sentence into settings
+    listen.ts      finding the sounds in a recording, and measuring them
+    rebuild.ts     making the nearest thing this app can make to one
     sources.ts     turning a placed sound into a played sound
     render.ts      writing the file, faster than real time
     transport.ts   the step clock

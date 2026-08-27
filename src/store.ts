@@ -1,6 +1,7 @@
 import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import type { Pack, PackSound } from './audio/pack.ts';
+import type { Rebuilt } from './audio/rebuild.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
@@ -82,6 +83,24 @@ export interface AppState {
   packs: Pack[];
   /** Sounds saved from the timeline, kept between projects. */
   mine: PackSound[];
+  /** Sounds read out of a recording, and rebuilt out of the palette. */
+  extract: Extraction;
+}
+
+/**
+ * Sounds pulled out of a recording.
+ *
+ * Kept whole rather than placed straight onto the timeline, because a rebuild
+ * is a suggestion: the app offers three ways of making each one and cannot
+ * tell you which is right, so somebody has to listen before any of them is
+ * worth putting anywhere.
+ */
+export interface Extraction {
+  /** What it is doing, or null when it is not doing anything. */
+  busy: string | null;
+  /** The name of the file they came out of. */
+  from: string | null;
+  sounds: Rebuilt[];
 }
 
 /**
@@ -143,6 +162,7 @@ export function initialState(): AppState {
     detect: emptyDetection(),
     packs: [],
     mine: [],
+    extract: { busy: null, sounds: [], from: null },
   };
 }
 

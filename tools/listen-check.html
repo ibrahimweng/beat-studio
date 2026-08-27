@@ -1,0 +1,258 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>listen check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Pulling sounds out of a recording is two claims, and both can be checked
+     against ground truth by making the recording here: put known sounds at
+     known moments, then ask the finder where they are and the rebuilder what
+     they were. Whether the rebuild is any good on a recording that did not
+     come out of this app is a different question, and the last section makes
+     an honest attempt at it. */
+  import { listen, print, alike, mono } from '/src/audio/listen.ts';
+  import { rebuild } from '/src/audio/rebuild.ts';
+  import { makeCue } from '/src/timeline/project.ts';
+  import { playCue } from '/src/audio/sources.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+  const say = (t) => { document.getElementById('out').textContent = t; };
+
+  /**
+   * A recording made on purpose: eight sounds, spaced far enough apart to be
+   * separate events and close enough together to be a real piece of work.
+   */
+  const PLACED = [
+    { at: 0.30, voice: 'impact', length: 0.9, tune: -5, space: 0.2 },
+    { at: 1.40, voice: 'click', length: 0.02, tune: 0, space: 0 },
+    { at: 2.10, voice: 'metal', length: 1.2, tune: 3, space: 0.45 },
+    { at: 3.60, voice: 'whoosh', length: 0.8, tune: 0, space: 0.3 },
+    { at: 4.80, voice: 'sub', length: 1.1, tune: -7, space: 0 },
+    { at: 6.20, voice: 'glass', length: 0.7, tune: 6, space: 0.5 },
+    { at: 7.30, voice: 'gravel', length: 0.6, tune: 0, space: 0.15 },
+    { at: 8.40, voice: 'bell', length: 1.5, tune: -3, space: 0.6 },
+  ];
+  const SPAN = 11;
+
+  const cueFor = (p, id) => ({
+    ...makeCue(0, 'check', { kind: 'design', name: p.voice }),
+    id, gain: 1, tune: p.tune, length: p.length, space: p.space,
+    drive: 0, anchor: 'start',
+  });
+
+  say('making the recording…');
+  const ctx = new OfflineAudioContext(1, Math.ceil(RATE * SPAN), RATE);
+  PLACED.forEach((p, i) => playCue(ctx, ctx.destination, cueFor(p, `placed-${i}`), p.at, 1));
+  const recording = await ctx.startRendering();
+
+  // ---------- does it find them ----------
+
+  say('finding the sounds…');
+  const heard = listen(recording);
+
+  /*
+   * Matched generously and timed strictly, which are two different questions.
+   * A whoosh has no attack — it fades up — so "when did it start" has no
+   * sharp answer for it, and the app itself anchors risers and swells to
+   * their end for the same reason. Whether each one was found at all is asked
+   * generously; how well it was timed is asked strictly below, and only of the
+   * sounds that have an attack to time. The whoosh is found about a third of a
+   * second late, which is reported rather than hidden inside a pass.
+   */
+  const SHARP = ['impact', 'click', 'metal', 'sub', 'glass', 'gravel', 'bell'];
+  const matchedTo = PLACED.map((p) => {
+    const near = heard
+      .map((h, i) => ({ i, off: Math.abs(h.at - p.at) }))
+      .sort((a, b) => a.off - b.off)[0];
+    return near && near.off < 0.45 ? near : null;
+  });
+  const foundAll = matchedTo.filter(Boolean).length;
+  const spurious = heard.length - foundAll;
+
+  check('every sound placed is a sound found',
+    foundAll === PLACED.length,
+    `${foundAll} of ${PLACED.length}` +
+    (foundAll < PLACED.length
+      ? `, missed ${PLACED.filter((_, i) => !matchedTo[i]).map((p) => p.voice).join(', ')}`
+      : ''));
+
+  check('and it does not invent any',
+    spurious === 0,
+    spurious ? `${spurious} extra at ${heard.filter((h) => !matchedTo.some((m) => m && heard[m.i] === h)).map((h) => h.at.toFixed(2)).join(', ')}s`
+             : `${heard.length} found, ${PLACED.length} placed`);
+
+  const sharpOffs = PLACED.map((p, i) => (matchedTo[i] && SHARP.includes(p.voice) ? matchedTo[i].off : null))
+    .filter((off) => off !== null);
+  const worstOff = sharpOffs.length ? Math.max(...sharpOffs) : 1;
+  const slowOffs = PLACED.map((p, i) => (matchedTo[i] && !SHARP.includes(p.voice) ? matchedTo[i].off : null))
+    .filter((off) => off !== null);
+  check('and lands the ones with an attack within a frame',
+    worstOff < 1 / 30,
+    `worst is ${(worstOff * 1000).toFixed(0)}ms, a frame at thirty is ${(1000 / 30).toFixed(0)}ms` +
+    (slowOffs.length ? `; the ones that fade up land ${slowOffs.map((o) => (o * 1000).toFixed(0)).join('/')}ms out` : ''));
+
+  // Lengths, which is what decides how long the rebuilt cue runs.
+  /*
+   * Within a third, or within fifty milliseconds — whichever is kinder, since
+   * a click is twenty milliseconds long and being forty out on it is a huge
+   * proportion of nothing at all.
+   */
+  const lengthOff = PLACED.map((p, i) =>
+    matchedTo[i] ? heard[matchedTo[i].i].length - p.length : Infinity);
+  const close = lengthOff.filter((off, i) =>
+    Math.abs(off) < 0.05 || Math.abs(off) / PLACED[i].length < 0.34).length;
+  check('and measures how long each one runs',
+    close >= PLACED.length - 1,
+    `${close} of ${PLACED.length} — ` +
+    PLACED.map((p, i) => `${p.voice} ${(lengthOff[i] * 1000).toFixed(0)}ms`).join(' · '));
+
+  // ---------- does it rebuild them ----------
+
+  say('rebuilding…');
+  const started = performance.now();
+  const built = await rebuild(heard, (done, of) => say(`rebuilding ${done}/${of}…`));
+  const rebuildMs = performance.now() - started;
+
+  const namesOf = (made) => [made.source.name, ...(made.source.with ?? []).map((w) => w.name)];
+  const recovered = PLACED.map((p, i) => {
+    if (!matchedTo[i]) return null;
+    const made = built[matchedTo[i].i];
+    const first = namesOf(made);
+    const any = [...first, ...made.also.flatMap(namesOf)];
+    return {
+      want: p.voice, got: first,
+      closest: first.includes(p.voice),
+      offered: any.includes(p.voice),
+      match: made.match,
+    };
+  }).filter(Boolean);
+
+  const closest = recovered.filter((r) => r.closest).length;
+  const offered = recovered.filter((r) => r.offered).length;
+
+  /*
+   * Two numbers, and the second is the one the feature rests on. Picking the
+   * exact voice out of forty from a recording of it is hard and this gets it
+   * right about a third of the time; having it among the three offered is a
+   * different and much easier claim, and it is the one that makes a shortlist
+   * worth handing to somebody who can listen to three things.
+   */
+  check('the voice that made a sound is among the three offered',
+    offered >= recovered.length * 0.6,
+    `${offered} of ${recovered.length} offered it, ${closest} led with it — ` +
+    recovered.map((r) => `${r.want}→${r.got.join('+')}${r.closest ? '' : r.offered ? ' (2nd or 3rd)' : ' ✗'}`).join(', '));
+
+  const matches = built.map((b) => b.match).sort((a, b) => a - b);
+  check('and every rebuild is offered with a score, not a promise',
+    built.every((b) => b.match >= 0 && b.match <= 1),
+    `lowest ${(matches[0] * 100).toFixed(0)}%, middle ` +
+    `${(matches[matches.length >> 1] * 100).toFixed(0)}%, highest ` +
+    `${(matches[matches.length - 1] * 100).toFixed(0)}%`);
+
+  // ---------- what does the score mean ----------
+
+  /*
+   * A number between nought and one says nothing until you know what a good
+   * one and a bad one look like. Both ends are measured here: the same voice
+   * at the same settings rendered twice is the most any rebuild could score,
+   * and a deliberately wrong voice is roughly what a miss looks like.
+   */
+  say('working out what a score means…');
+  async function renderOne(p, id, seconds) {
+    const c = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
+    playCue(c, c.destination, cueFor(p, id), 0, 1);
+    return (await c.startRendering()).getChannelData(0);
+  }
+
+  const ceilings = [], floors = [];
+  for (const p of PLACED) {
+    const span = p.length + 0.4 + p.space * 2.6;
+    const a = print(await renderOne(p, 'a', span), RATE);
+    const b = print(await renderOne(p, 'b', span), RATE);
+    ceilings.push(alike(a, b));
+    // Something that is definitely not it, at the same length.
+    const wrong = { ...p, voice: p.voice === 'sub' ? 'chirp' : 'sub' };
+    floors.push(alike(a, print(await renderOne(wrong, 'c', span), RATE)));
+  }
+  const middle = (list) => [...list].sort((a, b) => a - b)[list.length >> 1];
+
+  check('the same sound twice scores near the top',
+    middle(ceilings) > 0.9,
+    `${(middle(ceilings) * 100).toFixed(0)}%`);
+
+  check('and the wrong voice scores below it',
+    middle(floors) < middle(ceilings) - 0.1,
+    `wrong voice ${(middle(floors) * 100).toFixed(0)}%, ` +
+    `same voice ${(middle(ceilings) * 100).toFixed(0)}%`);
+
+  // ---------- and on something it did not make ----------
+
+  /*
+   * The honest part. Everything above is the app listening to itself, which
+   * is the only way to have ground truth and is also the easiest possible
+   * case. These four are built out of things the palette has no voice for —
+   * a swept sine, a square wave, a formant-ish pair of resonances, a slow
+   * bowed swell — so what they score is a fairer guess at what a recording
+   * off a hard drive would score. It is reported rather than asserted: there
+   * is no threshold here to pass.
+   */
+  say('trying it on sounds it cannot make…');
+  function stranger(kind, seconds) {
+    const n = Math.ceil(RATE * seconds);
+    const d = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const t = i / RATE;
+      const fade = Math.min(1, t / 0.005) * Math.exp(-t * (kind === 'bowed' ? 1.2 : 6));
+      if (kind === 'sweep') d[i] = Math.sin(2 * Math.PI * (200 + 3000 * t) * t) * fade;
+      else if (kind === 'square') d[i] = Math.sign(Math.sin(2 * Math.PI * 140 * t)) * fade * 0.6;
+      else if (kind === 'formant') {
+        d[i] = (Math.sin(2 * Math.PI * 700 * t) + 0.6 * Math.sin(2 * Math.PI * 1220 * t)) * fade * 0.5;
+      } else d[i] = Math.sin(2 * Math.PI * 320 * t) * Math.min(1, t / 0.4) * fade;
+    }
+    return d;
+  }
+
+  const strange = [];
+  for (const kind of ['sweep', 'square', 'formant', 'bowed']) {
+    const seconds = kind === 'bowed' ? 2 : 1;
+    const d = stranger(kind, seconds);
+    let peak = 0;
+    for (const v of d) peak = Math.max(peak, Math.abs(v));
+    const [made] = await rebuild([{
+      at: 0, length: seconds * 0.7, peak, attack: 0.005,
+      centroid: 900, print: print(d, RATE),
+    }]);
+    strange.push({ kind, as: made.name, match: Number((made.match * 100).toFixed(0)) });
+  }
+
+  /*
+   * And the finding that decided how this is presented. A score is only worth
+   * showing if a good rebuild and a hopeless one land in different places.
+   * These do not: the middles are apart, the ranges overlap, and a single
+   * number in the middle of the scale says nothing. Reported rather than
+   * threshold-tested, because the honest response was to change what the
+   * feature claims rather than to keep looking for a number that behaved.
+   */
+  const mine = built.map((b) => b.match).sort((a, b) => a - b);
+  const theirs = strange.map((s) => s.match / 100).sort((a, b) => a - b);
+  check('and a good rebuild cannot be told from a hopeless one by score alone',
+    mine[0] <= theirs[theirs.length - 1],
+    `its own sounds ${(mine[0] * 100).toFixed(0)}–${(mine[mine.length - 1] * 100).toFixed(0)}%, ` +
+    `sounds it cannot make ${(theirs[0] * 100).toFixed(0)}–${(theirs[theirs.length - 1] * 100).toFixed(0)}% — ` +
+    `which is why three are offered rather than one judged`);
+
+
+  const failed = results.filter((r) => !r.pass);
+  say(JSON.stringify({
+    passed: results.length - failed.length,
+    of: results.length,
+    score: {
+      sameSoundTwice: Number((middle(ceilings) * 100).toFixed(0)),
+      wrongVoice: Number((middle(floors) * 100).toFixed(0)),
+      thisAppsOwnSounds: built.map((b) => Number((b.match * 100).toFixed(0))),
+      soundsItCannotMake: strange,
+    },
+    rebuildSecondsPerSound: Number((rebuildMs / 1000 / heard.length).toFixed(1)),
+    results,
+  }, null, 1));
+  document.title = 'done';
+</script></body></html>

@@ -50,6 +50,8 @@ import type {
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
+import { listen } from './audio/listen.ts';
+import { rebuild, type Made } from './audio/rebuild.ts';
 import { emptyDetection, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
@@ -1081,6 +1083,89 @@ export class SoundDesignSession {
     );
     this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'place all');
     this.#store.set({ status: `${cues.length} sounds placed` });
+  }
+
+  // ---------- reading sounds out of a recording ----------
+
+  /**
+   * Find the sounds in a file and rebuild each out of the palette.
+   *
+   * Nothing is uploaded: the browser decodes it, the app measures it, and it
+   * never leaves the machine. What comes back is offers rather than answers —
+   * three ways of making each sound, none of which the app can tell you is
+   * the right one.
+   */
+  async extractFrom(file: File): Promise<void> {
+    this.#wake();
+    this.#store.set({ extract: { busy: 'reading the file…', from: file.name, sounds: [] } });
+
+    const buffer = await this.#engine.decode(file);
+    if (!buffer) {
+      this.#store.set({
+        extract: { busy: null, from: null, sounds: [] },
+        status: 'that file could not be read as sound',
+      });
+      return;
+    }
+
+    this.#store.set({
+      extract: { busy: 'finding the sounds…', from: file.name, sounds: [] },
+    });
+    // A turn of the loop, so the message is drawn before the work starts.
+    await new Promise((wake) => setTimeout(wake, 0));
+    const heard = listen(buffer);
+    if (!heard.length) {
+      this.#store.set({
+        extract: { busy: null, from: file.name, sounds: [] },
+        status: 'nothing in that file sounded like a separate sound',
+      });
+      return;
+    }
+
+    const sounds = await rebuild(heard, (done, of) => {
+      this.#store.set({
+        extract: { busy: `rebuilding ${done} of ${of}…`, from: file.name, sounds: [] },
+      });
+    });
+    this.#store.set({
+      extract: { busy: null, from: file.name, sounds },
+      status: `${sounds.length} sounds rebuilt from ${file.name}`,
+    });
+  }
+
+  /** Arm one of the ways of making a sound that was heard, and hear it. */
+  chooseMade(made: Made): void {
+    this.chooseSource(made.source, made.preset);
+  }
+
+  /** Put one where it was in the recording. */
+  placeMade(heardAt: number, made: Made): void {
+    const at = snapTime(this.project, this.#insideVideo(heardAt));
+    const cue = dressCue(
+      makeCue(at, this.#store.state.activeLayerId, made.source),
+      made.preset,
+    );
+    this.#setProject({ ...this.project, cues: [...this.project.cues, cue] }, `place:${cue.id}`);
+    this.#store.set({ selection: [cue.id] });
+    this.audition(cue);
+  }
+
+  /** Put the closest of each where it was, which is the whole point of this. */
+  placeAllExtracted(): void {
+    const { extract, activeLayerId } = this.#store.state;
+    if (!extract.sounds.length) return;
+    const cues = extract.sounds.map((sound) =>
+      dressCue(
+        makeCue(snapTime(this.project, this.#insideVideo(sound.heard.at)), activeLayerId, sound.source),
+        sound.preset,
+      ),
+    );
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'place rebuilt');
+    this.#store.set({ status: `${cues.length} rebuilt sounds placed` });
+  }
+
+  clearExtracted(): void {
+    this.#store.set({ extract: { busy: null, from: null, sounds: [] } });
   }
 
   /** Put the current sound on one suggested moment. */
