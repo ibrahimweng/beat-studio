@@ -99,14 +99,15 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
 /**
  * A cue as a library entry asked for it, or exactly as its voice makes it.
  *
- * The four numbers a preset carries are the four the library varies. Applied
+ * The numbers a preset carries are the ones a chooser is allowed to set on
+ * the way in. Applied
  * after {@link makeCue} rather than inside it, so a voice keeps one answer to
  * "what is this on its own" no matter how many named versions of it exist.
  */
 export function dressCue(cue: Cue, preset: CuePreset | null): Cue {
   if (!preset) return cue;
-  const { length, tune, space, drive } = preset;
-  return { ...cue, length, tune, space, drive };
+  const { length, tune, space, drive, gain } = preset;
+  return { ...cue, length, tune, space, drive, gain };
 }
 
 /** Seconds per frame at the project's rate. */

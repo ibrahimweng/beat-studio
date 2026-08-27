@@ -1,5 +1,6 @@
 import { DESIGN_DEFAULT_LENGTH, DESIGN_CHARACTER, DESIGN_GROUPS } from '../timeline/types.ts';
 import type { CuePreset, DesignName } from '../timeline/types.ts';
+import { SYNONYMS } from './vocabulary.ts';
 
 /**
  * A browsable library, generated rather than stored.
@@ -63,56 +64,6 @@ const FAMILY = new Map<DesignName, string>(
 );
 
 /**
- * Words that describe a voice but are not in its name.
- *
- * Searching a library is guessing at what someone else called things, so the
- * things nobody would think to type the exact name of carry the words they
- * would type instead.
- */
-const ALSO: Partial<Record<DesignName, readonly string[]>> = {
-  impact: ['hit', 'boom', 'punch'],
-  thud: ['hit', 'body', 'dull'],
-  slam: ['door', 'hit', 'heavy'],
-  metal: ['clang', 'steel', 'ring'],
-  clank: ['metal', 'knock'],
-  whoosh: ['swish', 'pass', 'air'],
-  swipe: ['swish', 'fast', 'air'],
-  flutter: ['wings', 'flap', 'air'],
-  wobble: ['warp', 'bend'],
-  riser: ['build', 'lead in', 'tension'],
-  swell: ['build', 'lead in'],
-  reverse: ['backwards', 'suck', 'lead in'],
-  sub: ['bass', 'low', 'drop'],
-  rumble: ['low', 'earth', 'thunder'],
-  drone: ['hum', 'low', 'bed'],
-  click: ['tick', 'ui', 'button'],
-  tick: ['click', 'ui'],
-  pop: ['blip', 'ui', 'bubble'],
-  beep: ['tone', 'ui', 'alert'],
-  chirp: ['blip', 'ui', 'bird'],
-  zap: ['laser', 'electric', 'sci fi'],
-  glitch: ['digital', 'error', 'broken'],
-  shimmer: ['sparkle', 'magic', 'bright'],
-  static: ['noise', 'hiss', 'radio'],
-  bell: ['chime', 'ring', 'church'],
-  glass: ['crystal', 'ring', 'ping'],
-  wood: ['block', 'knock', 'dry'],
-  pipe: ['tube', 'hollow', 'organ'],
-  string: ['pluck', 'guitar', 'harp'],
-  thunk: ['knock', 'dull', 'hollow'],
-  wire: ['twang', 'cable', 'tension'],
-  rain: ['water', 'weather', 'drops'],
-  fire: ['crackle', 'burn', 'flames'],
-  gravel: ['stones', 'scrape', 'dirt'],
-  swarm: ['insects', 'bees', 'sci fi'],
-  pour: ['water', 'bubbles', 'liquid'],
-  ratchet: ['clatter', 'gear', 'wind up'],
-  clockwork: ['ticking', 'clock', 'gears'],
-  zip: ['zipper', 'fast', 'lead in'],
-  motor: ['engine', 'machine', 'idle'],
-};
-
-/**
  * Every entry, worked out once.
  *
  * Built at module load rather than on demand: a thousand small objects is
@@ -142,12 +93,15 @@ function build(): Entry[] {
           // The push a voice was born with, left alone. What size and place
           // change is how big it is and where it is, not what it is made of.
           drive: character.drive,
+          // The library varies size and place and nothing else, so every
+          // entry arrives at the level any sound arrives at.
+          gain: 1,
           tags: [
             voice,
             family,
             size.word,
             place.word,
-            ...(ALSO[voice] ?? []),
+            ...SYNONYMS[voice],
           ].filter(Boolean).map((t) => t.toLowerCase()),
         });
       }
