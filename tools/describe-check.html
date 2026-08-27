@@ -1,0 +1,293 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>describe check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Does a sentence come out as the sound it describes?
+     The corpus below was written first, as things somebody putting sound to
+     picture would actually type, and deliberately includes words the engine
+     was never taught — explosion, shattering, cardboard, spark — because a
+     vocabulary is only honest if you know where it stops. */
+  import { describe } from '/src/audio/describe.ts';
+  import { makeCue, dressCue, MIN_LENGTH, MAX_LENGTH } from '/src/timeline/project.ts';
+  import { playCue } from '/src/audio/sources.ts';
+  import { SIZE, LENGTH, PLACE, PUSH, TONE, LOUD, AMOUNT, SYNONYMS } from '/src/audio/vocabulary.ts';
+
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+  const say = (t) => { document.getElementById('out').textContent = t; };
+
+  /*
+   * Written as sentences first, with the voices filled in afterwards. Where
+   * more than one is listed any of them is a fair reading: "a metal door
+   * slamming" is a slam and it is also metal, and an engine that offers both
+   * has understood the sentence rather than guessed at it.
+   */
+  const CORPUS = [
+    ['heavy metal door slamming', ['slam', 'metal']],
+    ['quick ui click', ['click']],
+    ['deep boom in a cavern', ['sub', 'impact']],
+    ['laser blast', ['zap']],
+    ['glass shattering', ['glass']],
+    ['a huge explosion', ['impact', 'rumble', 'sub']],
+    ['soft rain on a window', ['rain', 'glass']],
+    ['whoosh transition', ['whoosh']],
+    ['riser into a cut', ['riser', 'swipe']],
+    ['small wooden knock', ['wood', 'thunk', 'clank']],
+    ['distant thunder', ['rumble']],
+    ['electric spark', ['zap']],
+    ['digital glitch error', ['glitch']],
+    ['bright bell in a church', ['bell']],
+    ['footsteps on gravel', ['gravel']],
+    ['crackling fire', ['fire']],
+    ['a swarm of bees', ['swarm']],
+    ['water pouring into a glass', ['pour', 'glass']],
+    ['clock ticking', ['clockwork', 'tick']],
+    ['engine idling', ['motor']],
+    ['a zipper', ['zip']],
+    ['a long low drone', ['drone', 'sub', 'rumble']],
+    ['sharp metallic clang', ['metal', 'clank']],
+    ['muffled thud', ['thud']],
+    ['sci fi beam weapon', ['zap']],
+    ['magical sparkle reveal', ['shimmer']],
+    ['radio static', ['static']],
+    ['guitar pluck', ['string']],
+    ['a spring boing', ['wire']],
+    ['cardboard box drop', ['thunk', 'sub']],
+    ['a very quick snappy tick', ['tick', 'click']],
+    ['massive impact in a warehouse', ['impact']],
+    ['paper rustle', ['flutter']],
+    ['reverse suck into a cut', ['reverse', 'swipe']],
+    ['wind up mechanism', ['ratchet', 'clockwork']],
+    ['notification beep', ['beep']],
+    ['bubble pop', ['pop']],
+    ['a bird chirp', ['chirp']],
+    ['tape warble', ['wobble']],
+    ['earthquake rumble', ['rumble']],
+  ];
+
+  /*
+   * A second set, written after the vocabulary was finished and deliberately
+   * harder: real phrasings that lean on words nobody sat down and added.
+   *
+   * Being straight about what this is worth. Both lists were written by the
+   * same hand as the vocabulary, so what they measure is coverage of the
+   * phrasings that hand thought of, which is a weaker claim than a hit rate
+   * usually sounds like. The first list did change the vocabulary once — it
+   * had no word for an explosion, which was a hole worth filling rather than
+   * a score worth protecting — and this one is reported separately because of
+   * it. Where a description names nothing the engine knows, the failure is
+   * listed in full rather than counted.
+   */
+  const HELD_OUT = [
+    ['a soft knock on a wooden door', ['wood', 'slam', 'thunk']],
+    ['cash register ding', ['beep', 'bell']],
+    ['helicopter passing overhead', ['motor', 'whoosh']],
+    ['a sword being drawn', ['metal', 'swipe']],
+    ['a coin dropping on concrete', ['glass', 'metal']],
+    ['elastic band twang', ['wire']],
+    ['an old film projector', ['clockwork', 'motor']],
+    ['a distant siren', ['beep', 'drone']],
+    ['a champagne cork', ['pop']],
+    ['loud aggressive gunshot in a tunnel', ['impact']],
+    ['very quiet background hum', ['drone']],
+    ['an enormous stone door grinding open', ['slam', 'gravel']],
+    ['sparks from a welder', ['zap', 'fire']],
+    ['keyboard typing', ['click']],
+    ['a heartbeat', ['thud', 'sub']],
+    ['boiling water', ['pour', 'static']],
+    ['a whip crack', ['swipe', 'wood']],
+    ['microwave beep', ['beep']],
+    ['thunder in the distance', ['rumble']],
+    ['creaking floorboards', ['wood']],
+  ];
+
+  // ---------- does it understand the sentence ----------
+
+  function score(corpus) {
+    const missed = [], second = [];
+    for (const [text, want] of corpus) {
+      const names = describe(text).suggestions.map((s) => s.voice);
+      const at = names.findIndex((v) => want.includes(v));
+      if (at < 0) missed.push(`“${text}” → ${names.slice(0, 3).join('/') || 'nothing'}`);
+      else if (at > 0) second.push(`“${text}” put ${names[0]} first`);
+    }
+    return { missed, second, hit: corpus.length - missed.length, of: corpus.length };
+  }
+
+  const first = score(CORPUS);
+  const later = score(HELD_OUT);
+
+  check('a description names a sound it could reasonably mean',
+    first.hit >= first.of * 0.9,
+    `${first.hit} of ${first.of}${first.missed.length ? ' — ' + first.missed.join('; ') : ''}`);
+
+  check('and names it first, more often than not',
+    first.hit - first.second.length >= first.of * 0.6,
+    `${first.hit - first.second.length} of ${first.of} lead with it` +
+    (first.second.length ? `; ${first.second.length} offered it later` : ''));
+
+  check('and holds up on phrasings written after the words were fixed',
+    later.hit >= later.of * 0.65,
+    `${later.hit} of ${later.of}${later.missed.length ? ' — ' + later.missed.join('; ') : ''}`);
+
+  // ---------- does it hand back what it did not understand ----------
+
+  const unknown = describe('a menacing eerie ominous impact').unknown;
+  check('words it does not know are handed back, not swallowed',
+    unknown.length === 3 && ['menacing', 'eerie', 'ominous'].every((w) => unknown.includes(w)),
+    unknown.join(', ') || 'none');
+
+  check('and the small words are not handed back with them',
+    describe('a big hit in the hall').unknown.length === 0,
+    JSON.stringify(describe('a big hit in the hall').unknown));
+
+  check('a description that names nothing offers nothing',
+    describe('menacing and eerie').suggestions.length === 0 &&
+    describe('').suggestions.length === 0,
+    'empty, rather than a guess');
+
+  // ---------- do the words actually move the sound ----------
+
+  const one = (text) => describe(text).suggestions[0];
+
+  const small = one('tiny quick click');
+  const big = one('huge long impact');
+  check('size and length reach the settings',
+    small.tune > 12 && small.length < 0.1 && big.tune < -10 && big.length > 2,
+    `tiny quick click → ${small.length}s at ${small.tune}; ` +
+    `huge long impact → ${big.length}s at ${big.tune}`);
+
+  const dry = one('impact, no reverb');
+  const wet = one('impact in a cavern');
+  check('a room can be asked for and refused',
+    dry.space === 0 && wet.space === 1,
+    `no reverb → ${dry.space}, cavern → ${wet.space}`);
+
+  const clean = one('a gentle clean impact');
+  const dirty = one('a brutal distorted impact');
+  check('how hard it is pushed reaches the settings',
+    clean.drive === 0 && dirty.drive > 0.8,
+    `gentle clean → ${clean.drive}, brutal distorted → ${dirty.drive}`);
+
+  const quiet = one('a quiet click');
+  const veryQuiet = one('a very quiet click');
+  const loud = one('a deafening click');
+  check('how loud it arrives can be asked for',
+    veryQuiet.gain < quiet.gain && quiet.gain < 1 && loud.gain > 1.4,
+    `quiet ${quiet.gain}, very quiet ${veryQuiet.gain}, deafening ${loud.gain}`);
+
+  const plain = one('quick impact');
+  const veryQuick = one('very quick impact');
+  const barely = one('barely quick impact');
+  check('an intensifier scales the word after it',
+    veryQuick.length < plain.length && plain.length < barely.length,
+    `quick ${plain.length}s, very quick ${veryQuick.length}s, barely quick ${barely.length}s`);
+
+  const bright = one('a bright bell');
+  const dark = one('a dark bell');
+  check('brightness moves it without changing its size',
+    bright.tune > 0 && dark.tune < 0 && bright.length === dark.length,
+    `bright ${bright.tune}, dark ${dark.tune}, both ${bright.length}s`);
+
+  check('what is not asked for is left as the voice made it',
+    one('a bell').space === 0.3 && one('a bell').length === 2.2 && one('a bell').tune === 0,
+    `a plain bell stays ${one('a bell').length}s, space ${one('a bell').space}`);
+
+  const endings = ['a slamming door', 'a ringing bell', 'popping bubbles', 'a buzzing swarm',
+                   'crunching stones', 'a closing gate'];
+  const readEndings = endings.filter((text) => describe(text).unknown.length === 0);
+  check('the ending on a word does not hide it',
+    readEndings.length === endings.length,
+    readEndings.length === endings.length
+      ? `all of ${endings.join(', ')}`
+      : `missed ${endings.filter((t) => !readEndings.includes(t)).join('; ')}`);
+
+  check('and a stem that is nonsense is still nonsense',
+    describe('a menacing bell').unknown.includes('menacing'),
+    'menacing does not become “menac”');
+
+  const excluded = describe('a hit, not metal').suggestions.map((s) => s.voice);
+  check('a voice can be ruled out',
+    !excluded.includes('metal') && excluded.length > 0,
+    excluded.slice(0, 4).join(', '));
+
+  // ---------- is it steady ----------
+
+  const key = (r) => JSON.stringify(r.suggestions.map((s) => [s.id, s.name]));
+  check('the same words give the same answer',
+    key(describe('huge metal in a hall')) === key(describe('huge metal in a hall')),
+    'twice, identical');
+
+  check('the order of the words does not matter',
+    key(describe('huge metal in a hall')) === key(describe('in a hall, metal, huge')),
+    'same answer either way');
+
+  check('punctuation and case are nothing',
+    key(describe('Huge Metal, in a Hall!')) === key(describe('huge metal in a hall')),
+    'same answer either way');
+
+  // ---------- can everything it offers actually be placed ----------
+
+  say('rendering what it offers…');
+  const RATE = 48000;
+  async function render(s) {
+    const cue = dressCue(makeCue(0, 'check', { kind: 'design', name: s.voice }), s);
+    const seconds = Math.min(6, s.length + 0.5 + s.space * 2.6);
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
+    playCue(ctx, ctx.destination, { ...cue, id: `fixed:${s.id}` }, 0, 1);
+    const d = (await ctx.startRendering()).getChannelData(0);
+    let peak = 0;
+    for (const v of d) peak = Math.max(peak, Math.abs(v));
+    return peak;
+  }
+
+  const every = [...CORPUS, ...HELD_OUT].flatMap(([text]) => describe(text).suggestions);
+  const outside = every.filter(
+    (s) => s.length < MIN_LENGTH || s.length > MAX_LENGTH || s.space < 0 || s.space > 1 ||
+           s.drive < 0 || s.drive > 1 || s.tune < -24 || s.tune > 24);
+  check('nothing it offers asks for a setting the app cannot hold',
+    outside.length === 0,
+    outside.length ? `${outside.length}, e.g. ${outside[0].name}` : `all ${every.length} inside the sliders`);
+
+  const silent = [];
+  for (const s of every) if (await render(s) < 1e-4) silent.push(s.name);
+  check('nothing it offers is silent', silent.length === 0,
+    silent.length ? `${silent.length}: ${silent.slice(0, 4).join(', ')}` : `all ${every.length} make a sound`);
+
+  // Corners, since a description can push two axes to their ends at once.
+  const corners = [
+    'a minuscule instant click, no reverb, clean',
+    'a colossal endless drone in a cavern, destroyed',
+    'an extremely piercing tiny glass',
+    'an insanely dark massive sub',
+  ];
+  const cornerPeaks = [];
+  for (const text of corners) {
+    for (const s of describe(text).suggestions) cornerPeaks.push([s.name, await render(s)]);
+  }
+  check('the corners of what can be asked for still make a sound',
+    cornerPeaks.every(([, p]) => p > 1e-4),
+    cornerPeaks.map(([n, p]) => `${n} ${p.toFixed(2)}`).join(' · '));
+
+  // ---------- how much does it know ----------
+
+  const vocabulary = {
+    voices: Object.keys(SYNONYMS).length,
+    waysToNameAVoice: new Set(Object.values(SYNONYMS).flat()).size,
+    size: Object.keys(SIZE).length,
+    length: Object.keys(LENGTH).length,
+    place: Object.keys(PLACE).length,
+    push: Object.keys(PUSH).length,
+    tone: Object.keys(TONE).length,
+    loudness: Object.keys(LOUD).length,
+    intensifiers: Object.keys(AMOUNT).length,
+  };
+  vocabulary.wordsInAll =
+    vocabulary.waysToNameAVoice + vocabulary.voices + vocabulary.size + vocabulary.length +
+    vocabulary.place + vocabulary.push + vocabulary.tone + vocabulary.loudness +
+    vocabulary.intensifiers;
+
+  const failed = results.filter((r) => !r.pass);
+  say(JSON.stringify(
+    { passed: results.length - failed.length, of: results.length, vocabulary, results }, null, 1));
+  document.title = 'done';
+</script></body></html>

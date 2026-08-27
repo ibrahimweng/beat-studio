@@ -105,6 +105,7 @@ export interface CuePreset {
   tune: number;
   space: number;
   drive: number;
+  gain: number;
 }
 
 /**

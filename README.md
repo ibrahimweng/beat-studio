@@ -144,6 +144,39 @@ seconds at that density. Around fifty sounds, which is a lot for half a minute
 of picture, everything is immediate and the file writes in about five
 seconds.
 
+### Describe what you want
+
+The same box takes a sentence. "A huge metal door slamming in a warehouse",
+"very quick bright tick, no reverb", "a quiet drone in a cavern". What comes
+back is built to order, at settings no entry in the library happens to sit on,
+and the button says what it made: "huge slam, hall". Hovering one says why:
+"slam, from “door” and “slamming” · huge · in the warehouse".
+
+Nothing is uploaded and there is no model. A description is read as a set of
+claims about seven things — what the thing is, how big, how long, where it is,
+how hard it is pushed, how bright, how loud — and each of those is a number the
+app already has a control for. That only works because a voice here is a
+description rather than a recording: there is somewhere for the words to land.
+
+What it cannot do is worth saying plainly.
+
+It knows about five hundred and sixty words and no others, so "menacing" and
+"eerie" mean nothing to it however much they mean to you. Rather than quietly
+ignoring them it hands them back — "nothing here for “menacing”, “eerie”" —
+which is how anybody finds out what it does know. Endings are handled, so
+"slamming", "slammed" and "slam" are one word to it.
+
+It reads one sound at a time. "A boom with a metallic ring over it" comes back
+as two candidates to choose between, not as one sound with two parts.
+
+And it has no idea what anything is for. It will build you a huge dull thud in
+a cavern; whether that is the sound of a vault door closing is your call.
+
+Measured on twenty descriptions written after the vocabulary was finished, it
+names a sound you could reasonably have meant fifteen times out of twenty, and
+every one of the five misses is a noun it had never heard. `tools/README.md`
+has the method and is straight about what that number is worth.
+
 ### Let it find the hits for you
 
 Click "Find hits" and Beat Studio reads the video and suggests where sounds
@@ -544,6 +577,8 @@ src/
     voices.ts      the drum kit and the pitched instruments
     design-voices.ts impacts, whooshes, risers and the rest
     catalogue.ts   a thousand named sounds over those voices
+    vocabulary.ts  the words the app knows, and what each one means
+    describe.ts    turning a sentence into settings
     sources.ts     turning a placed sound into a played sound
     render.ts      writing the file, faster than real time
     transport.ts   the step clock

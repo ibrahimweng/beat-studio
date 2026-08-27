@@ -222,6 +222,46 @@ fixed order, so it comes back differing in the last bit of a float.
 Takes about a minute and a half. Run the development server and open
 http://localhost:5173/tools/library-check.html
 
+## describe-check.html
+
+Checks that a sentence comes out as a sound it could reasonably mean, and
+that every word in it reaches a setting.
+
+Two corpora, and the difference between them is the point. The first forty
+descriptions were written before the vocabulary was, as things somebody
+putting sound to picture would actually type. They scored 39 of 40, and the
+one miss was that there was no word for an explosion — a hole worth filling
+rather than a score worth protecting, so it was filled, and that list now
+reads 40 of 40 and is no longer a measurement of anything. The second twenty
+were written afterwards and lean deliberately on words nobody sat down and
+added. They score 15 of 20, and all five misses are the same shape: a noun
+the vocabulary has never heard of, reported back rather than guessed at.
+
+Both lists were written by the same hand as the vocabulary, so what they
+measure is coverage of the phrasings that hand thought of. That is a weaker
+claim than a hit rate usually sounds like, and it is the reason the failures
+are printed in full rather than counted.
+
+One miss led to a change in mechanism rather than vocabulary. "Slamming" did
+not reach the slam, and neither did "ringing" reach the bell, because a table
+that has to carry every ending of every word will always be missing one.
+Words are now tried as themselves first and then as the shorter word they
+might be an inflection of, and only a stem that turns out to be a word one of
+the tables already knows is used — so "menacing" does not quietly become
+"menac".
+
+The rest checks that the axes actually move: that size reaches pitch and
+length together, that a room can be asked for and refused, that an
+intensifier scales the word after it rather than the sentence, that
+brightness moves a sound without changing its size, that a voice can be ruled
+out, and that anything unasked for is left exactly as the voice made it. Then
+every suggestion the two corpora produce is rendered, plus the corners where
+two axes are pushed to their ends at once, to check that nothing it offers is
+silent or outside what the sliders can hold.
+
+Run the development server and open
+http://localhost:5173/tools/describe-check.html
+
 ## shaper-check.html
 
 Records why Drive is not oversampled, which is not the usual answer.

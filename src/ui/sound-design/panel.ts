@@ -15,6 +15,7 @@ import {
   type CueSource,
 } from '../../timeline/types.ts';
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
+import { describe } from '../../audio/describe.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 
@@ -64,12 +65,14 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     node: HTMLElement;
     picks: Pick[];
     /**
-     * Sections that answer the search rather than being filtered by it.
+     * Sections that answer what was typed rather than being filtered by it,
+     * and say for themselves whether they have anything to show.
      *
      * A thousand buttons is not a list anyone can look at, so the library
-     * builds itself from whatever was typed instead of hiding the rest.
+     * builds itself from whatever was typed instead of hiding the rest; and
+     * the describer has nothing at all to show until a sentence is one.
      */
-    fill?: (term: string) => void;
+    fill?: (term: string) => boolean;
   }
 
   /**
@@ -206,7 +209,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     libraryRow,
   ]);
 
-  const fillLibrary = (term: string): void => {
+  const fillLibrary = (term: string): boolean => {
     const found = term ? findSounds(term, CATALOGUE.length) : SHELF;
     const showing = found.slice(0, LIBRARY_SHOWN);
 
@@ -230,12 +233,75 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         ? `${found.length} found${found.length > showing.length ? `, first ${showing.length}` : ''}`
         : `${CATALOGUE.length} sounds, one of each shown`,
     );
+    return showing.length > 0;
   };
 
   sections.push({ node: librarySection, picks: libraryPicks, fill: fillLibrary });
   // Drawn once up front, so the shelf is there to browse before anything is
   // typed and before the first state has arrived.
   fillLibrary('');
+
+  /* ---------- made from what you said ---------- */
+
+  /**
+   * The same box, read as a sentence rather than as a name.
+   *
+   * One box and two answers, because "huge bell" is both a thing the library
+   * has a name for and a thing worth building, and asking somebody to decide
+   * which of two boxes they meant before they have typed anything is asking
+   * the wrong question. What comes back from the library is a sound that
+   * exists; what comes back from here is one made to order, at settings no
+   * entry in the library happens to sit on.
+   */
+  const sayRow = el('div', { class: 'pick-row pick-row--scroll' });
+  const sayNote = el('span', { class: 'hint' });
+  const sayPicks: Pick[] = [];
+  const saySection = el('div', { class: 'pick-group' }, [
+    el('div', { class: 'pick-group__title' }, [
+      el('span', { text: 'Made from your words' }),
+      sayNote,
+    ]),
+    sayRow,
+  ]);
+
+  const quoted = (words: readonly string[]): string => words.map((w) => `“${w}”`).join(', ');
+
+  const fillSaid = (term: string): boolean => {
+    sayPicks.length = 0;
+    clear(sayRow);
+    if (!term) return false;
+
+    const reading = describe(term);
+    // A bare voice name is already a button three rows down, and building it
+    // again at the settings it already has would be two of the same thing.
+    const worth = reading.shaped && reading.suggestions.length > 0;
+    if (worth) {
+      for (const suggestion of reading.suggestions) {
+        const pick = pickButton(
+          suggestion.name,
+          { kind: 'design', name: suggestion.voice },
+          () => false,
+          suggestion,
+        );
+        pick.node.title = suggestion.why.join(' · ');
+        sayPicks.push(pick);
+        sayRow.appendChild(pick.node);
+      }
+    }
+
+    // Words it did not understand are handed back rather than swallowed,
+    // which is the only way anybody finds out what it does understand. Held
+    // until there are two words, so it does not scold you halfway through
+    // typing a name.
+    const complain = reading.unknown.length > 0 && term.split(/\s+/).length > 1;
+    setText(
+      sayNote,
+      complain ? `nothing here for ${quoted(reading.unknown)}` : worth ? 'built to order' : '',
+    );
+    return worth || complain;
+  };
+
+  sections.push({ node: saySection, picks: sayPicks, fill: fillSaid });
 
   /* ---------- packs ---------- */
 
@@ -271,15 +337,21 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const search = el('input', {
     class: 'pick-search',
     type: 'search',
-    attrs: { placeholder: 'Find a sound', 'aria-label': 'Find a sound' },
+    attrs: {
+      placeholder: 'Find a sound, or describe one',
+      'aria-label': 'Find a sound, or describe one',
+      title:
+        'A name finds it. A sentence builds it: "a huge metal door slamming in ' +
+        'a warehouse", "very quick bright tick, no reverb". Words it does not ' +
+        'know are listed back to you.',
+    },
   }) as HTMLInputElement;
 
   function applyFilter(): void {
     const term = search.value.trim().toLowerCase();
     for (const section of sections) {
       if (section.fill) {
-        section.fill(term);
-        section.node.style.display = section.picks.length ? '' : 'none';
+        section.node.style.display = section.fill(term) ? '' : 'none';
         continue;
       }
       let showing = 0;
@@ -640,6 +712,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       // First, because a sound you made is the one you are most likely
       // reaching for.
       mineSection,
+      // What you asked for before what merely matches it, since somebody who
+      // typed a sentence meant the sentence.
+      saySection,
       // Then the library, because a typed word is answered best by the list
       // that was built to be searched.
       librarySection,
