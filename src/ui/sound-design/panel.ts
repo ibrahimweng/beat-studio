@@ -7,7 +7,14 @@ import {
 } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
-import { DESIGN_GROUPS, type Anchor, type Cue, type CueSource } from '../../timeline/types.ts';
+import {
+  DESIGN_GROUPS,
+  type Anchor,
+  type Cue,
+  type CuePreset,
+  type CueSource,
+} from '../../timeline/types.ts';
+import { CATALOGUE, search as findSounds } from '../../audio/catalogue.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 
@@ -49,13 +56,20 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     /** What the filter matches against. */
     label: string;
     /** Whether this is the sound a click on the timeline would place. */
-    chosen: (source: CueSource) => boolean;
+    chosen: (source: CueSource, preset: CuePreset | null) => boolean;
   }
 
   /** A titled row of sounds, which hides itself when the filter empties it. */
   interface Section {
     node: HTMLElement;
     picks: Pick[];
+    /**
+     * Sections that answer the search rather than being filtered by it.
+     *
+     * A thousand buttons is not a list anyone can look at, so the library
+     * builds itself from whatever was typed instead of hiding the rest.
+     */
+    fill?: (term: string) => void;
   }
 
   /**
@@ -68,18 +82,42 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const sections: Section[] = [];
   let builtIn = 0;
 
+  /**
+   * What the highlight is currently drawn against, or null before the first
+   * state has arrived.
+   *
+   * Held here rather than read from the store each time, because the filter
+   * can build a row of buttons between two state updates and those buttons
+   * have to be lit against the same answer as the ones beside them.
+   */
+  let armed: { source: CueSource; preset: CuePreset | null } | null = null;
+
+  function paintChosen(): void {
+    if (!armed) return;
+    for (const section of sections) {
+      for (const pick of section.picks) {
+        toggleClass(pick.node, 'is-on', pick.chosen(armed.source, armed.preset));
+      }
+    }
+  }
+
   const pickButton = (
     label: string,
     source: CueSource,
     chosen: (current: CueSource) => boolean,
+    preset: CuePreset | null = null,
   ): Pick => ({
     node: button(
       // Choosing plays it, so a list this long can be worked through by ear.
-      { class: 'cell pick', on: { click: () => session.chooseSource(source) } },
+      { class: 'cell pick', on: { click: () => session.chooseSource(source, preset) } },
       [el('span', { text: label })],
     ),
     label,
-    chosen,
+    // A library entry is a voice plus a set of numbers, so the plain voice's
+    // own button stays dark while one of its named versions is armed.
+    chosen: preset
+      ? (_, current) => current?.id === preset.id
+      : (current, currentPreset) => !currentPreset && chosen(current),
   });
 
   /** A titled row of sounds, which disappears when the filter empties it. */
@@ -122,6 +160,61 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ),
   );
 
+  /* ---------- library ---------- */
+
+  /**
+   * How many of the matches to draw.
+   *
+   * Enough that narrowing by one more word is usually not needed, few enough
+   * that the row is still something you look at rather than scroll.
+   */
+  const LIBRARY_SHOWN = 48;
+
+  /** With nothing typed, one of each voice at its own size, in the dry. */
+  const SHELF = CATALOGUE.filter((entry) => entry.id.endsWith(':mid:dry'));
+
+  const libraryRow = el('div', { class: 'pick-row pick-row--scroll' });
+  const libraryCount = el('span', { class: 'hint' });
+  const libraryPicks: Pick[] = [];
+  const librarySection = el('div', { class: 'pick-group' }, [
+    el('div', { class: 'pick-group__title' }, [
+      el('span', { text: 'Library' }),
+      libraryCount,
+    ]),
+    libraryRow,
+  ]);
+
+  const fillLibrary = (term: string): void => {
+    const found = term ? findSounds(term, CATALOGUE.length) : SHELF;
+    const showing = found.slice(0, LIBRARY_SHOWN);
+
+    libraryPicks.length = 0;
+    clear(libraryRow);
+    for (const entry of showing) {
+      const pick = pickButton(
+        entry.name,
+        { kind: 'design', name: entry.voice },
+        () => false,
+        entry,
+      );
+      pick.node.title = `${entry.voice}, ${entry.length.toFixed(2)}s`;
+      libraryPicks.push(pick);
+      libraryRow.appendChild(pick.node);
+    }
+
+    setText(
+      libraryCount,
+      term
+        ? `${found.length} found${found.length > showing.length ? `, first ${showing.length}` : ''}`
+        : `${CATALOGUE.length} sounds, one of each shown`,
+    );
+  };
+
+  sections.push({ node: librarySection, picks: libraryPicks, fill: fillLibrary });
+  // Drawn once up front, so the shelf is there to browse before anything is
+  // typed and before the first state has arrived.
+  fillLibrary('');
+
   /* ---------- packs ---------- */
 
   const mineSection = el('div', {});
@@ -162,6 +255,11 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   function applyFilter(): void {
     const term = search.value.trim().toLowerCase();
     for (const section of sections) {
+      if (section.fill) {
+        section.fill(term);
+        section.node.style.display = section.picks.length ? '' : 'none';
+        continue;
+      }
       let showing = 0;
       for (const pick of section.picks) {
         const keep = !term || pick.label.toLowerCase().includes(term);
@@ -170,6 +268,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       }
       section.node.style.display = showing ? '' : 'none';
     }
+    // Buttons the filter just built have never been lit, and the next state
+    // update may be a long way off if nothing is clicked.
+    paintChosen();
   }
   search.addEventListener('input', applyFilter);
 
@@ -517,6 +618,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       // First, because a sound you made is the one you are most likely
       // reaching for.
       mineSection,
+      // Then the library, because a typed word is answered best by the list
+      // that was built to be searched.
+      librarySection,
       ...designSections,
       kitSection,
       pitchedSection,
@@ -591,7 +695,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     el: root,
 
     update(state: AppState) {
-      const { project, currentSource } = state;
+      const { project } = state;
+      armed = { source: state.currentSource, preset: state.currentPreset };
 
       if (state.packs !== paintedPacks || state.mine !== paintedMine) {
         paintedPacks = state.packs;
@@ -600,11 +705,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         applyFilter();
       }
 
-      for (const section of sections) {
-        for (const pick of section.picks) {
-          toggleClass(pick.node, 'is-on', pick.chosen(currentSource));
-        }
-      }
+      paintChosen();
 
       if (project.layers !== paintedLayers) {
         paintedLayers = project.layers;

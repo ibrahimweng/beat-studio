@@ -2,7 +2,7 @@ import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import type { Pack, PackSound } from './audio/pack.ts';
 import { emptyProject } from './timeline/project.ts';
-import type { CueSource, Project } from './timeline/types.ts';
+import type { CuePreset, CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
 import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 
@@ -61,6 +61,15 @@ export interface AppState {
   selection: string[];
   /** The sound that clicking the timeline will place. */
   currentSource: CueSource;
+  /**
+   * The settings that sound arrives with, when it was picked from the library.
+   *
+   * Null means the voice's own, which is what every sound in the app used to
+   * be. Kept beside the source rather than folded into it because it is not
+   * part of what the sound is made of: the same voice can be placed plain or
+   * as any of the library's twenty five versions of it.
+   */
+  currentPreset: CuePreset | null;
   /** The layer new cues are placed on. */
   activeLayerId: string;
   /** Playing an instrument drops a cue at the playhead. */
@@ -127,6 +136,7 @@ export function initialState(): AppState {
     videoReady: false,
     selection: [],
     currentSource: { kind: 'design', name: 'impact' },
+    currentPreset: null,
     activeLayerId: 'impacts',
     armed: false,
     exporting: null,

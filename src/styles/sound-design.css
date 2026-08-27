@@ -949,6 +949,20 @@
   min-height: 18px;
 }
 
+/*
+ * The library answers a typed word with as many as forty eight sounds, which
+ * is more than the panel has room for. Held to a box of its own so a long
+ * answer scrolls inside itself rather than pushing the voices, the kit and
+ * the packs off the bottom of the screen.
+ */
+.pick-row--scroll {
+  max-height: 190px;
+  overflow-y: auto;
+  /* Away from the scrollbar, and enough that a focus ring is not clipped. */
+  padding: 2px 6px 2px 2px;
+  margin: -2px;
+}
+
 /* Finding one sound among several hundred, once packs are loaded. */
 .pick-search {
   width: 100%;

@@ -33,6 +33,16 @@ import {
 
 export type DesignOptions = VoiceOptions;
 
+/**
+ * The highest a filter corner is allowed to be tuned to, in hertz.
+ *
+ * Above this there is nothing left to hear even on equipment that reaches it,
+ * and past half the sample rate there is nothing left at all. Voices built by
+ * filtering noise are held here so that the top of the Tune range is a thin
+ * version of the sound rather than an absence of one.
+ */
+const CLICK_TOP = 16000;
+
 // ---------- shapes every voice is built out of ----------
 
 /** Starts at full and decays away. */
@@ -489,7 +499,12 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
       dur,
       noise(dur, decays(0.75 * o.gain, dur), {
         type: 'highpass',
-        freq: flat(6400 * ratio(o.tune)),
+        // Held inside the audible band. A click is noise above a corner, so
+        // tuning it up walks that corner towards the top of hearing and then
+        // past it: at two octaves up the corner used to land above the sample
+        // rate's own limit and the sound came out as nothing at all. Capped,
+        // the top of the range is a very thin click rather than silence.
+        freq: flat(Math.min(CLICK_TOP, 6400 * ratio(o.tune))),
         q: 0.6,
       }),
     );
