@@ -167,6 +167,61 @@ instead.
 
 Run the development server and open http://localhost:5173/tools/mechanism-check.html
 
+## library-check.html
+
+Checks the thousand-entry library: that it holds what it says it holds, that
+everything in it can be found, and that the grid it is built on is made of
+real steps rather than a thousand names over forty sounds.
+
+The searching half is quick. Every entry has to be findable by typing its own
+name, every word typed has to match something, a word carried only as a tag
+has to still get you there, and a name match has to beat a tag match.
+
+The listening half renders all thousand and asks how far apart they are. Four
+things were learned the hard way and are worth not learning again.
+
+Render at the rate the app exports at. Rendering at half rate to save time
+reported ten entries as silent that are nothing of the kind: a click is noise
+above a corner, and tuning one up walks that corner past 11 kHz. That also
+turned up a real fault — the corner used to walk past the sample rate itself
+at the top of the Tune range, and the sound vanished — which is why it is now
+capped inside the audible band.
+
+Give every render a fixed id. A placed sound draws its noise from its own id,
+so leaving that to `makeCue` makes the page answer a slightly different
+question every run.
+
+Measure the room after the sound stops, and floor it. The first four features
+could not see a reverb at all, because one here is added to the sound rather
+than blended with it and so barely changes how long or how bright the whole
+render is; what happens after the hit is over is nothing but room. Floored at
+forty decibels down, or it measures the last bit of a float instead — two
+renders of the same dry bell differ there, and unfloored that read as a whole
+octave of difference.
+
+Compare a step against one semitone, not against the engine's own noise. A
+semitone is the smallest change any control in the app can make, it is
+measured on the voice being stepped, and it holds still. How far apart two
+placements of the same sound land is reported alongside, but it is not a bar
+to clear: on the noisier voices it is larger than a small room is, and asking
+a library step to out-shout that answers a question nobody has.
+
+What it reports: a different voice is about forty times one semitone, one
+size up about ten, one room bigger about five, and two placements of the same
+sound about one and a half. A tenth of the steps come out under a semitone
+and every one of them is a room step on a voice that sustains — a drone, a
+sub, a motor, a swell. That is a fact about reverb rather than a fault in the
+grid. A room shows itself in what happens after a sound stops, and a sound
+that does not stop does not give it the chance.
+
+The count of those moves by a few per cent between runs while the verdict does
+not, for the reason `mechanism-check.html` measures directly: a struck body is
+a stack of oscillators summed by the graph rather than numbers added in a
+fixed order, so it comes back differing in the last bit of a float.
+
+Takes about a minute and a half. Run the development server and open
+http://localhost:5173/tools/library-check.html
+
 ## shaper-check.html
 
 Records why Drive is not oversampled, which is not the usual answer.

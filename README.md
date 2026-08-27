@@ -75,10 +75,10 @@ quickest way to compare a handful of similar sounds against each other.
 There are four layers. Use them to keep your impacts apart from your movement
 and detail, so you can balance them separately and export them separately.
 
-Thirty nine sounds can be placed, in three groups.
+Fifty five sounds can be placed, in three groups.
 
-Twenty four design voices, which are the ones made for this work, sorted by
-what they are for.
+Forty design voices, which are the ones made for this work, sorted by what
+they are for.
 
 | Group | Sounds |
 |---|---|
@@ -88,6 +88,10 @@ what they are for.
 | Low end | sub, rumble, drone |
 | Detail | click, tick, pop, beep, chirp |
 | Texture | zap, glitch, shimmer, static |
+| Struck | bell, glass, wood, pipe |
+| Plucked | string, thunk, wire |
+| Grains | rain, fire, gravel, swarm, pour |
+| Mechanical | ratchet, clockwork, zip, motor |
 
 Then thirteen drum voices, when you want something closer to a real
 instrument, and piano and guitar for texture. A low piano note under an impact
@@ -103,11 +107,36 @@ several very short bursts at uneven spacing, so it never falls into a rhythm.
 
 There is a page for checking this. It renders every voice, reduces each to a
 fingerprint of what it is made of and how it moves, and compares every pair.
-Across all 276 pairs the middle similarity is 0.37, and the closest pair is
-0.84. See `tools/README.md`.
+Across all 780 pairs the middle similarity is 0.38, and the closest pair is
+0.83. See `tools/README.md`.
 
 Every one of them can be tuned by two octaves up or down and given any length,
-so the thirty nine are starting points rather than the whole set.
+so the forty are starting points rather than the whole set.
+
+### The library
+
+Above the voices there is a library of a thousand named sounds — "small metal,
+hall", "huge bell, cavern", "tiny click, dry". Type a word and it answers with
+what matches; type nothing and it shows one of each voice to browse. Choosing
+one arms it exactly as choosing a voice does, and placing it brings its length,
+its pitch, its room and its push with it.
+
+Being straight about what that is: it is the forty voices at five sizes in five
+places, not a thousand unrelated recordings. A size is a pitch and a length
+together, because that is what size actually is — a large object is lower and
+rings longer, and moving only one of the two gives the same object played
+wrong. A place is how much room is around it. What the library buys is finding
+a sound by name instead of dialling for it, which is what a sound library has
+always actually been. Nothing is stored: every entry is a name and four
+numbers, and the sound is worked out when you ask for it, which is the return
+on describing a voice as data rather than as code.
+
+It is measured rather than asserted. Against one semitone — the smallest change
+any control in the app can make — a whole different voice is about forty times
+that, one size up about ten, and one room bigger about five. A tenth of the
+steps come out smaller than a semitone and every one of them is a room step on
+a voice that sustains, because a room shows itself in what happens after a
+sound stops and a drone does not stop. `tools/README.md` has the method.
 
 There is no limit on how many you can place. A thirty second piece was tested
 with 1372 sounds on it and nothing broke, although writing the file took twenty
@@ -514,6 +543,7 @@ src/
     pack.ts        reading someone else's sound pack into that
     voices.ts      the drum kit and the pitched instruments
     design-voices.ts impacts, whooshes, risers and the rest
+    catalogue.ts   a thousand named sounds over those voices
     sources.ts     turning a placed sound into a played sound
     render.ts      writing the file, faster than real time
     transport.ts   the step clock

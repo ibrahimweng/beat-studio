@@ -24,6 +24,7 @@ import {
   cueLength,
   cueStart,
   cuesOnLayer,
+  dressCue,
   fromSession,
   makeCue,
   MAX_LENGTH,
@@ -37,7 +38,15 @@ import {
   updateLayer,
   frameDuration,
 } from './timeline/project.ts';
-import type { AutoPoint, Cue, CueSource, LaneName, Layer, Project } from './timeline/types.ts';
+import type {
+  AutoPoint,
+  Cue,
+  CuePreset,
+  CueSource,
+  LaneName,
+  Layer,
+  Project,
+} from './timeline/types.ts';
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
@@ -489,8 +498,15 @@ export class SoundDesignSession {
 
   // ---------- cues ----------
 
-  setSource(source: CueSource): void {
-    this.#store.set({ currentSource: source });
+  /**
+   * Arm a sound, and whatever settings it was picked with.
+   *
+   * A preset of null means the voice's own settings, so picking a plain voice
+   * after a library entry puts the plain voice back rather than leaving the
+   * last entry's length and room quietly attached to it.
+   */
+  setSource(source: CueSource, preset: CuePreset | null = null): void {
+    this.#store.set({ currentSource: source, currentPreset: preset });
   }
 
   /**
@@ -501,14 +517,26 @@ export class SoundDesignSession {
    * again. Choosing now plays the sound at the settings it would arrive with,
    * so the list can be worked through by ear.
    */
-  chooseSource(source: CueSource): void {
-    this.setSource(source);
-    this.preview(source);
+  chooseSource(source: CueSource, preset: CuePreset | null = null): void {
+    this.setSource(source, preset);
+    this.preview(source, preset);
   }
 
   /** Hear a sound as it would arrive, without putting it anywhere. */
-  preview(source: CueSource): void {
-    this.audition(makeCue(0, this.#store.state.activeLayerId, source));
+  preview(source: CueSource, preset: CuePreset | null = null): void {
+    this.audition(dressCue(makeCue(0, this.#store.state.activeLayerId, source), preset));
+  }
+
+  /**
+   * The armed sound, built ready to place.
+   *
+   * Everywhere that puts down "the current sound" goes through here, so the
+   * timeline, the playhead and the suggested hits cannot come to disagree
+   * about what a library entry means.
+   */
+  #armedCue(time: number, layerId: string): Cue {
+    const { currentSource, currentPreset } = this.#store.state;
+    return dressCue(makeCue(time, layerId, currentSource), currentPreset);
   }
 
   setActiveLayer(layerId: string): void {
@@ -549,11 +577,11 @@ export class SoundDesignSession {
    */
   addCue(time: number, source?: CueSource, layerId?: string): Cue {
     const state = this.#store.state;
-    const cue = makeCue(
-      snapTime(this.project, this.#insideVideo(time)),
-      layerId ?? state.activeLayerId,
-      source ?? state.currentSource,
-    );
+    const at = snapTime(this.project, this.#insideVideo(time));
+    const on = layerId ?? state.activeLayerId;
+    // An explicit source is an instrument being played, which arms nothing
+    // and so carries none of the library's settings.
+    const cue = source ? makeCue(at, on, source) : this.#armedCue(at, on);
     this.#setProject({ ...this.project, cues: [...this.project.cues, cue] }, `place:${cue.id}`);
     this.#store.set({ selection: [cue.id] });
     this.audition(cue);
@@ -978,7 +1006,7 @@ export class SoundDesignSession {
     if (!peaks.length) return;
     const state = this.#store.state;
     const cues = peaks.map((peak) =>
-      makeCue(snapTime(this.project, this.#insideVideo(peak.t)), state.activeLayerId, state.currentSource),
+      this.#armedCue(snapTime(this.project, this.#insideVideo(peak.t)), state.activeLayerId),
     );
     this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'place all');
     this.#store.set({ status: `${cues.length} sounds placed` });

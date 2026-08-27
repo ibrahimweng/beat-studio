@@ -89,6 +89,25 @@ export interface CueSource {
 }
 
 /**
+ * The settings a chosen sound carries onto the cue it places.
+ *
+ * A voice on its own arrives at the length, pitch, room and push it was born
+ * with. Something picked out of the library is that same voice with a
+ * different set of numbers, and this is the set: enough to say which sound
+ * out of a thousand was chosen, and nothing about how it is made.
+ */
+export interface CuePreset {
+  /** What chose it, so a list can show which one is on. */
+  id: string;
+  /** Seconds. */
+  length: number;
+  /** Semitones. */
+  tune: number;
+  space: number;
+  drive: number;
+}
+
+/**
  * Which end of the sound lands on the cue's time.
  *
  * A riser or a reverse swell leads into a moment, so the part that matters is
