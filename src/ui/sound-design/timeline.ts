@@ -166,6 +166,8 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     ['↷'],
   );
 
+  const status = el('div', { class: 'tl__status' });
+
   const zoomOut = button({ class: 'chip chip--sm', title: 'Zoom out', on: { click: () => setZoom(pxPerSec / 1.6) } }, ['−']);
   const zoomIn = button({ class: 'chip chip--sm', title: 'Zoom in', on: { click: () => setZoom(pxPerSec * 1.6) } }, ['+']);
   const zoomFit = button({ class: 'chip chip--sm', title: 'Fit the whole video', on: { click: fit } }, ['Fit']);
@@ -181,6 +183,16 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       helpButton('edit', 'editing on the timeline'),
       detectGroup,
       el('div', { class: 'dock__spacer' }),
+      /*
+       * What the app has to say, on the screen it is being said about.
+       *
+       * The session writes a status line for everything it does — a file
+       * exported, a session opened, a clip that could not be kept — and until
+       * now the only place it was drawn was the dock at the bottom of the
+       * instrument screens. So the messages about the timeline were the ones
+       * you could not see.
+       */
+      status,
       zoomOut,
       zoomFit,
       zoomIn,
@@ -1281,6 +1293,9 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       paint(state.project);
       undo.disabled = !session.canUndo;
       redo.disabled = !session.canRedo;
+      // What was said last, or what there is, which is worth knowing anyway.
+      const count = state.project.cues.length;
+      setText(status, state.status ?? `${count} sound${count === 1 ? '' : 's'}`);
       // Only the ones losing the mark and the ones gaining it, rather than
       // every sound on the timeline on every change.
       if (state.selection !== marked) {

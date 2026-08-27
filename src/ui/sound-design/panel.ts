@@ -959,10 +959,45 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     },
   }) as HTMLInputElement;
 
-  const sessionBody = el('div', { style: { display: 'flex', gap: '4px' } }, [
-    button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => session.saveSession() } }, ['Save session']),
-    button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => openInput.click() } }, ['Open session']),
-    openInput,
+  /**
+   * Start again on nothing.
+   *
+   * Asks first, and says what it is throwing away, because the piece is kept
+   * from one visit to the next now: this is the only thing in the app that
+   * gets rid of it, so it is the only place that could lose work nobody meant
+   * to lose.
+   */
+  const newProject = button(
+    {
+      class: 'chip chip--sm chip--danger',
+      style: { width: '100%' },
+      title: 'Clear the timeline and the clip, and start on nothing',
+      on: {
+        click: () => {
+          const { project } = session.store.state;
+          const count = project.cues.length;
+          const has = count > 0 || project.videoName;
+          const what = count ? `${count} sound${count === 1 ? '' : 's'}` : 'the clip';
+          if (has && !window.confirm(`Start a new project? This throws away ${what}.`)) return;
+          void session.newProject();
+        },
+      },
+    },
+    ['New project'],
+  );
+
+  const sessionBody = el('div', {}, [
+    el('div', {
+      class: 'hint',
+      style: { marginBottom: '6px' },
+      text: 'Kept as you work, so closing the page and coming back picks up where you left off.',
+    }),
+    el('div', { style: { display: 'flex', gap: '4px' } }, [
+      button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => session.saveSession() } }, ['Save session']),
+      button({ class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => openInput.click() } }, ['Open session']),
+      openInput,
+    ]),
+    el('div', { style: { marginTop: '4px' } }, [newProject]),
   ]);
 
   const paletteBody = el('div', {}, [
@@ -1003,7 +1038,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ]),
     el('div', {}, [heading('Selected sound', 'sound'), cueBody]),
     el('div', {}, [heading('Export', 'export'), exportBody]),
-    el('div', {}, [heading('Session', 'export'), sessionBody]),
+    el('div', {}, [heading('Session', 'session'), sessionBody]),
     el('div', {}, [heading('Palette', 'export'), paletteBody]),
   ]);
 

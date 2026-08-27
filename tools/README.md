@@ -525,6 +525,39 @@ been wrong at some point:
   asks for it again. Shutting it on one screen must not answer for the other:
   check that shutting it on the timeline still leaves the drums showing it.
 
+## Checking that work survives a reload
+
+No page for this one either: it is about what two browser stores hold across
+a page load, which needs a real page load.
+
+With a clip loaded and a few sounds placed, and after a second's pause for the
+write to settle:
+
+- `localStorage['toolcraft.st88.work']` holds a session file — the same shape
+  `Save session` writes, so one reader checks both.
+- IndexedDB `toolcraft.st88` → `clip` → `current` holds the video as a blob.
+- Reload. The sounds, the layers, the frame rate and the snapping come back,
+  the clip comes back with them, and the timeline bar says so.
+- Undo does not walk back past the restore into an empty project. The history
+  is started again on the piece that was restored, not on nothing.
+- `New project` asks first, clears both stores, and a reload after it opens on
+  nothing rather than bringing the piece back.
+
+Two failures are worth arranging on purpose, because both happen in the wild:
+
+- **Delete the IndexedDB record and leave localStorage alone**, which is what
+  a browser evicting storage looks like. The piece must come back on its own
+  and say the clip has to be loaded again — never sit waiting for a clip that
+  is not coming.
+- **Fill the quota**, or use a clip larger than the browser will store. The
+  piece is still kept; the timeline bar says the clip was not.
+
+One thing this found: the status line the sound design screen writes to was
+only ever drawn in the dock at the bottom of the instrument screens, so every
+message about the timeline — a session opened, an export finished, a clip that
+would not fit — was written somewhere nobody on that screen could see it. It
+is now in the timeline bar.
+
 ## make-icons.mjs
 
 Draws the site icons.

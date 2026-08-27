@@ -25,6 +25,7 @@ const SECTIONS: readonly Section[] = [
       ['Find hits', 'Reads the video and suggests where sounds belong. The slider shows more or fewer.'],
       ['Export', 'Writes a file that starts at zero, so it lines up when dropped at the head of your composition.'],
       ['Nothing is uploaded', 'The video, the audio you drop in and everything you make stay in this browser.'],
+      ['Nothing is lost either', 'The piece and its clip are kept as you work, so a refresh opens on what you left. "New project" is the only thing that clears them.'],
     ],
   },
   {
@@ -154,14 +155,26 @@ const SECTIONS: readonly Section[] = [
   },
   {
     id: 'export',
-    title: 'Export and session',
+    title: 'Export',
     rows: [
       ['Stop it clipping', 'Holds the loudest moments back so a stack of sounds cannot distort the file.'],
       ['Match loudness', 'Brings every export to the same loudness, so two pieces sit the same way.'],
       ['Cut to video length', 'Off by default, so a reverb tail at the end is allowed to finish.'],
       ['One file per layer', 'Stems. They add up to the mixed file exactly rather than nearly.'],
-      ['Session', 'Saves the cue list, the layers and the settings, so you can come back to it.'],
       ['Export patch', 'Writes the palette as a @web-kits/audio patch file.'],
+    ],
+  },
+  {
+    id: 'session',
+    title: 'Keeping your work',
+    rows: [
+      ['Nothing to press', 'The piece is kept as you work. Close the page, refresh it, come back tomorrow: it opens on what you left.'],
+      ['The clip comes back too', 'The video is kept beside the timeline, so you do not have to find the file again. It stays in this browser and is never uploaded.'],
+      ['New project', 'The only thing that clears it. It asks first, and says what it is throwing away.'],
+      ['What a new project keeps', 'Your saved sounds, your packs and your patterns. Starting a new piece is not forgetting your own sounds.'],
+      ['Save session', 'A file, for keeping a piece beyond this browser or moving it to another machine. It carries the packs and your sounds with it.'],
+      ['Open session', 'Reads one back. It replaces the piece, so there is nothing to undo to afterwards.'],
+      ['A clip too large to keep', 'Says so when it happens. The timeline is kept either way, and only the clip has to be found again.'],
     ],
   },
   {
