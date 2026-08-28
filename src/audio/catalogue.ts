@@ -24,20 +24,104 @@ export interface Entry extends CuePreset {
   tags: readonly string[];
 }
 
+/** The five sizes, smallest first. The middle one is the voice as written. */
+const SIZE_WORDS = ['tiny', 'small', '', 'large', 'huge'] as const;
+
 /**
  * How big the thing is.
  *
  * Pitch and length together, because that is what size actually is: a large
  * object is lower and rings for longer, and moving only one of the two gives
  * the same object played wrong rather than a different object.
+ *
+ * `tune` is where the smallest and the largest sit, in semitones, and `length`
+ * the same as a multiple of the voice's own. The middle size is always the
+ * voice exactly as written — nought and one — and the two either side are
+ * halfway there, so a named size is always a step off the plain sound rather
+ * than something unrelated to it.
  */
-const SIZES: readonly { word: string; tune: number; length: number }[] = [
-  { word: 'tiny', tune: 19, length: 0.45 },
-  { word: 'small', tune: 11, length: 0.7 },
-  { word: '', tune: 0, length: 1 },
-  { word: 'large', tune: -7, length: 1.45 },
-  { word: 'huge', tune: -14, length: 2.1 },
-];
+interface SizeAxis {
+  /** Semitones at the smallest size, and at the largest. */
+  tune: readonly [number, number];
+  /** Length as a multiple of the voice's own, smallest and largest. */
+  length: readonly [number, number];
+}
+
+/**
+ * What size does to most voices: mostly length, with pitch alongside.
+ *
+ * A hit that lasts twice as long and sits a full tone lower is a bigger
+ * version of the same hit, and for the twenty-nine voices that are shaped like
+ * that this is right.
+ */
+const SIZE: SizeAxis = { tune: [19, -14], length: [0.45, 2.1] };
+
+/**
+ * The voices that need something else, and why.
+ *
+ * One grid over forty mechanisms does not fit all of them, and measuring which
+ * steps did nothing — `tools/size-check.html` — found two shapes it fitted
+ * badly. Both were producing names for nothing.
+ *
+ * **Voices already at the floor.** A click is twenty milliseconds long and
+ * clamps itself at sixty, so five lengths of it are one length: measured, a
+ * tiny click and a huge one were 97.6% the same sound. What size means for a
+ * transient is where its corner sits anyway — a small one is a thin tick, a
+ * big one is a dull thud — so the pitch carries it and the length barely
+ * moves. The pitch range is pulled *down* rather than widened, because these
+ * voices' corners run into the top of hearing at the small end and were
+ * capped there, which is what made tiny and small identical.
+ *
+ * **Voices that are a long slow sweep.** A riser twice as long is the same
+ * riser: measured, large against huge was 99% and the three of them together
+ * made a cluster of twenty-one entries. What tells a big sweep from a small
+ * one is how low it goes, so again the pitch does the work and the length is
+ * compressed to about what the ear can still hear as a difference.
+ */
+const SIZE_BY_VOICE: Partial<Record<DesignName, SizeAxis>> = {
+  // At the floor: the corner does the work.
+  click: { tune: [12, -19], length: [0.7, 2.6] },
+  tick: { tune: [15, -19], length: [0.7, 2.5] },
+  thunk: { tune: [16, -18], length: [0.6, 2.6] },
+  pop: { tune: [15, -18], length: [0.7, 2.4] },
+  /*
+   * Long slow sweeps, and three of them that used to land on top of each
+   * other.
+   *
+   * Taken down the full two octaves, all three put everything they had below
+   * two kilohertz at the big end — 99%, 100% and 95% — and a riser, a swell
+   * and a reverse became one low roar under three names, twenty-one entries
+   * in one cluster. They are different mechanisms and they scale differently,
+   * so they are given different axes rather than one.
+   *
+   * A riser leads with a tone, so pitch is what its size is. A swell is pure
+   * noise with no pitch to follow, so a bigger one is a longer one and the
+   * pitch moves less. A reverse carries its own filter now, which does the
+   * work the pitch was being asked to do.
+   */
+  riser: { tune: [24, -18], length: [0.6, 1.5] },
+  swell: { tune: [18, -10], length: [0.5, 2.4] },
+  reverse: { tune: [22, -14], length: [0.6, 1.6] },
+  // A run of hits that clamps its own length at just over a second, so the
+  // top half of the axis was doing nothing: mid against large was 100%.
+  zip: { tune: [22, -20], length: [0.5, 1.6] },
+};
+
+/** The five steps for one voice, from its axis. */
+function sizesFor(voice: DesignName): { word: string; tune: number; length: number }[] {
+  const axis = SIZE_BY_VOICE[voice] ?? SIZE;
+  return SIZE_WORDS.map((word, i) => {
+    // −1 at the smallest, 0 in the middle, +1 at the largest.
+    const away = (i - 2) / 2;
+    const [up, down] = axis.tune;
+    const [short, long] = axis.length;
+    return {
+      word,
+      tune: Math.round(away < 0 ? up * -away : down * away),
+      length: away < 0 ? 1 + (short - 1) * -away : 1 + (long - 1) * away,
+    };
+  });
+}
 
 /**
  * Where it is. The room around a sound is most of what says where it is.
@@ -80,7 +164,7 @@ function build(): Entry[] {
     const base = DESIGN_DEFAULT_LENGTH[voice];
     const character = DESIGN_CHARACTER[voice];
 
-    for (const size of SIZES) {
+    for (const size of sizesFor(voice)) {
       for (const place of PLACES) {
         const name = [size.word, voice].filter(Boolean).join(' ');
         out.push({

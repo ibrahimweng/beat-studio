@@ -525,6 +525,53 @@ been wrong at some point:
   asks for it again. Shutting it on one screen must not answer for the other:
   check that shutting it on the timeline still leaves the drums showing it.
 
+## size-check.html
+
+Does the size axis do anything, voice by voice?
+
+The library is one grid — five sizes, five places — laid over forty mechanisms
+that do not all respond to it the same way, and a grid that does not fit is
+what produces two names for one sound. This measures each step on its own, so
+a fix can go where the fault is instead of everywhere.
+
+It reports two numbers per voice and you need both, because each is blind
+where the other works:
+
+- **the fingerprint**, which stops at 10 kHz;
+- **five wide bands to Nyquist**, which cannot see a pitch that stays inside
+  one of them.
+
+That is not caution, it is the finding. A tiny click puts 97% of its energy
+above 10 kHz and a huge one 63% — plainly different sounds — and the
+fingerprint calls them 98.7% the same, because everything it can see is the
+filter's skirt with the same shape at both ends. The other way round, `sub` and
+`rumble` live entirely in the bottom band, so the band measure shows nothing
+however far their pitch moves while the fingerprint sees it clearly. Anyone
+tempted to "fix" a voice by one of these numbers should read the other first.
+
+What it found, and what came of it:
+
+- **Three voices ignored the Tune control entirely** — `rain`, `fire`,
+  `ratchet`, `clockwork` and `zip` never read `o.tune`, so the slider did
+  nothing at all for five of the forty. `zip`'s mid-to-large step measured
+  100% identical because length was its only axis and it clamps its own
+  length at 1.2 seconds. All five now follow it.
+- **Voices already at the length floor.** A click is 20 ms and clamps at 60,
+  so five lengths of it are one length. They get a size axis that runs on
+  pitch instead, and pulled *down* rather than widened, because their filter
+  corners ran into the top of hearing at the small end and were capped there.
+- **`reverse` had no size at all.** Tune moved only the tone, which is two
+  fifths of it; the noise over it was full band and went nowhere, so a tiny
+  reverse and a huge one both put 45% of their energy below 2 kHz. It now
+  carries a filter and an air amount that follow size: 19% below 2 kHz at tiny,
+  95% at huge.
+
+And what it did not fix. `riser`, `swell` and `reverse` sit in one cluster of
+21 entries, dry, at both ends of the axis — they are three mechanisms that
+converge into one low sweep however their size axes are set, and three
+different axes were tried before concluding it. That is a question about
+whether they should be three voices, not about the grid over them.
+
 ## Checking that work survives a reload
 
 No page for this one either: it is about what two browser stores hold across
@@ -587,9 +634,13 @@ Per-placement variation, added afterwards, took that to 38 entries in 8
 clusters and the worst pair from 100% to 99.4%, so nothing in the library is
 identical to anything else any more. It broke the fifteen clicks and ticks
 apart into three. It made the risers and swells *worse*, from 7 in a cluster to
-21: a half-semitone across a two-second sweep differentiates nothing, and it
-blurred what little the size axis was doing there. That corner is the size
-axis's to fix, not variation's.
+21.
+
+Then per-voice size axes — see `size-check.html` — took it to **33 entries in 5
+clusters**. Twenty-seven of the thirty-three are the riser, swell and reverse
+family, which no size axis fixes: those three converge whatever they are given,
+and it is a question about the voices rather than the grid. The other six are
+three pairs, of clicks and glitches, at neighbouring points.
 
 Both corners have the same cause, which is worth knowing before changing
 anything: the size axis multiplies length, and `click` is 0.02s to begin with,

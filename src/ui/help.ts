@@ -62,6 +62,7 @@ const SECTIONS: readonly Section[] = [
     rows: [
       ['A thousand named sounds', 'The forty voices at five sizes in five places: "small metal, hall", "huge bell, cavern".'],
       ['Placed twice, heard twice', 'Two of the same entry are two takes of it, not one file twice — a shade apart in pitch, brightness and decay. "Variation", on the selected sound, decides how far apart.'],
+      ['What a size means', 'Different things to different voices. A click cannot be made longer, so its sizes are pitched from a thin tick to a dull thud; a swell has no pitch, so a big one is a long one.'],
       ['Type a name', 'Finds what matches. Every word has to match something, and the order does not matter.'],
       ['Type nothing', 'Shows one of each voice, at a spread of sizes and places, to browse.'],
       ['What it is', 'An index over settings, not a thousand recordings. Nothing is stored: each is a name and four numbers, and the sound is worked out when you ask for it.'],

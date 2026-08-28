@@ -220,6 +220,14 @@ always actually been. Nothing is stored: every entry is a name and four
 numbers, and the sound is worked out when you ask for it, which is the return
 on describing a voice as data rather than as code.
 
+How much of the size goes into the pitch and how much into the length is per
+voice, not one rule for all forty. A click is twenty milliseconds long and
+cannot be made shorter, so its size is where its corner sits — a small one is a
+thin tick, a big one a dull thud. A swell has no pitch to speak of, so a big
+one is a long one. Measured before this was done, five sizes of click were one
+sound and a tiny click and a huge one were 98% the same; now every voice in the
+library moves across its own size axis.
+
 It is measured rather than asserted. Against one semitone — the smallest change
 any control in the app can make — a whole different voice is about forty times
 that, one size up about ten, and one room bigger about five. A tenth of the

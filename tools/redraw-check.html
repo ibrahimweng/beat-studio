@@ -55,8 +55,14 @@
     const on = [
       await render(e, `redraw:a:${e.id}`, DEFAULT_VARY),
       await render(e, `redraw:b:${e.id}`, DEFAULT_VARY),
+      // A third, so the number can say when it does not mean anything. A
+      // glitch scatters its bursts from the seed, so two placements of it are
+      // two different arrangements and there is nothing for the fingerprint to
+      // line up: its reading swings between 0% and 64% run to run with no code
+      // changing. Three takes make that visible instead of puzzling.
+      await render(e, `redraw:c:${e.id}`, DEFAULT_VARY),
     ];
-    prints.push(off[0].print, off[1].print, on[0].print, on[1].print);
+    prints.push(off[0].print, off[1].print, on[0].print, on[1].print, on[2].print);
     let same = 0;
     const n = Math.min(on[0].data.length, on[1].data.length);
     for (let i = 0; i < n; i++) if (on[0].data[i] === on[1].data[i]) same++;
@@ -67,7 +73,7 @@
       voice: e.voice, name: e.name,
       bitIdentical: same === n,
       offA: off[0].print, offB: off[1].print,
-      a: on[0].print, b: on[1].print,
+      a: on[0].print, b: on[1].print, c: on[2].print,
       dbOff: shift(off[0], off[1]), dbOn: shift(on[0], on[1]),
       brightOff: Math.abs(off[0].centre - off[1].centre),
       brightOn: Math.abs(on[0].centre - on[1].centre),
@@ -77,9 +83,14 @@
   }
   const usual = ordinary(prints);
   for (const r of rows) {
-    r.match = alike(r.a, r.b, usual);
+    const ab = alike(r.a, r.b, usual), ac = alike(r.a, r.c, usual);
+    r.match = (ab + ac) / 2;
+    // How far the two readings of the same thing disagree. Big here means the
+    // voice is a scatter and the number below it is not measuring anything.
+    r.unsure = Math.abs(ab - ac);
     r.wasMatch = alike(r.offA, r.offB, usual);
   }
+  const SCATTER = 0.2;
 
   /*
    * The half that stops this being a win on paper.
@@ -135,9 +146,17 @@
     `IS IT STILL THE SAME SOUND`,
     `  nearer its own voice than any other: ${wasHeld.length} off, ${held.length} on, of ${nearest.length}`,
     `  nearest different voice: median ${pct(midOther)}`,
-    ...(newlyLost.length
+    ...(rows.filter((r) => r.unsure >= SCATTER).length
+      ? [``, `Voices whose own number means nothing — two readings of the same`,
+         `thing disagree by more than ${pct(SCATTER)}, because the voice scatters what`,
+         `it is made of and there is nothing to line up:`,
+         ...rows.filter((r) => r.unsure >= SCATTER)
+           .map((r) => `  ${r.voice.padEnd(11)} two readings ${pct(r.unsure)} apart`)]
+      : []),
+    ...(newlyLost.filter((n) => (rows.find((r) => r.voice === n.voice)?.unsure ?? 0) < SCATTER).length
       ? [``, `Lost by turning it on — these are the ones to answer for:`,
-         ...newlyLost.map((n) => `  ${n.voice} is ${pct(n.other)} like ${n.who}, but only ${pct(n.self)} like itself`)]
+         ...newlyLost.filter((n) => (rows.find((r) => r.voice === n.voice)?.unsure ?? 0) < SCATTER)
+           .map((n) => `  ${n.voice} is ${pct(n.other)} like ${n.who}, but only ${pct(n.self)} like itself`)]
       : [``, `Nothing lost its identity that had it: every voice that read as`,
          `itself with the control off still does with it on.`]),
     ...(stillLost.length

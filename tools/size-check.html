@@ -1,0 +1,146 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>size check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * Does the size axis do anything, voice by voice?
+   *
+   * The library is one grid — five sizes, five places — laid over forty
+   * mechanisms that do not all respond to it the same way. A click is already
+   * at the shortest the app allows, so five lengths of it are one length. A
+   * riser is a slow sweep, and a slow sweep twice as long is the same slow
+   * sweep. Both come out as names for nothing.
+   *
+   * This measures each step separately, so the fix can go where the fault is
+   * rather than everywhere.
+   */
+  import { CATALOGUE } from '/src/audio/catalogue.ts';
+  import { DESIGN_NAMES } from '/src/timeline/types.ts';
+  import { makeCue, dressCue } from '/src/timeline/project.ts';
+  import { playCue } from '/src/audio/sources.ts';
+  import { print, alike, ordinary, fft } from '/src/audio/listen.ts';
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const RATE = 48000;
+
+  /*
+   * A second measure, all the way to Nyquist.
+   *
+   * The fingerprint stops at 10 kHz, and a click lives above it: measured, a
+   * tiny click puts 97% of its energy over 10 kHz and a huge one 63%, which
+   * are plainly different sounds, and the print calls them 98.7% the same
+   * because everything it can see is the filter's skirt with the same shape at
+   * both ends. Five wide bands over the whole range say what actually moved.
+   * Anybody tempted to "fix" click by this page's first number should read
+   * this one instead.
+   */
+  const EDGES = [0, 2000, 5000, 10000, 16000, 24000];
+  const bandsOf = (d) => {
+    const N = 4096;
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N && i < d.length; i++) re[i] = d[i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    fft(re, im);
+    const out = new Array(EDGES.length - 1).fill(0);
+    for (let k = 1; k < N / 2; k++) {
+      const p = re[k] * re[k] + im[k] * im[k], hz = (k * RATE) / N;
+      for (let b = 0; b < out.length; b++) if (hz >= EDGES[b] && hz < EDGES[b + 1]) out[b] += p;
+    }
+    const total = out.reduce((a, b) => a + b, 0) || 1;
+    return out.map((v) => v / total);
+  };
+  /** How far apart two spreads are, 0 to 1: half the total shifted. */
+  const apart = (a, b) => a.reduce((n, v, i) => n + Math.abs(v - b[i]), 0) / 2;
+
+  const render = async (entry) => {
+    // Variation off: this is asking what the *grid* does, and a probe that
+    // varied would be measuring itself. See tools/README.md.
+    const cue = {
+      ...dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry),
+      id: `size:${entry.id}`, vary: 0,
+    };
+    const secs = Math.min(7, entry.length + 0.4 + entry.space * 2.6);
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * secs), RATE);
+    playCue(ctx, ctx.destination, cue, 0, 1);
+    const d = (await ctx.startRendering()).getChannelData(0);
+    return { print: print(d, RATE, 0, d.length), bands: bandsOf(d) };
+  };
+
+  const SIZES = ['tiny', 'small', 'mid', 'large', 'huge'];
+  const PLACES = ['dry', 'close', 'room', 'hall', 'cavern'];
+  const at = (voice, size, place) => CATALOGUE.find((e) => e.id === `cat:${voice}:${size}:${place}`);
+
+  const prints = new Map();
+  let done = 0;
+  for (const voice of DESIGN_NAMES) {
+    for (const size of SIZES) {
+      for (const place of PLACES) {
+        const e = at(voice, size, place);
+        prints.set(e.id, await render(e));
+      }
+    }
+    say(`${++done} of ${DESIGN_NAMES.length} voices…`);
+    await new Promise(r => setTimeout(r));
+  }
+  const usual = ordinary([...prints.values()].map((v) => v.print));
+  const sim = (a, b) => alike(prints.get(a.id).print, prints.get(b.id).print, usual);
+  const moved = (a, b) => apart(prints.get(a.id).bands, prints.get(b.id).bands);
+
+  // For each voice: the worst neighbouring size step, dry, and the worst
+  // neighbouring place step at its own size. Worst, because one dead step is
+  // two names for one sound however lively the others are.
+  const rows = DESIGN_NAMES.map((voice) => {
+    let sizeWorst = 0, sizeWhere = '';
+    for (let i = 0; i < SIZES.length - 1; i++) {
+      const m = sim(at(voice, SIZES[i], 'dry'), at(voice, SIZES[i + 1], 'dry'));
+      if (m > sizeWorst) { sizeWorst = m; sizeWhere = `${SIZES[i]}→${SIZES[i + 1]}`; }
+    }
+    let placeWorst = 0, placeWhere = '';
+    for (let i = 0; i < PLACES.length - 1; i++) {
+      const m = sim(at(voice, 'mid', PLACES[i]), at(voice, 'mid', PLACES[i + 1]));
+      if (m > placeWorst) { placeWorst = m; placeWhere = `${PLACES[i]}→${PLACES[i + 1]}`; }
+    }
+    // Across the whole axis, tiny against huge: if even that is close, the
+    // voice does not have a size at all.
+    const span = sim(at(voice, 'tiny', 'dry'), at(voice, 'huge', 'dry'));
+    // The same span, over the whole band. Where the two disagree, this is the
+    // one to believe.
+    const spread = moved(at(voice, 'tiny', 'dry'), at(voice, 'huge', 'dry'));
+    let stepMoved = 1;
+    for (let i = 0; i < SIZES.length - 1; i++) {
+      stepMoved = Math.min(stepMoved, moved(at(voice, SIZES[i], 'dry'), at(voice, SIZES[i + 1], 'dry')));
+    }
+    return { voice, sizeWorst, sizeWhere, placeWorst, placeWhere, span, spread, stepMoved };
+  });
+
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const DEAD = 0.97;
+  // A voice has a size only if its whole axis moves the spectrum somewhere and
+  // no single step is a repeat. Both numbers, because either alone lies: the
+  // print cannot see above 10 kHz, and the bands cannot see a pitch that stays
+  // inside one of them.
+  const MOVED = 0.05;
+  const flat = rows.filter((r) => r.spread < MOVED).sort((a, b) => a.spread - b.spread);
+  const deadStep = rows.filter((r) => r.stepMoved < 0.02).sort((a, b) => a.stepMoved - b.stepMoved);
+
+  say([
+    `Each grid step, measured two ways: how alike the fingerprint says they`,
+    `are, and how much of the spectrum moved across the whole band.`,
+    ``,
+    `VOICES WITH NO SIZE AT ALL (under ${pct(MOVED)} of the spectrum moves, tiny to huge)`,
+    `  ${flat.length} of ${rows.length}`,
+    ...flat.map((r) => `  ${r.voice.padEnd(11)}${pct(r.spread).padStart(7)} moved`),
+    ``,
+    `VOICES WITH A REPEATED STEP (under 2% moves between two neighbours)`,
+    `  ${deadStep.length} of ${rows.length}`,
+    ...deadStep.map((r) => `  ${r.voice.padEnd(11)}${pct(r.stepMoved).padStart(7)} at its quietest step`),
+    ``,
+    `VOICES WITH A DEAD PLACE STEP (fingerprint, over ${pct(DEAD)})`,
+    `  ${rows.filter((r) => r.placeWorst >= DEAD).length} of ${rows.length}`,
+    ...rows.filter((r) => r.placeWorst >= DEAD).sort((a, b) => b.placeWorst - a.placeWorst)
+      .map((r) => `  ${r.voice.padEnd(11)}${pct(r.placeWorst).padStart(7)}  at ${r.placeWhere}`),
+    ``,
+    `EVERY VOICE`,
+    `  voice        print  spread   worst size step (print / spread)`,
+    ...[...rows].sort((a, b) => a.spread - b.spread).map((r) =>
+      `  ${r.voice.padEnd(11)}${pct(r.span).padStart(7)}${pct(r.spread).padStart(8)}   ${pct(r.sizeWorst).padStart(6)} / ${pct(r.stepMoved).padStart(6)}  ${r.sizeWhere}`),
+  ].join('\n'));
+  document.title = 'done';
+</script></body></html>

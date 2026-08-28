@@ -420,9 +420,24 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
    */
   reverse: (o) => {
     const dur = Math.max(0.15, o.length);
+    const r = ratio(o.tune);
+    /*
+     * Size has to reach the noise, not just the tone.
+     *
+     * Tune used to move only the tone, which is two fifths of this. The noise
+     * over it is full band and went nowhere, so it held the whole sound at one
+     * brightness however big it was asked to be: measured, a tiny reverse and
+     * a huge one both put 45% of their energy below 2 kHz and were the same
+     * sound at two lengths. Now a big one is darker and has more body, and a
+     * small one is thinner and more air, which is what size means for a swell.
+     */
+    const air = Math.max(0.3, Math.min(0.85, 0.6 + o.tune * 0.008));
     return one(dur, {
       // Noise and tone together, so it has both air and body when reversed.
-      source: { kind: 'reverse', freq: 320 * ratio(o.tune), shape: 3, air: 0.6 },
+      source: { kind: 'reverse', freq: 320 * r, shape: 3, air },
+      // High enough at the middle size to leave the plain sound as it was,
+      // and low enough at the big end to be the difference.
+      filter: { type: 'lowpass', freq: flat(Math.min(16000, 13000 * r)) },
       gain: flat(0.7 * o.gain),
       length: dur,
       overrun: SHORT_TAIL,
@@ -753,6 +768,10 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
 
   rain: (o) => {
     const dur = Math.max(0.2, o.length);
+    // Rain has no pitch, so tune moves the window it is heard through, which
+    // is what says fine drizzle against heavy drops on a roof. Without this
+    // the control did nothing here at all.
+    const r = ratio(o.tune);
     // Two sizes at once. A wash of fine drops on its own is only filtered
     // noise; the larger, rarer drops falling through it are what the ear
     // reads as rain rather than as hiss.
@@ -770,9 +789,9 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
         {
           type: 'highpass',
           freq: [
-            { at: 0, to: 2000 },
-            { at: dur * 0.45, to: 3600, curve: 'exp' },
-            { at: dur, to: 2200, curve: 'exp' },
+            { at: 0, to: 2000 * r },
+            { at: dur * 0.45, to: 3600 * r, curve: 'exp' },
+            { at: dur, to: 2200 * r, curve: 'exp' },
           ],
         },
         // Gusting. Static is defined by nothing moving at all, so the surest
@@ -786,13 +805,17 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
         { density: 24, grain: 0.011, freq: 0, spread: 0, air: 1 },
         dur,
         holds(0.5 * o.gain, 0.05, dur * 0.85, dur),
-        { type: 'bandpass', freq: flat(1300), q: 1.2 },
+        { type: 'bandpass', freq: flat(1300 * r), q: 1.2 },
       ),
     ]);
   },
 
   fire: (o) => {
     const dur = Math.max(0.2, o.length);
+    // Both halves follow tune: the roar underneath and the cracks over it. A
+    // bigger fire is a deeper roar with heavier cracks, and this did nothing
+    // at all before.
+    const r = ratio(o.tune);
     // Fewer and larger than rain, and low enough to have some body, which is
     // the difference between crackling and hissing.
     // A fire is a low roar with sharp cracks over it. One cloud gives only
@@ -801,13 +824,13 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
       noise(
         dur,
         holds(0.34 * o.gain, dur * 0.15, dur * 0.8, dur),
-        { type: 'lowpass', freq: flat(420) },
+        { type: 'lowpass', freq: flat(420 * r) },
       ),
       cloud(
         { density: 34, grain: 0.006, freq: 0, spread: 0, air: 1 },
         dur,
         holds(0.6 * o.gain, 0.02, dur * 0.9, dur),
-        { type: 'highpass', freq: flat(1800) },
+        { type: 'highpass', freq: flat(1800 * r) },
       ),
     ]);
   },
@@ -853,33 +876,43 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
 
   ratchet: (o) => {
     const dur = Math.max(0.15, o.length);
+    // Tuned, where it used to ignore the control entirely: a big pawl on a big
+    // gear is a lower clatter, not a slower one.
     return one(dur, run(
       // Low and woody rather than bright and ticking. A pawl running over a
       // gear is a clatter, and pitched up here it was only a fast tick.
-      { rate: [{ at: 0, to: 38 }, { at: dur, to: 7 }], ring: 0.016, freq: 620, jitter: 0.1 },
+      { rate: [{ at: 0, to: 38 }, { at: dur, to: 7 }], ring: 0.016, freq: 620 * ratio(o.tune), jitter: 0.1 },
       dur,
       decays(0.85 * o.gain, dur, 0.02),
-      { type: 'lowpass', freq: flat(2600) },
+      { type: 'lowpass', freq: flat(2600 * ratio(o.tune)) },
     ));
   },
 
   clockwork: (o) => {
     const dur = Math.max(0.2, o.length);
+    // A bigger mechanism ticks lower. The rate is left alone on purpose: how
+    // often it ticks is what a clockwork is, and moving that with the size
+    // control would make a large one a slow one instead of a deep one.
+    const r = ratio(o.tune);
     return one(dur, run(
-      { rate: flat(7), ring: 0.008, freq: 1900, jitter: 0.015 },
+      { rate: flat(7), ring: 0.008, freq: 1900 * r, jitter: 0.015 },
       dur,
       holds(0.75 * o.gain, 0.005, dur * 0.95, dur),
-      { type: 'highpass', freq: flat(900) },
+      { type: 'highpass', freq: flat(900 * r) },
     ));
   },
 
   zip: (o) => {
     const dur = Math.max(0.1, Math.min(1.2, o.length));
+    // What the teeth ring at, and the corner under them. Both follow tune:
+    // without this the control did nothing at all here, and a coarse zip and
+    // a fine one were the same zip at two lengths.
+    const r = ratio(o.tune);
     return one(dur, run(
-      { rate: [{ at: 0, to: 24 }, { at: dur, to: 130 }], ring: 0.004, freq: 3100, jitter: 0.12 },
+      { rate: [{ at: 0, to: 24 }, { at: dur, to: 130 }], ring: 0.004, freq: 3100 * r, jitter: 0.12 },
       dur,
       holds(0.5 * o.gain, 0.01, dur * 0.9, dur),
-      { type: 'highpass', freq: flat(1200) },
+      { type: 'highpass', freq: flat(1200 * r) },
     ));
   },
 
