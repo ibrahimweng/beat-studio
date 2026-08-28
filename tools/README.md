@@ -779,6 +779,41 @@ Two things about measuring it, both of which cost time here:
   back empty while the UI was drawing the recording and IndexedDB was holding
   it. Assert on what is drawn and on the exported file.
 
+## attack-check.html
+
+Whether a voice reads as an event or as a tone that starts, by how far its
+spectral centroid falls over the first 30 ms and how sharp its onset is.
+
+Written to justify giving the twenty-eight single-layer voices a contact layer
+— the mallet touching the bell, separate from the bell ringing. **It measured
+the opposite and the change was reverted.** Kept so the idea is not had twice:
+
+- A modal source already has a broad, bright onset. Five partials starting at
+  once is close enough to a step to be broadband on its own. `bell` measures
+  5460 Hz at its onset with no contact layer at all; adding one at a sensible
+  level moved it to 5466 Hz and raised the energy in the first 3 ms by 0.7%.
+  Driven to a gain of 10 — clipping, peak 4.26 — it reached 5829 Hz. The
+  contact is not wrong, it is masked.
+- Randomising each partial's phase was tried next, on the theory that partials
+  all starting at phase 0 sum into an unnaturally coherent spike. With five
+  widely spaced inharmonic ratios they do not: peak 0.393 in phase against
+  0.420 random.
+- **"28 of the 40 voices are a single layer" does not mean what it looks like.**
+  Counting `one()` calls counts how a voice is written down, not whether it has
+  structure. `impact` scores 1.44 because it carries an explicit transient
+  layer, but `bell` scores 0.74 with one layer and nothing else.
+- A low number is not a fault. `glass` scores 0.07 because glass does not dim
+  as it rings, which is the whole difference between glass and wood; `thud` is
+  documented as having no transient; `click` is a contact with nothing to
+  settle into.
+
+One trap in the measurement itself, which produced a confident null result
+first: the FFT window was 2048 samples, which is 42.7 ms — longer than the 3 ms
+event being looked for, so the contact was averaged in with twelve times as
+much ringing and every voice measured exactly as it had before the layer
+existed. A window has to be shorter than the thing it measures. It is 256
+samples now.
+
 ## room-check.html
 
 Whether the rooms are rooms, or decaying noise with a new name.
