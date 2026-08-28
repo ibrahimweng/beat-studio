@@ -10,13 +10,27 @@
   import { print, alike, ordinary } from '/src/audio/listen.ts';
   const say = (t) => { document.getElementById('out').textContent = t; };
   const RATE = 48000;
-  const render = async (entry, id) => {
-    const cue = { ...dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry), id };
+  const render = async (entry, id, vary) => {
+    const cue = { ...dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry), id, vary };
     const secs = Math.min(7, entry.length + 0.4 + entry.space * 2.6);
     const ctx = new OfflineAudioContext(1, Math.ceil(RATE * secs), RATE);
     playCue(ctx, ctx.destination, cue, 0, 1);
     const d = (await ctx.startRendering()).getChannelData(0);
-    return { print: print(d, RATE, 0, d.length), data: d };
+    /*
+     * A second measure, because the first one cannot see the tail.
+     *
+     * The fingerprint is twenty bands from 40 Hz to 10 kHz, so a third of a
+     * semitone is a tenth of a band and moving a sub or a beep by that much
+     * leaves the print all but unchanged — 100% before, 99.8% after, while the
+     * two are no longer the same file at all. Peak level and where the weight
+     * sits say what actually moved.
+     */
+    let peak = 0, num = 0, den = 0;
+    for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+    // Centre of the print, which is a stand-in for where the brightness sits.
+    const pr = print(d, RATE, 0, d.length);
+    for (let i = 0; i < pr.length; i++) { num += pr[i] * (i % 20); den += pr[i]; }
+    return { print: pr, data: d, peak, centre: den > 0 ? num / den : 0 };
   };
   // One entry per voice, at a middling size in a room.
   const picks = [];
@@ -26,38 +40,110 @@
     if (e.size !== 'mid' && e.size !== '' && e.name.split(',')[0].trim() !== e.voice) continue;
     seen.add(e.voice); picks.push(e);
   }
+  /*
+   * Every voice twice, at two settings.
+   *
+   * With the control at nothing, which is what the app did before any of this
+   * existed and is the only fair thing to compare against; and at whatever it
+   * defaults to now. Measured in one run so the two sides cannot drift apart.
+   */
+  const DEFAULT_VARY = 0.3;
   const rows = [];
   const prints = [];
   for (const e of picks) {
-    const a = await render(e, `redraw:a:${e.id}`);
-    const b = await render(e, `redraw:b:${e.id}`);
-    prints.push(a.print, b.print);
+    const off = [await render(e, `redraw:a:${e.id}`, 0), await render(e, `redraw:b:${e.id}`, 0)];
+    const on = [
+      await render(e, `redraw:a:${e.id}`, DEFAULT_VARY),
+      await render(e, `redraw:b:${e.id}`, DEFAULT_VARY),
+    ];
+    prints.push(off[0].print, off[1].print, on[0].print, on[1].print);
     let same = 0;
-    const n = Math.min(a.data.length, b.data.length);
-    for (let i = 0; i < n; i++) if (a.data[i] === b.data[i]) same++;
-    rows.push({ voice: e.voice, name: e.name, bitIdentical: same === n, sameShare: same / n, a: a.print, b: b.print });
+    const n = Math.min(on[0].data.length, on[1].data.length);
+    for (let i = 0; i < n; i++) if (on[0].data[i] === on[1].data[i]) same++;
+    const shift = (x, y) => (Math.max(x.peak, y.peak) > 1e-6
+      ? Math.abs(20 * Math.log10(Math.max(1e-9, x.peak) / Math.max(1e-9, y.peak)))
+      : 0);
+    rows.push({
+      voice: e.voice, name: e.name,
+      bitIdentical: same === n,
+      offA: off[0].print, offB: off[1].print,
+      a: on[0].print, b: on[1].print,
+      dbOff: shift(off[0], off[1]), dbOn: shift(on[0], on[1]),
+      brightOff: Math.abs(off[0].centre - off[1].centre),
+      brightOn: Math.abs(on[0].centre - on[1].centre),
+    });
     say(`${rows.length} of ${picks.length}…`);
     await new Promise(r => setTimeout(r));
   }
   const usual = ordinary(prints);
-  for (const r of rows) r.match = alike(r.a, r.b, usual);
+  for (const r of rows) {
+    r.match = alike(r.a, r.b, usual);
+    r.wasMatch = alike(r.offA, r.offB, usual);
+  }
+
+  /*
+   * The half that stops this being a win on paper.
+   *
+   * Two takes of a sound have to still be that sound. So beside "how alike are
+   * two placements" sits "how alike is a placement to a different voice" — the
+   * first has to stay well clear of the second, or variation has bought a
+   * difference by throwing the identity away.
+   */
+  const nearestFor = (key, selfKey) => {
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+      let best = -1, who = '';
+      for (let j = 0; j < rows.length; j++) {
+        if (i === j) continue;
+        const m = alike(rows[i][key], rows[j][key], usual);
+        if (m > best) { best = m; who = rows[j].voice; }
+      }
+      out.push({ voice: rows[i].voice, self: rows[i][selfKey], other: best, who });
+    }
+    return out;
+  };
+  const nearest = nearestFor('a', 'match');
+  const wasNearest = nearestFor('offA', 'wasMatch');
+  const held = nearest.filter((n) => n.self > n.other);
+  const wasHeld = wasNearest.filter((n) => n.self > n.other);
+  const midOther = [...nearest].sort((a, b) => a.other - b.other)[Math.floor(nearest.length / 2)].other;
+
   rows.sort((x, y) => x.match - y.match);
-  const identical = rows.filter((r) => r.bitIdentical);
   const pct = (x) => `${(x * 100).toFixed(1)}%`;
-  const mid = rows[Math.floor(rows.length / 2)];
+  const mid = (key) => [...rows].sort((a, b) => a[key] - b[key])[Math.floor(rows.length / 2)][key];
+  const bitsOff = rows.filter((r) => r.wasMatch >= 0.9999).length;
+
+  // Voices that were already nearer something else than themselves before any
+  // of this: their trouble is the noise seed, not the variation on top of it.
+  const alreadyLost = new Set(wasNearest.filter((n) => n.self <= n.other).map((n) => n.voice));
+  const newlyLost = nearest.filter((n) => n.self <= n.other && !alreadyLost.has(n.voice));
+  const stillLost = nearest.filter((n) => n.self <= n.other && alreadyLost.has(n.voice));
+
   say([
-    `Placing the same library entry twice, ${rows.length} voices, one entry each.`,
+    `Placing the same entry twice, ${rows.length} voices, at the control off and on.`,
     ``,
-    `  bit for bit identical: ${identical.length} of ${rows.length} voices`,
-    `  how alike the two are: median ${pct(mid.match)}`,
-    `  most different pair:   ${rows[0].voice} at ${pct(rows[0].match)}`,
-    `  least different pair:  ${rows[rows.length - 1].voice} at ${pct(rows[rows.length - 1].match)}`,
+    `TWO TAKES OF ONE SOUND        off        on`,
+    `  how alike they are   ${pct(mid('wasMatch')).padStart(9)} ${pct(mid('match')).padStart(9)}   (median)`,
+    `  bit for bit the same ${String(bitsOff).padStart(9)} ${String(rows.filter((r) => r.bitIdentical).length).padStart(9)}   of ${rows.length}`,
     ``,
-    `Bit-identical voices (a second placement is the same file):`,
-    `  ${identical.map((r) => r.voice).join(', ') || 'none'}`,
+    `  level between takes  ${mid('dbOff').toFixed(2).padStart(7)}dB ${mid('dbOn').toFixed(2).padStart(7)}dB   (median)`,
+    `  brightness moved     ${mid('brightOff').toFixed(3).padStart(9)} ${mid('brightOn').toFixed(3).padStart(9)}   (bands, median)`,
     ``,
-    `The ten that vary most between placements:`,
-    ...rows.slice(0, 10).map((r) => `  ${r.voice.padEnd(10)} ${pct(r.match)}`),
+    `Every voice, most varied first — off, then on:`,
+    ...rows.map((r) => `  ${r.voice.padEnd(11)}${pct(r.wasMatch).padStart(8)} → ${pct(r.match).padStart(7)}   ${r.dbOn.toFixed(2).padStart(5)}dB`),
+    ``,
+    `IS IT STILL THE SAME SOUND`,
+    `  nearer its own voice than any other: ${wasHeld.length} off, ${held.length} on, of ${nearest.length}`,
+    `  nearest different voice: median ${pct(midOther)}`,
+    ...(newlyLost.length
+      ? [``, `Lost by turning it on — these are the ones to answer for:`,
+         ...newlyLost.map((n) => `  ${n.voice} is ${pct(n.other)} like ${n.who}, but only ${pct(n.self)} like itself`)]
+      : [``, `Nothing lost its identity that had it: every voice that read as`,
+         `itself with the control off still does with it on.`]),
+    ...(stillLost.length
+      ? [``, `Already like this with the control off, from the noise seed alone:`,
+         `  ${stillLost.map((n) => n.voice).join(', ')}`]
+      : []),
   ].join('\n'));
   document.title = 'done';
 </script></body></html>

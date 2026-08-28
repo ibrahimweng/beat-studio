@@ -61,6 +61,7 @@ const SECTIONS: readonly Section[] = [
     title: 'The library',
     rows: [
       ['A thousand named sounds', 'The forty voices at five sizes in five places: "small metal, hall", "huge bell, cavern".'],
+      ['Placed twice, heard twice', 'Two of the same entry are two takes of it, not one file twice — a shade apart in pitch, brightness and decay. "Variation", on the selected sound, decides how far apart.'],
       ['Type a name', 'Finds what matches. Every word has to match something, and the order does not matter.'],
       ['Type nothing', 'Shows one of each voice, at a spread of sizes and places, to browse.'],
       ['What it is', 'An index over settings, not a thousand recordings. Nothing is stored: each is a name and four numbers, and the sound is worked out when you ask for it.'],
@@ -106,6 +107,7 @@ const SECTIONS: readonly Section[] = [
       ['Level, Tune, Length', 'What it is, how high and how long. Changes reach everything chosen.'],
       ['Space', 'Puts this sound in a room of its own, added to it rather than mixed with it.'],
       ['Drive', 'Pushes it, which adds weight. It is what makes low sounds read on a small speaker.'],
+      ['Variation', 'How much this one differs from the next one like it. Turn it to nothing and every placement is the same sound; leave it up and six impacts in a row are six takes rather than one file six times.'],
       ['Ends on it', 'The sound finishes on the marker. Use it for risers and reverse swells.'],
       ['In context', 'Plays from a second before, so you hear it in place.'],
       ['−1f and +1f', 'Move it one frame, for a hit that feels a touch late.'],

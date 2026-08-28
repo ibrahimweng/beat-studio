@@ -633,6 +633,16 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   // of the chain that every sound used to have to share.
   const space = field('Space', 0, 1, 0.01, (v) => patch({ space: v }));
   const drive = field('Drive', 0, 1, 0.01, (v) => patch({ drive: v }));
+  /*
+   * How much this placement differs from another of the same sound.
+   *
+   * Below the room and the push because it is the only one of these that is
+   * about the placement rather than the sound: turning it up does not change
+   * what a sound is, it changes how much this one differs from the next one
+   * like it. At nothing, six of them in a row are six copies of one file,
+   * which is what a synthesised effect always used to be.
+   */
+  const vary = field('Variation', 0, 1, 0.01, (v) => patch({ vary: v }));
 
   /* ---------- what the selected sound is made of ---------- */
 
@@ -809,6 +819,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     length.row,
     space.row,
     drive.row,
+    vary.row,
     madeOf,
     el('div', { class: 'setting-row__label', style: { marginTop: '10px' }, text: 'Lands so that it' }),
     el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, anchorButtons.map((a) => a.node)),
@@ -1178,6 +1189,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(space.out, selected.space ? selected.space.toFixed(2) : 'dry');
         drive.input.value = String(selected.drive);
         setText(drive.out, selected.drive ? selected.drive.toFixed(2) : 'off');
+        vary.input.value = String(selected.vary);
+        // "same" rather than "off", because what nothing here means is that
+        // every placement of this sound is the same sound.
+        setText(vary.out, selected.vary ? selected.vary.toFixed(2) : 'same');
         // Only with one chosen: four sounds can all be given the same extra,
         // but showing one of their stacks and calling it theirs would be a lie.
         madeOf.style.display = chosen === 1 ? '' : 'none';

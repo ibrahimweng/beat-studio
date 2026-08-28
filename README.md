@@ -394,6 +394,15 @@ between a sound that reads as part of a scene and one that reads as pasted on
 top of it. The room is added to the sound rather than blended with it, so
 turning it up does not thin out the hit you started with.
 
+"Variation" is the third, and it is about the placement rather than the sound.
+Turn it to nothing and every placement of one sound is the same sound. Leave it
+up and two of the same thing are two takes of it — a shade apart in pitch, in
+brightness, in how fast they decay, and for a struck object in the ratios that
+decide what it is made of. Six impacts in a row used to be one file six times,
+which is what makes a synthesised effect read as fake however good any one of
+them is. It is drawn from the sound's own place on the timeline, so it is the
+same every time that one is played and different from the one beside it.
+
 "Drive" pushes the sound into a gentle curve, which adds harmonics above what
 was there. This is what people mean by punch. It matters most for anything low:
 a sub with nothing above it cannot be reproduced by a phone at all, and a
@@ -775,6 +784,7 @@ src/
     listen.ts      finding the sounds in a recording, and measuring them
     rebuild.ts     making the nearest thing this app can make to one
     sources.ts     turning a placed sound into a played sound
+    vary.ts        a placement's own take of a voice, so two are not one twice
     render.ts      writing the file, faster than real time
     transport.ts   the step clock
     recorder.ts    capturing takes
