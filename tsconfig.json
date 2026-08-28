@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
 
     "strict": true,
     "noUnusedLocals": true,
@@ -20,5 +20,11 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  /*
+   * `api` and `vite.config.ts` are in here because they were not, and the
+   * serverless function shipped with four type errors nobody could see: the
+   * build was green, the deployment was not. Anything that gets deployed is
+   * checked.
+   */
+  "include": ["src", "api", "vite.config.ts"]
 }
