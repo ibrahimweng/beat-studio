@@ -558,6 +558,57 @@ message about the timeline — a session opened, an export finished, a clip that
 would not fit — was written somewhere nobody on that screen could see it. It
 is now in the timeline bar.
 
+## variety-check.html
+
+Asks how many genuinely different sounds are in the thousand-entry library, by
+rendering every one of them and comparing all 499,500 pairs.
+
+`library-check.html` walks the grid one axis at a time — is one size step
+bigger than a semitone, is one room step bigger than a semitone — and a
+library can pass all of that while still holding entries that are the same
+sound under two names. This looks at the whole grid at once.
+
+What it reported when it was written:
+
+```
+median 0.3%   90th 59.2%   99th 84.1%   worst 100.0%
+49 of 1000 entries sit in 12 clusters, closer than 97%
+  1. 15 entries — tiny click, dry · small click, dry · click, dry · … · huge tick, dry
+  2.  7 entries — large riser, dry · huge riser, dry · large swell, dry · …
+  3.  6 entries — small riser, dry · tiny swell, dry · …
+one voice, its 25 versions:     median 60.1%
+same size and place, 40 voices: median 0.3%
+```
+
+So the palette is well separated — a median of 0.3% across every pair — and
+the duplicates are concentrated in two corners rather than spread about.
+
+Both corners have the same cause, which is worth knowing before changing
+anything: the size axis multiplies length, and `click` is 0.02s to begin with,
+which is `MIN_LENGTH`. Five sizes of it span 0.02s to 0.042s, and at eight
+windows of twenty bands those print identically. Risers and swells collapse at
+the other end for the mirror-image reason. Size wants to be a per-voice idea
+rather than one multiplier.
+
+## redraw-check.html
+
+Places the same library entry twice and asks how different the two are.
+
+This is the question a recorded library answers by giving you five takes of a
+door slam. What it reported:
+
+```
+bit for bit identical: 7 of 40 voices (wobble, sub, drone, pop, beep, chirp, zap)
+how alike the two are: median 98.9%
+most different: ratchet 30.7%, glitch 37.4%, motor 73.0%
+```
+
+A cue draws its noise from its own id, so the noise-heavy voices do vary. Every
+voice built from oscillators and envelopes does not: it is the same sound every
+time it is placed, and six of them in a row read as one sound pasted six times.
+Run this again after adding any per-placement variation; the median is the
+number to watch, and it wants to come down a long way.
+
 ## Checking the things a review turned up
 
 Six faults came out of using the app rather than reading it. Each is worth

@@ -1,0 +1,125 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>variety check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * How many genuinely different sounds are in the library?
+   *
+   * The library is 40 voices at 5 sizes in 5 places, which is a thousand
+   * names. The question this asks is how many of those names are the same
+   * sound wearing a different one — measured across the whole grid rather
+   * than one axis at a time, which is what the other check does.
+   *
+   * The two numbers that matter are different questions:
+   *   · within a voice, do its 25 versions differ from each other?
+   *   · across voices, does a metal sound like a clank?
+   * A library can pass the first and fail the second, and it is the second
+   * that somebody notices when they play through it.
+   */
+  import { CATALOGUE } from '/src/audio/catalogue.ts';
+  import { makeCue, dressCue } from '/src/timeline/project.ts';
+  import { playCue } from '/src/audio/sources.ts';
+  import { print, alike, ordinary } from '/src/audio/listen.ts';
+
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const RATE = 48000;
+
+  async function render(entry) {
+    const cue = dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry);
+    // Fixed id, so a run is repeatable: the noise a cue draws comes from its
+    // own id, and an unseeded run measures a different sound every time.
+    const fixed = { ...cue, id: `variety:${entry.id}` };
+    const seconds = Math.min(7, entry.length + 0.4 + entry.space * 2.6);
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
+    playCue(ctx, ctx.destination, fixed, 0, 1);
+    const data = (await ctx.startRendering()).getChannelData(0);
+    return print(data, RATE, 0, data.length);
+  }
+
+  // Render everything, in batches, so the tab stays alive.
+  const prints = [];
+  for (let i = 0; i < CATALOGUE.length; i++) {
+    prints.push(await render(CATALOGUE[i]));
+    if (i % 25 === 0) { say(`rendering ${i + 1} of ${CATALOGUE.length}…`); await new Promise(r => setTimeout(r)); }
+  }
+  say('comparing…');
+
+  // Taken out of every comparison: what all of these have in common is that
+  // they are sounds, and leaving it in scores everything against everything
+  // at about ninety per cent. See `alike` in listen.ts.
+  const usual = ordinary(prints);
+  const sim = (a, b) => alike(prints[a], prints[b], usual);
+
+  // ---------- how alike is everything, to everything ----------
+  const all = [];
+  for (let a = 0; a < CATALOGUE.length; a++)
+    for (let b = a + 1; b < CATALOGUE.length; b++) all.push(sim(a, b));
+  all.sort((x, y) => x - y);
+  const at = (q) => all[Math.floor(q * (all.length - 1))];
+
+  // ---------- clusters: entries nothing tells apart ----------
+  // Union-find over "closer than this", so a chain of near-identical sounds
+  // counts once rather than as every pair inside it.
+  const NEAR = 0.97;
+  const parent = CATALOGUE.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const join = (a, b) => { const x = find(a), y = find(b); if (x !== y) parent[x] = y; };
+  for (let a = 0; a < CATALOGUE.length; a++)
+    for (let b = a + 1; b < CATALOGUE.length; b++) if (sim(a, b) >= NEAR) join(a, b);
+
+  const groups = new Map();
+  for (let i = 0; i < CATALOGUE.length; i++) {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(i);
+  }
+  const clusters = [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length);
+  const inACluster = clusters.reduce((n, g) => n + g.length, 0);
+
+  // ---------- the two axes, separately ----------
+  const byVoice = new Map();
+  CATALOGUE.forEach((e, i) => {
+    if (!byVoice.has(e.voice)) byVoice.set(e.voice, []);
+    byVoice.get(e.voice).push(i);
+  });
+  const within = [];
+  for (const list of byVoice.values())
+    for (let a = 0; a < list.length; a++)
+      for (let b = a + 1; b < list.length; b++) within.push(sim(list[a], list[b]));
+  within.sort((x, y) => x - y);
+
+  // Across voices, holding size and place still, so only the voice differs.
+  const across = [];
+  const bySlot = new Map();
+  CATALOGUE.forEach((e, i) => {
+    const k = `${e.size}|${e.place}`;
+    if (!bySlot.has(k)) bySlot.set(k, []);
+    bySlot.get(k).push(i);
+  });
+  for (const list of bySlot.values())
+    for (let a = 0; a < list.length; a++)
+      for (let b = a + 1; b < list.length; b++) across.push(sim(list[a], list[b]));
+  across.sort((x, y) => x - y);
+  const mid = (xs) => xs[Math.floor(xs.length / 2)];
+
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const lines = [
+    `1000 entries, ${all.length.toLocaleString()} pairs.`,
+    ``,
+    `HOW ALIKE EVERYTHING IS`,
+    `  median ${pct(at(0.5))}   90th ${pct(at(0.9))}   99th ${pct(at(0.99))}   worst ${pct(all[all.length - 1])}`,
+    ``,
+    `ENTRIES NOTHING TELLS APART (closer than ${pct(NEAR)})`,
+    `  ${inACluster} of 1000 entries sit in ${clusters.length} clusters.`,
+    ...clusters.slice(0, 8).map((g, n) =>
+      `  ${n + 1}. ${g.length} entries — ${g.slice(0, 6).map((i) => CATALOGUE[i].name).join(' · ')}${g.length > 6 ? ' · …' : ''}`),
+    ``,
+    `THE TWO AXES`,
+    `  one voice, its 25 versions:   median ${pct(mid(within))}   worst ${pct(within[within.length - 1])}`,
+    `  same size and place, 40 voices: median ${pct(mid(across))}   worst ${pct(across[across.length - 1])}`,
+    ``,
+    `A voice against itself with only the noise redrawn is the floor for`,
+    `"the same sound"; see tools/README.md for where that sits.`,
+  ];
+  say(lines.join('\n'));
+  document.title = 'done';
+</script></body></html>

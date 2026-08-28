@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>redraw check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Two placements of one library entry. How different are they, really?
+     A recorded library gives you five takes of a door slam and they differ.
+     This asks what this app gives you when you place the same name twice. */
+  import { CATALOGUE } from '/src/audio/catalogue.ts';
+  import { makeCue, dressCue } from '/src/timeline/project.ts';
+  import { playCue } from '/src/audio/sources.ts';
+  import { print, alike, ordinary } from '/src/audio/listen.ts';
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const RATE = 48000;
+  const render = async (entry, id) => {
+    const cue = { ...dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry), id };
+    const secs = Math.min(7, entry.length + 0.4 + entry.space * 2.6);
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * secs), RATE);
+    playCue(ctx, ctx.destination, cue, 0, 1);
+    const d = (await ctx.startRendering()).getChannelData(0);
+    return { print: print(d, RATE, 0, d.length), data: d };
+  };
+  // One entry per voice, at a middling size in a room.
+  const picks = [];
+  const seen = new Set();
+  for (const e of CATALOGUE) {
+    if (seen.has(e.voice)) continue;
+    if (e.size !== 'mid' && e.size !== '' && e.name.split(',')[0].trim() !== e.voice) continue;
+    seen.add(e.voice); picks.push(e);
+  }
+  const rows = [];
+  const prints = [];
+  for (const e of picks) {
+    const a = await render(e, `redraw:a:${e.id}`);
+    const b = await render(e, `redraw:b:${e.id}`);
+    prints.push(a.print, b.print);
+    let same = 0;
+    const n = Math.min(a.data.length, b.data.length);
+    for (let i = 0; i < n; i++) if (a.data[i] === b.data[i]) same++;
+    rows.push({ voice: e.voice, name: e.name, bitIdentical: same === n, sameShare: same / n, a: a.print, b: b.print });
+    say(`${rows.length} of ${picks.length}…`);
+    await new Promise(r => setTimeout(r));
+  }
+  const usual = ordinary(prints);
+  for (const r of rows) r.match = alike(r.a, r.b, usual);
+  rows.sort((x, y) => x.match - y.match);
+  const identical = rows.filter((r) => r.bitIdentical);
+  const pct = (x) => `${(x * 100).toFixed(1)}%`;
+  const mid = rows[Math.floor(rows.length / 2)];
+  say([
+    `Placing the same library entry twice, ${rows.length} voices, one entry each.`,
+    ``,
+    `  bit for bit identical: ${identical.length} of ${rows.length} voices`,
+    `  how alike the two are: median ${pct(mid.match)}`,
+    `  most different pair:   ${rows[0].voice} at ${pct(rows[0].match)}`,
+    `  least different pair:  ${rows[rows.length - 1].voice} at ${pct(rows[rows.length - 1].match)}`,
+    ``,
+    `Bit-identical voices (a second placement is the same file):`,
+    `  ${identical.map((r) => r.voice).join(', ') || 'none'}`,
+    ``,
+    `The ten that vary most between placements:`,
+    ...rows.slice(0, 10).map((r) => `  ${r.voice.padEnd(10)} ${pct(r.match)}`),
+  ].join('\n'));
+  document.title = 'done';
+</script></body></html>
