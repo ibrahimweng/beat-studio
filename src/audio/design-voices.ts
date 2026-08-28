@@ -431,7 +431,32 @@ export const DESIGN_SPECS: Record<DesignName, (o: DesignOptions) => VoiceSpec> =
      * sound at two lengths. Now a big one is darker and has more body, and a
      * small one is thinner and more air, which is what size means for a swell.
      */
-    const air = Math.max(0.3, Math.min(0.85, 0.6 + o.tune * 0.008));
+    /*
+     * How much of it is air rather than the object ringing.
+     *
+     * Far lower than it was, because the thing being reversed is now a struck
+     * body rather than one sine, and at 60% noise the body cannot be heard.
+     *
+     * Set by measuring against the swell, which is the voice this one kept
+     * being mistaken for. Both are a build that stops dead — that gesture is
+     * what they are both for and is not worth breaking — so the one axis they
+     * can differ on is whether there is an object in there or only air. The
+     * swell measures 0.48 spectral flatness. This voice measured 0.61 before,
+     * which is to say it was the *noisier* of the two when a reversed hit
+     * should be the one you can hear a pitch in. At 0.28 air it landed on
+     * 0.51, nearer the swell than it started. It sits near 0.31 now, on the
+     * far side and about twice as far away as it originally was.
+     *
+     * Worth knowing before tuning this by the variety check: that check
+     * cannot see any of it. Driving air from 0.28 to 0.02 moves flatness from
+     * 0.51 to 0.18 and moves its "alike" score against the swell from 93.3%
+     * to 92.5%. Twenty coarse bands cannot tell a partial from noise inside
+     * one of them. See `tools/README.md`.
+     *
+     * The direction is unchanged: more air as it gets smaller, since a small
+     * one is thin and breathy and a big one has body.
+     */
+    const air = Math.max(0.04, Math.min(0.3, 0.11 + o.tune * 0.005));
     return one(dur, {
       // Noise and tone together, so it has both air and body when reversed.
       source: { kind: 'reverse', freq: 320 * r, shape: 3, air },

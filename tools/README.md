@@ -822,6 +822,56 @@ And one that was the test's fault, not the app's: placed cues are `.cue`, not
 `.tl__cue`, so "a recording can be placed" failed while placing worked
 perfectly. Check a selector against the DOM before believing what it reports.
 
+## preview-check.html, and place.js
+
+Whether every sound in the library can actually be heard before it is placed.
+
+Four voices — riser, swell, reverse and zip — are anchored to their **end**:
+they finish on their marker rather than starting from it, because a riser
+exists to lead into something. `cueLength` therefore clamps them to how much
+timeline lies before them, so a riser dropped at 0.3 s is 0.3 s long. That is
+right for a placed sound and nonsense for a preview, where the position is a
+fiction — and a preview cue was being built at time zero, so all four
+collapsed to the 0.2 second stub their own minimum allows.
+
+**A hundred of the thousand library entries could not be auditioned**, and
+clicking any of those four in the palette played a blip rather than the sound.
+
+It also poisoned the measurements, which is how it was found. Every page here
+that renders one sound in isolation placed its cue at zero, so `variety-check`
+had been comparing three 0.2 second noise blips and reporting twenty five
+entries in clusters that "nothing tells apart" — every one of them a riser, a
+swell or a reverse. That was written up as a design question about whether
+those should be three voices. It was not a design question. `place.js` now
+holds the one line that puts an end-anchored cue where it can sound, and the
+pages import it.
+
+Two things worth carrying forward:
+
+- **The number of affected voices was wrong in three separate comments** until
+  the check enumerated them from `DESIGN_DEFAULT_ANCHOR` instead of being
+  told. Reading a forty-entry record by eye finds three of the four.
+- A cluster of "identical" sounds is a claim about the measurement as much as
+  about the sounds. Check what the probe is doing before concluding anything
+  about the library.
+
+## What the variety check cannot see
+
+`alike` compares 8 windows of 20 log-spaced bands plus an envelope. Inside one
+band it cannot tell a partial from noise, so it is blind to tonality.
+
+Measured while separating `reverse` from `swell`: driving the reverse voice's
+noise share from 0.28 down to 0.02 moves its spectral flatness from 0.51 to
+0.18 — the difference between a wash and a clearly ringing object — and moves
+its `alike` score against the swell from 93.3% to 92.5%. Splitting the print
+into its spectrum and envelope halves shows the same thing: the spectrum half
+alone stays at 92%.
+
+So a high `alike` between two voices is not on its own evidence that they
+sound the same, and a change that does not move it is not on its own a change
+that does nothing. Spectral flatness is the measure for tonality. Both are in
+`redraw-check` and `variety-check`; neither replaces listening.
+
 ## attack-check.html
 
 Whether a voice reads as an event or as a tone that starts, by how far its

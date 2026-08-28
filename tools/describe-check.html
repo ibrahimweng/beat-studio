@@ -10,6 +10,7 @@
   import { makeCue, dressCue, MIN_LENGTH, MAX_LENGTH } from '/src/timeline/project.ts';
   import { playCue } from '/src/audio/sources.ts';
   import { SIZE, LENGTH, PLACE, PUSH, TONE, LOUD, AMOUNT, SYNONYMS } from '/src/audio/vocabulary.ts';
+  import { placed } from '/tools/place.js';
 
   const results = [];
   const check = (name, pass, detail) => results.push({ name, pass, detail });
@@ -275,7 +276,7 @@
   say('rendering what it offers…');
   const RATE = 48000;
   async function render(s) {
-    const cue = dressCue(makeCue(0, 'check', { kind: 'design', name: s.voice }), s);
+    const cue = placed(dressCue(makeCue(0, 'check', { kind: 'design', name: s.voice }), s));
     const seconds = Math.min(6, s.length + 0.5 + s.space * 2.6);
     const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
     playCue(ctx, ctx.destination, { ...cue, id: `fixed:${s.id}` }, 0, 1);

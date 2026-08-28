@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>preview check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * Can every sound in the library actually be heard before it is placed?
+   *
+   * Clicking a sound in the palette previews it, and a preview is a cue that
+   * is never placed anywhere — it exists to be heard once. Built at time zero,
+   * which is the obvious way, three voices came out wrong.
+   *
+   * `riser`, `swell`, `reverse` and `zip` are anchored to their end: they
+   * finish on their marker rather than starting from it, because a riser
+   * exists to lead into something. So `cueLength` clamps them to how much timeline lies
+   * before them — a riser dropped at 0.3 s is 0.3 s long, since it cannot
+   * begin before the piece does. Correct for a placed sound, and nonsense for
+   * a preview, where the position is a fiction. At time zero they collapsed to
+   * the 0.2 second stub their own minimum length allows.
+   *
+   * A hundred of the thousand entries could not be auditioned — and the list
+   * of which voices those are is read from the anchors below rather than
+   * written out here, which is how the fourth one turned up after three had
+   * been named in three different comments. It also made three of them
+   * measure as identical to each other, because 0.2 second noise blips are
+   * identical: the variety check reported twenty five entries in clusters
+   * that "nothing tells apart", every one a riser, a swell or a reverse. The
+   * voices were never the problem. See `tools/place.js`.
+   */
+  import { CATALOGUE } from '/src/audio/catalogue.ts';
+  import { DESIGN_NAMES, DESIGN_DEFAULT_ANCHOR } from '/src/timeline/types.ts';
+  import { makeCue, dressCue, cueLength } from '/src/timeline/project.ts';
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const lines = [];
+  const out = (t = '') => { lines.push(t); say(lines.join('\n')); };
+
+  /*
+   * What `SoundDesignSession.preview` does. Kept in step with it by hand,
+   * which is the cost of the session needing a live engine to be built.
+   */
+  const previewCue = (source, preset) => {
+    const cue = dressCue(makeCue(0, 'l', source), preset);
+    return cue.anchor === 'end' ? { ...cue, time: cue.length } : cue;
+  };
+
+  let short = 0;
+  const worst = [];
+  for (const entry of CATALOGUE) {
+    const cue = previewCue({ kind: 'design', name: entry.voice }, entry);
+    const heard = cueLength(cue);
+    // Allowed to be shorter only because the voice itself clamps it.
+    const share = cue.length > 0 ? heard / cue.length : 1;
+    if (share < 0.999) { short++; worst.push({ name: entry.name, asked: cue.length, heard }); }
+  }
+
+  out('EVERY LIBRARY ENTRY, PREVIEWED');
+  out(`  ${CATALOGUE.length} entries, ${short} that would not be heard in full.`);
+  if (worst.length) {
+    for (const w of worst.slice(0, 8)) {
+      out(`    ${w.name.padEnd(24)} asked ${w.asked.toFixed(2)}s, heard ${w.heard.toFixed(2)}s`);
+    }
+    if (worst.length > 8) out(`    …and ${worst.length - 8} more`);
+  }
+  out(short === 0 ? '  ok: every entry previews at its full length' : '  FAIL');
+
+  out('');
+  out('THE END-ANCHORED VOICES, WHICH ARE THE ONES THIS IS ABOUT');
+  const ends = DESIGN_NAMES.filter((n) => DESIGN_DEFAULT_ANCHOR[n] === 'end');
+  out('  ' + ends.join(', '));
+  let stubs = 0;
+  for (const name of ends) {
+    // What the old code did: a preview cue built at time zero.
+    const naive = dressCue(makeCue(0, 'l', { kind: 'design', name }), null);
+    const fixed = previewCue({ kind: 'design', name }, null);
+    const before = cueLength(naive);
+    const after = cueLength(fixed);
+    if (before < after * 0.9) stubs++;
+    out(`  ${name.padEnd(10)} at time zero ${before.toFixed(2)}s   placed for preview ${after.toFixed(2)}s`);
+  }
+  out('');
+  out(stubs === ends.length
+    ? `  ok: all ${ends.length} would have been stubs, and are not`
+    : `  note: ${stubs} of ${ends.length} were stubs — if this drops to 0 the bug may have been fixed elsewhere`);
+
+  out('');
+  out(short === 0 ? 'ALL CHECKS PASS' : 'CHECK FAILED');
+  document.title = 'done';
+</script></body></html>

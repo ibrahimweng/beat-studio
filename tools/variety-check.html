@@ -19,12 +19,13 @@
   import { makeCue, dressCue } from '/src/timeline/project.ts';
   import { playCue } from '/src/audio/sources.ts';
   import { print, alike, ordinary } from '/src/audio/listen.ts';
+  import { placed } from '/tools/place.js';
 
   const say = (t) => { document.getElementById('out').textContent = t; };
   const RATE = 48000;
 
   async function render(entry) {
-    const cue = dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry);
+    const cue = placed(dressCue(makeCue(0, 'l', { kind: 'design', name: entry.voice }), entry));
     // Fixed id, so a run is repeatable: the noise a cue draws comes from its
     // own id, and an unseeded run measures a different sound every time.
     const fixed = { ...cue, id: `variety:${entry.id}` };
