@@ -13,6 +13,7 @@ import { createDivider } from './ui/sound-design/divider.ts';
 import {
   flushProject,
   heldProject,
+  heldSamples,
   heldTakes,
   heldVideo,
   isKeeping,
@@ -265,6 +266,11 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   void heldTakes().then((takes) => {
     if (takes.length && !session.store.state.takes.length) session.store.set({ takes });
   });
+
+  // Recordings likewise, and for the same reason: a piece using one draws it
+  // at once from the length written down, and it gets its audio the first
+  // time anything asks to hear it.
+  void heldSamples().then((list) => soundDesign.restoreSamples(list));
 
   if (kept?.videoName) {
     void heldVideo().then(async (file) => {

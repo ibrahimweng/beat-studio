@@ -1,6 +1,7 @@
 import { BPM_MAX, BPM_MIN } from './constants.ts';
 import { freshBanks } from './pattern.ts';
 import type { Pack, PackSound } from './audio/pack.ts';
+import type { Sample } from './audio/samples.ts';
 import type { Rebuilt } from './audio/rebuild.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
@@ -83,6 +84,13 @@ export interface AppState {
   packs: Pack[];
   /** Sounds saved from the timeline, kept between projects. */
   mine: PackSound[];
+  /**
+   * Recordings somebody gave the app, kept between projects.
+   *
+   * The one kind of sound the app does not make itself. See `audio/samples.ts`
+   * for why they are held by id rather than carried in a description.
+   */
+  samples: Sample[];
   /** Sounds read out of a recording, and rebuilt out of the palette. */
   extract: Extraction;
   /**
@@ -178,6 +186,7 @@ export function initialState(): AppState {
     detect: emptyDetection(),
     packs: [],
     mine: [],
+    samples: [],
     extract: { busy: null, sounds: [], from: null },
     videoWindow: false,
     keeping: true,

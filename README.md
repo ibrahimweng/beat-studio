@@ -584,6 +584,33 @@ there is a box at the top of the picker to find one by name.
 Packs are remembered between sessions, and "Save session" writes them into the
 session file, so a session opens complete on another machine.
 
+### Your own recordings
+
+"Add recordings", under the packs, puts audio files on the timeline. Anything
+the browser can play: WAV, MP3, whatever else it knows. Until now every sound
+the app could place was one it made — forty voices, a drum kit, two
+instruments, and a pack, which is a description of a sound rather than a
+recording of one. There was no way to place an actual file at all.
+
+A recording goes through everything a made sound goes through: its level, its
+room, its push, where it lands, a curve drawn over its layer, the same export.
+Two things work differently, because a recording is not a description.
+
+"Tune" plays it faster or slower, the way a sampler does, so its pitch and its
+length move together. There is no honest way to move one without the other:
+stretching a recording to a new length while holding its pitch is a phase
+vocoder, and one written in an afternoon sounds like one.
+
+"Length" says how much of it is heard rather than how long it takes. Each
+button shows the recording's own length, because that is the one thing about it
+the app cannot change and it is worth knowing before you place one.
+
+They are kept in this browser like everything else, left alone by "New
+project", and never uploaded. The one place they cannot follow is "Export
+patch": that format describes how to make a sound, and there is no way in it to
+say "this file", so a recording is left out rather than replaced with the
+nearest thing that can be synthesised.
+
 ### Keep a sound you made
 
 Getting a voice, a length, a pitch, a level, a room and some push to sit right
@@ -791,6 +818,7 @@ src/
     describe.ts    turning a sentence into settings
     listen.ts      finding the sounds in a recording, and measuring them
     rebuild.ts     making the nearest thing this app can make to one
+    samples.ts     recordings somebody gave it, held by id
     sources.ts     turning a placed sound into a played sound
     vary.ts        a placement's own take of a voice, so two are not one twice
     render.ts      writing the file, faster than real time

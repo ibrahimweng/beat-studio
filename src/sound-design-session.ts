@@ -10,9 +10,10 @@ import {
   type Pack,
   type PackSound,
 } from './audio/pack.ts';
-import { specForCue } from './audio/sources.ts';
+import { specForCue, usesSample } from './audio/sources.ts';
 import { MINE_ID } from './constants.ts';
-import { forgetWork, keepVideo } from './keep.ts';
+import { forgetWork, keepSamples, keepVideo } from './keep.ts';
+import { addSample, decodeSample, forgetSample, sampleById, samples, setSamples } from './audio/samples.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -285,6 +286,100 @@ export class SoundDesignSession {
     const packs = this.#store.state.packs.filter((p) => p.id !== id);
     this.#store.set({ packs, status: `${pack.name} removed` });
     savePacks(packs.map((p) => p.file));
+  }
+
+  // ---------- recordings ----------
+
+  /**
+   * Take on recordings somebody dropped in.
+   *
+   * Decoded here rather than lazily, because the length is what the timeline
+   * draws a placed sound with and somebody who has just chosen a file expects
+   * to see how long it is. Anything the browser cannot decode is named and
+   * left out rather than throwing: a folder of files will have something in it
+   * that is not audio, and the other five should still arrive.
+   */
+  async addSamples(files: readonly File[]): Promise<void> {
+    if (!files.length) return;
+    this.#wake();
+    const ctx = this.#engine.context;
+    const failed: string[] = [];
+    let added = 0;
+
+    for (const file of files) {
+      const id = newId('s');
+      let buffer: AudioBuffer | null = null;
+      try {
+        buffer = ctx ? await ctx.decodeAudioData(await file.arrayBuffer()) : null;
+      } catch {
+        buffer = null;
+      }
+      if (!buffer) {
+        failed.push(file.name);
+        continue;
+      }
+      addSample(
+        { id, name: file.name.replace(/\.[^.]+$/, '').slice(0, 40), duration: buffer.duration, blob: file },
+        buffer,
+      );
+      added++;
+    }
+
+    this.#keepSamples();
+    this.#store.set({
+      samples: [...samples()],
+      status: added
+        ? `${added} recording${added === 1 ? '' : 's'} added${failed.length ? `, ${failed.length} could not be read` : ''}`
+        : `nothing could be read${failed.length ? `: ${failed[0]}` : ''}`,
+    });
+  }
+
+  /** Take a recording back out. Sounds already placed from it stay put. */
+  removeSample(id: string): void {
+    const sample = sampleById(id);
+    if (!sample) return;
+    forgetSample(id);
+    this.#keepSamples();
+    this.#store.set({ samples: [...samples()], status: `${sample.name} removed` });
+  }
+
+  #keepSamples(): void {
+    void keepSamples(samples().map(({ id, name, duration, blob }) => ({ id, name, duration, blob })));
+  }
+
+  /**
+   * Take on the recordings from last time.
+   *
+   * Without their audio, which is decoded the first time one is played or
+   * placed: decoding needs an audio context and a browser will not give one
+   * until something has been clicked, and a piece that refused to open until
+   * then would be worse than one whose sounds arrive a moment late.
+   */
+  restoreSamples(list: readonly { id: string; name: string; duration: number; blob: Blob }[]): void {
+    setSamples(list);
+    if (list.length) this.#store.set({ samples: [...samples()] });
+  }
+
+  /**
+   * Make sure every recording a piece uses has audio, before it is heard.
+   *
+   * No early return when the engine is asleep: an export is a click that never
+   * starts it, and giving up here is what made an exported piece come out with
+   * silence where its recordings were. `decodeSample` stands an offline
+   * context in when there is no live one.
+   */
+  async readySamples(): Promise<void> {
+    const ctx = this.#engine.context;
+    const wanted = new Set<string>();
+    for (const cue of this.project.cues) {
+      if (cue.source.kind === 'sample') wanted.add(cue.source.name);
+      for (const part of cue.source.with ?? []) {
+        if (part.kind === 'sample') wanted.add(part.name);
+      }
+    }
+    let changed = false;
+    for (const id of wanted) changed = (await decodeSample(id, ctx)) || changed;
+    if (changed) this.#store.set({ samples: [...samples()] });
   }
 
   /** Read-only access for views that redraw outside a state change. */
@@ -599,6 +694,10 @@ export class SoundDesignSession {
       // Remembered so stop can put it back, rather than dropping you at zero.
       this.#playedFrom = this.#clock.time;
       this.#wake();
+      // Anything restored from last time has no audio yet. Pressing play is a
+      // gesture, so there is a context now and this is the first moment the
+      // recordings on the timeline can be made ready to sound.
+      void this.readySamples();
       void this.#clock.play();
     }
   }
@@ -1163,6 +1262,10 @@ export class SoundDesignSession {
   /** Hear one cue on its own. */
   audition(cue: Cue): void {
     this.#wake();
+    if (usesSample(cue)) {
+      void this.readySamples().then(() => this.#clock?.audition(cue));
+      return;
+    }
     this.#clock?.audition(cue);
   }
 
@@ -1428,6 +1531,9 @@ export class SoundDesignSession {
       return;
     }
     this.pause();
+    // A recording with nothing decoded renders as silence, so an export that
+    // did not wait would quietly write a file with holes in it.
+    await this.readySamples();
     this.#store.set({ exporting: working });
 
     const rendered = await render({

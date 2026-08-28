@@ -53,7 +53,21 @@ const SECTIONS: readonly Section[] = [
       ['Arrow keys in that box', 'Steps through what is left, playing each one, for comparing.'],
       ['Forty voices', 'Grouped by what they are for. Each is built from a different method, so they stay apart however they are tuned.'],
       ['Load a sound pack', 'Adds someone else’s sounds to the list. Anything written for @web-kits/audio works.'],
+      ['Add recordings', 'Puts your own audio files on the timeline. They get the same level, room, push and automation everything else does, and they stay in this browser.'],
       ['Save as mine', 'Keeps the selected sound as it is, under a name, for this and every other project.'],
+    ],
+  },
+  {
+    id: 'recordings',
+    title: 'Your own recordings',
+    rows: [
+      ['Add recordings', 'Under the packs. Anything the browser can play: WAV, MP3, whatever else it knows.'],
+      ['What they can do', 'Everything a made sound can — a level, a room, a push, a place on a layer, a curve drawn over them, the same export.'],
+      ['Tune', 'Plays it faster or slower, the way a sampler does, so its pitch and its length move together. There is no honest way to move one without the other.'],
+      ['Length', 'How much of it is heard, not how long it takes. A recording is as long as it is.'],
+      ['The length on each button', 'The one thing about a recording the app cannot change, so it is worth knowing before you place one.'],
+      ['They last', 'Kept in this browser like everything else, and left alone by "New project". Nothing is uploaded.'],
+      ['Export patch', 'Leaves them out. That format describes how to make a sound, and there is no way in it to say "this file".'],
     ],
   },
   {

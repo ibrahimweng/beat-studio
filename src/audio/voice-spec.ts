@@ -1,3 +1,4 @@
+import { bufferAt } from './samples.ts';
 /**
  * A voice, written down rather than coded.
  *
@@ -202,6 +203,27 @@ export interface ImpulseSource {
   jitter?: number;
 }
 
+/**
+ * A recording, named rather than carried.
+ *
+ * The audio lives in `samples.ts` under this id, because a {@link VoiceSpec}
+ * is plain data and an AudioBuffer in one would stop it being writable to a
+ * patch file, savable in a session, or renderable offline.
+ */
+export interface SampleSource {
+  kind: 'sample';
+  /** Which recording, by the id it was registered under. */
+  id: string;
+  /**
+   * Faster or slower, which for a recording is pitch and length together.
+   *
+   * The way a sampler works, and the only honest reading of a pitch control
+   * on a recording: stretching one to a new length without moving its pitch
+   * is a phase vocoder, and one written in an afternoon sounds like one.
+   */
+  rate?: number;
+}
+
 export type SourceSpec =
   | OscSource
   | NoiseSource
@@ -209,7 +231,8 @@ export type SourceSpec =
   | ModalSource
   | PluckSource
   | GrainSource
-  | ImpulseSource;
+  | ImpulseSource
+  | SampleSource;
 
 export interface FilterSpec {
   type: BiquadFilterType;
@@ -661,6 +684,32 @@ function buildSource(
   }
 
   const node = ctx.createBufferSource();
+  if (source.kind === 'sample') {
+    /*
+     * A recording, rather than something worked out here.
+     *
+     * Taken at the rate this context runs at: an offline render for an export
+     * can be at a different rate from playback, and a buffer belongs to the
+     * rate it was decoded at, so handing one straight over plays it at the
+     * wrong pitch with nothing to say so. See `samples.ts`.
+     *
+     * A recording with nothing decoded yet renders as silence rather than
+     * throwing. That happens for one frame after a session is opened, before
+     * anything has been clicked and there is an audio context to decode with,
+     * and a piece that refused to draw until then would be worse.
+     */
+    const buffer = bufferAt(ctx, source.id);
+    if (!buffer) return { node, freq: null };
+    node.buffer = buffer;
+    if (source.rate && source.rate > 0) node.playbackRate.value = source.rate;
+    node.start(t);
+    // Stopped at the layer's length, which is how much of the recording is
+    // wanted. Anything past that is cut by the envelope anyway; stopping the
+    // node as well is what stops a five minute file being decoded, resampled
+    // and mixed for the two seconds of it anybody asked for.
+    node.stop(until);
+    return { node, freq: null };
+  }
   if (source.kind === 'reverse') node.buffer = reverseBuffer(ctx, length, source, random);
   else if (source.kind === 'pluck') node.buffer = pluckBuffer(ctx, length, source, random);
   else if (source.kind === 'grains') node.buffer = grainBuffer(ctx, length, source, random);

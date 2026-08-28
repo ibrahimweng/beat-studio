@@ -11,9 +11,11 @@ import {
 import type { PadName } from '../types.ts';
 import { designSpec } from './design-voices.ts';
 import { packSpec, shapeSpec } from './pack.ts';
+import { sampleById } from './samples.ts';
 import { varySpec } from './vary.ts';
 import {
   layerShaper,
+  ratio,
   renderVoice,
   roomImpulse,
   seedFrom,
@@ -109,6 +111,37 @@ function voiceSpec(source: CueSource, cue: Cue, gain: number): VoiceSpec | null 
     // Kit voices have fixed shapes, so tune is applied as level only.
     return kitSpec(source.name as PadName, gain);
   }
+  if (source.kind === 'sample') {
+    /*
+     * A recording, as one layer holding the file.
+     *
+     * Tune plays it faster or slower, the way a sampler does, so its pitch and
+     * its length move together — the only honest reading of a pitch control on
+     * a recording. Length says how much of it is heard, with a short fade at
+     * the end so cutting one halfway through is a cut rather than a click.
+     */
+    const sample = sampleById(source.name);
+    if (!sample) return null;
+    const rate = ratio(cue.tune);
+    const length = Math.max(0.02, Math.min(options.length, sample.duration / rate));
+    const fade = Math.min(0.01, length * 0.2);
+    return {
+      duration: length,
+      layers: [
+        {
+          source: { kind: 'sample', id: source.name, rate },
+          length,
+          gain: [
+            { at: 0, to: gain },
+            { at: Math.max(0, length - fade), to: gain, curve: 'set' },
+            { at: length, to: 0.0008, curve: 'exp' },
+          ],
+          overrun: 0,
+        },
+      ],
+    };
+  }
+
   if (source.kind === 'pack') {
     // A pack sound arrives at one length, pitch and level. Fitting it to what
     // was asked for keeps the shape and changes only the scale, so the three
@@ -152,6 +185,12 @@ function cueEffects(cue: Cue): EffectSpec[] {
     });
   }
   return effects;
+}
+
+/** Whether a cue needs a recording, at any depth of its stack. */
+export function usesSample(cue: Cue): boolean {
+  if (cue.source.kind === 'sample') return true;
+  return (cue.source.with ?? []).some((part) => part.kind === 'sample');
 }
 
 /** Play whatever a cue points at. */
