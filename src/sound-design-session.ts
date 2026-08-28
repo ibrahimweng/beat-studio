@@ -22,11 +22,13 @@ import {
   sampleById,
   samples,
   setSamples,
+  type Credit,
   type Sample,
   tagsFromPath,
 } from './audio/samples.ts';
 import { looksLikeZip, readZip } from './audio/zip.ts';
 import { readTable, stemOf, type Described } from './audio/sidecar.ts';
+import { creditFor, fetchSound, FreesoundError, type Found } from './audio/freesound.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -79,6 +81,23 @@ const KEEP_DECODED = 32;
 
 /** Past this many files an import says how far along it is. */
 const PROGRESS_FROM = 40;
+
+/**
+ * One recording on its way into the library, whatever it arrived as.
+ *
+ * The one shape both importers hand to {@link SoundDesignSession.take}, so a
+ * file off a disk and a sound off Freesound stop differing the moment their
+ * bytes are in hand.
+ */
+interface TakeEntry {
+  /** Where it came from, for reporting and for naming when nothing better exists. */
+  path: string;
+  blob: Blob;
+  /** What to call it. */
+  name: string;
+  credit?: Credit;
+  tags?: readonly string[];
+}
 
 /** What is worth pulling out of an archive. */
 const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
@@ -364,21 +383,125 @@ export class SoundDesignSession {
       }
     }
 
+    const entries: TakeEntry[] = found.map((entry) => {
+      const { name, credit } = creditFromName(entry.path);
+      const about = described.get(stemOf(entry.path));
+      const tags = tagsFromPath(entry.path);
+      // What the archive itself calls it beats what its filename does: a
+      // catalogue number is a name only in the sense that it is unique.
+      if (about?.category) tags.push(about.category);
+      return {
+        path: entry.path,
+        blob: entry.blob,
+        name: about?.description || name,
+        ...(credit ? { credit } : {}),
+        tags,
+      };
+    });
+
+    const added = await this.#take(entries);
+    const failed = found.length - added;
+    const taken = new Set(
+      entries.map((e) => e.credit?.author).filter((a): a is string => Boolean(a)),
+    );
+
+    this.#keepSamples();
+    this.#store.set({
+      samples: [...samples()],
+      status: added
+        ? `${added} recording${added === 1 ? '' : 's'} added` +
+          (failed > 0 ? `, ${failed} could not be read` : '') +
+          (taken.size ? ` · ${taken.size} author(s) to credit` : '')
+        : 'nothing could be read',
+    });
+  }
+
+  /**
+   * Take on sounds found on Freesound.
+   *
+   * The same destination as a dropped file, reached without the round trip
+   * through a downloads folder. What arrives is the preview rather than the
+   * original — see `audio/freesound.ts` for why a static page cannot fetch
+   * the original — and the credit comes from the API rather than from the
+   * filename, which means it carries the licence too. That is the part worth
+   * having: a search that pulls in fifty sounds and forgets which of them are
+   * CC-BY has created an obligation nobody can keep.
+   */
+  async addFromFreesound(sounds: readonly Found[]): Promise<void> {
+    if (!sounds.length) return;
+    this.#wake();
+
+    const entries: TakeEntry[] = [];
+    const refused: string[] = [];
+
+    for (const [at, sound] of sounds.entries()) {
+      this.#store.set({ status: `fetching ${at + 1} of ${sounds.length}…` });
+      try {
+        const file = await fetchSound(sound);
+        entries.push({
+          path: file.name,
+          blob: file,
+          name: sound.name,
+          credit: creditFor(sound),
+          /*
+           * Freesound's own tags, which are the closest thing it has to the
+           * folders a downloaded archive would have arrived in — plus a note
+           * that this is a preview and not the master, because that is the
+           * one thing about these the library could not otherwise say and the
+           * one thing somebody would want to know before mastering from it.
+           */
+          tags: ['preview', ...sound.tags.slice(0, 6).map((t) => t.toLowerCase())],
+        });
+      } catch (error) {
+        refused.push(sound.name);
+        if (error instanceof FreesoundError && error.fault.kind !== 'unreachable') {
+          this.#store.set({ status: error.message });
+          break;
+        }
+      }
+    }
+
+    if (!entries.length) {
+      this.#store.set({
+        status: refused.length
+          ? `could not fetch ${refused.length === 1 ? refused[0] : `${refused.length} sounds`}`
+          : 'nothing to add',
+      });
+      return;
+    }
+
+    const added = await this.#take(entries);
+    this.#keepSamples();
+    this.#store.set({
+      samples: [...samples()],
+      status:
+        `${added} added from Freesound` +
+        (refused.length ? `, ${refused.length} could not be fetched` : ''),
+    });
+  }
+
+  /**
+   * Decode what has been gathered and put it in the library.
+   *
+   * Shared by the file importer and the Freesound one, because the difference
+   * between them is entirely in where the bytes came from: past that point a
+   * recording is a recording, and having two copies of "decode it, measure
+   * it, file it, remember who made it" is how the two come to disagree.
+   */
+  async #take(entries: readonly TakeEntry[]): Promise<number> {
     /*
      * Decoding needs a context and a browser withholds one until something has
-     * been clicked. `#wake()` above usually provides it, but an import is
-     * itself the first click often enough to matter, so a throwaway offline
-     * context stands in — the same fallback `decodeSample` uses, and the
-     * difference between a folder importing and a folder silently refusing.
+     * been clicked. `#wake()` usually provides it, but an import is itself the
+     * first click often enough to matter, so a throwaway offline context
+     * stands in — the same fallback `decodeSample` uses, and the difference
+     * between a folder importing and a folder silently refusing.
      */
     const ctx = this.#engine.context ?? new OfflineAudioContext(1, 1, 48000);
-    const failed: string[] = [];
-    const taken: string[] = [];
     let added = 0;
 
-    for (const [at, entry] of found.entries()) {
-      if (found.length > PROGRESS_FROM && at % 20 === 0) {
-        this.#store.set({ status: `reading ${at + 1} of ${found.length}…` });
+    for (const [at, entry] of entries.entries()) {
+      if (entries.length > PROGRESS_FROM && at % 20 === 0) {
+        this.#store.set({ status: `reading ${at + 1} of ${entries.length}…` });
         // Let the page draw. Without this the whole import is one frame and
         // the count goes from nothing straight to the total.
         await new Promise((done) => setTimeout(done, 0));
@@ -390,25 +513,16 @@ export class SoundDesignSession {
       } catch {
         buffer = null;
       }
-      if (!buffer) {
-        failed.push(entry.path);
-        continue;
-      }
+      if (!buffer) continue;
 
-      const { name, credit } = creditFromName(entry.path);
-      const about = described.get(stemOf(entry.path));
-      const tags = tagsFromPath(entry.path);
-      // What the archive itself calls it beats what its filename does: a
-      // catalogue number is a name only in the sense that it is unique.
-      if (about?.category) tags.push(about.category);
       addSample(
         {
           id: newId('s'),
-          name: about?.description || name || entry.path,
+          name: entry.name || entry.path,
           duration: buffer.duration,
           blob: entry.blob,
-          ...(credit ? { credit } : {}),
-          ...(tags.length ? { tags } : {}),
+          ...(entry.credit ? { credit: entry.credit } : {}),
+          ...(entry.tags && entry.tags.length ? { tags: entry.tags } : {}),
         },
         /*
          * Past a certain number the decoded audio is not kept.
@@ -421,19 +535,10 @@ export class SoundDesignSession {
          */
         at < KEEP_DECODED ? buffer : null,
       );
-      if (credit?.author) taken.push(credit.author);
       added++;
     }
 
-    this.#keepSamples();
-    this.#store.set({
-      samples: [...samples()],
-      status: added
-        ? `${added} recording${added === 1 ? '' : 's'} added` +
-          (failed.length ? `, ${failed.length} could not be read` : '') +
-          (taken.length ? ` · ${new Set(taken).size} author(s) to credit` : '')
-        : `nothing could be read${failed.length ? `: ${failed[0]}` : ''}`,
-    });
+    return added;
   }
 
   /**

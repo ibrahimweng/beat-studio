@@ -855,6 +855,40 @@ Two things worth carrying forward:
   about the sounds. Check what the probe is doing before concluding anything
   about the library.
 
+## freesound-check.html
+
+The Freesound client, checked without Freesound.
+
+freesound.org is not reachable from where this was written, so the live call
+is the one thing here that is **not** verified. Everything around it is: the
+URL that gets built, what comes out of a well-formed reply, what happens to a
+malformed one, and that every failure says something a person can act on —
+a rejected key, a quota, an unreachable host and a body that is not JSON are
+four different messages rather than one shrug.
+
+The UI is checked separately in the Playwright harness with the network
+intercepted, which runs the whole path — search, results, preview, fetch,
+decode, library, credits, and the key surviving a reload — against a canned
+server. Everything except Freesound itself.
+
+Two things it caught:
+
+- **The licence arrives as a deed URL, not a name.** Freesound's search
+  returns `http://creativecommons.org/publicdomain/zero/1.0/` while its search
+  *filter* takes `Creative Commons 0`, so the same licence has two spellings
+  depending on direction. The check for whether a credit is owed was passing
+  only because that URL happens to contain the word "publicdomain" — a CC-BY
+  deed contains no word saying so, so the very next licence along would have
+  been handled by luck running out. Named from the deed now, once.
+- A comment claimed the preview was "named so it is obvious in the library
+  which it is". It was not: the suffix was on the file, not the display name.
+  Tagged `preview` instead, which shows on hover and can be searched.
+
+If the real API differs in some detail, these tests will pass while the app
+fails. That is the honest limit of testing a client against a server you
+cannot reach, and it is why the failure path distinguishes *unreachable* from
+*rejected*: those two point at completely different things to go and check.
+
 ## What the variety check cannot see
 
 `alike` compares 8 windows of 20 log-spaced bands plus an envelope. Inside one

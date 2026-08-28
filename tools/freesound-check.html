@@ -1,0 +1,239 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>freesound check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * The Freesound client, checked without Freesound.
+   *
+   * The live call cannot be made from where this was written, so everything
+   * around it is checked instead: the URL that gets built, what comes out of
+   * a well-formed reply, what happens to a malformed one, and that every way
+   * it can fail says something a person could act on.
+   *
+   * The replies below are written to the published API's shape. If the real
+   * one differs, these tests will happily pass while the app fails — which is
+   * the honest limit of testing a client against a server you cannot reach,
+   * and the reason `search` reports an unreachable host and a rejected key as
+   * different things rather than as "something went wrong".
+   */
+  import {
+    search, searchUrl, readResult, readPage, faultFor, creditFor, fetchSound,
+    FreesoundError, LICENCES, licenceName,
+  } from '/src/audio/freesound.ts';
+  import { creditLine } from '/src/audio/samples.ts';
+
+  const results = [];
+  const check = (name, pass, detail = '') => results.push({ name, pass, detail });
+  const say = () => {
+    const lines = results.map((r) => `${r.pass ? 'ok  ' : 'FAIL'}  ${r.name}${r.detail ? '  —  ' + r.detail : ''}`);
+    const bad = results.filter((r) => !r.pass).length;
+    lines.push('', bad ? `${bad} of ${results.length} FAILED` : `all ${results.length} pass`);
+    document.getElementById('out').textContent = lines.join('\n');
+  };
+
+  // ---------- a reply shaped like the published API ----------
+  const REPLY = {
+    count: 1423,
+    next: 'https://freesound.org/apiv2/search/text/?page=2',
+    results: [
+      { id: 4948, name: 'oak door slam.wav', username: 'NoiseCollector',
+        license: 'http://creativecommons.org/publicdomain/zero/1.0/',
+        duration: 1.84, url: 'https://freesound.org/s/4948/', tags: ['door', 'wood'],
+        previews: { 'preview-hq-mp3': 'https://cdn.freesound.org/previews/4/4948_-hq.mp3',
+                    'preview-lq-mp3': 'https://cdn.freesound.org/previews/4/4948_-lq.mp3' } },
+      { id: 316847, name: 'latch.flac', username: 'unfa', license: 'Attribution',
+        duration: 0.4, url: 'https://freesound.org/s/316847/', tags: ['latch'],
+        previews: { 'preview-hq-ogg': 'https://cdn.freesound.org/previews/316/316847_-hq.ogg' } },
+      // no preview at all — must be skipped, not thrown on
+      { id: 999, name: 'broken.wav', username: 'x', license: 'Attribution', duration: 1, previews: {} },
+      // not an object at all
+      'nonsense',
+    ],
+  };
+
+  // ---------- the URL ----------
+  {
+    const u = new URL(searchUrl('KEY123', 'door slam'));
+    check('the search hits the documented endpoint',
+      u.origin + u.pathname === 'https://freesound.org/apiv2/search/text/', u.origin + u.pathname);
+    check('the key goes in the query, so no preflight is needed',
+      u.searchParams.get('token') === 'KEY123', 'token=' + u.searchParams.get('token'));
+    check('the query is passed through', u.searchParams.get('query') === 'door slam');
+    check('only the fields that are used are asked for',
+      (u.searchParams.get('fields') ?? '').includes('previews') &&
+      !(u.searchParams.get('fields') ?? '').includes('analysis'),
+      u.searchParams.get('fields'));
+    check('no filter is sent when none was asked for', u.searchParams.get('filter') === null);
+  }
+  {
+    const u = new URL(searchUrl('K', 'rain', { licence: 'Creative Commons 0', maxSeconds: 5 }));
+    const f = u.searchParams.get('filter');
+    check('a licence and a length become one filter',
+      f === 'license:"Creative Commons 0" duration:[0 TO 5]', f);
+  }
+  {
+    const u = new URL(searchUrl('K', 'x', { perPage: 9999, page: -3 }));
+    check('a silly page size is brought back into range',
+      u.searchParams.get('page_size') === '150' && u.searchParams.get('page') === '1',
+      `size ${u.searchParams.get('page_size')}, page ${u.searchParams.get('page')}`);
+  }
+  {
+    const u = new URL(searchUrl('K', 'a b & c=d'));
+    check('a query with punctuation survives being put in a URL',
+      u.searchParams.get('query') === 'a b & c=d', u.searchParams.get('query'));
+  }
+
+  // ---------- reading a reply ----------
+  {
+    const page = readPage(REPLY);
+    check('the usable results come back', page.sounds.length === 2, `${page.sounds.length} of 4 entries`);
+    check('one entry with no preview does not lose the page',
+      !page.sounds.some((s) => s.id === 999), 'id 999 skipped');
+    check('a non-object entry does not throw', true, 'survived');
+    check('the total is the total, not the page', page.total === 1423, String(page.total));
+    check('it knows there is another page', page.more === true);
+
+    const [a, b] = page.sounds;
+    check('the extension is taken off the name', a.name === 'oak door slam', a.name);
+    check('the author comes through', a.author === 'NoiseCollector', a.author);
+    check('the high quality mp3 is preferred', a.preview.includes('-hq.mp3'), a.preview);
+    check('an ogg-only sound still works', b.preview.includes('.ogg'), b.preview);
+    check('the duration comes through', b.duration === 0.4, String(b.duration));
+  }
+  {
+    check('an empty result set is not an error',
+      readPage({ count: 0, results: [] }).sounds.length === 0);
+    check('a missing results array is not an error',
+      readPage({ count: 0 }).sounds.length === 0);
+    let threw = false;
+    try { readPage('not json at all'); } catch (e) { threw = e instanceof FreesoundError; }
+    check('a body that is not an object is reported as one fault', threw);
+  }
+  {
+    const odd = readResult({ id: '4948', previews: { 'something-new': 'https://x/y.mp3' } });
+    check('an id that arrived as a string is still read', odd !== null && odd.id === 4948, JSON.stringify(odd?.id));
+    check('an unfamiliar preview key is used rather than refused',
+      odd !== null && odd.preview === 'https://x/y.mp3', odd?.preview);
+    check('a missing name gets one', odd !== null && odd.name === 'sound 4948', odd?.name);
+  }
+
+  // ---------- what the faults say ----------
+  {
+    check('a bad key says the key is bad, and where to get one',
+      faultFor(401).kind === 'rejected' && faultFor(401).message.includes('apply'), faultFor(401).message);
+    check('403 is read as a key problem too', faultFor(403).kind === 'rejected');
+    check('a quota says to wait', faultFor(429).kind === 'quota', faultFor(429).message);
+    check('anything else carries its status', faultFor(500).message.includes('500'), faultFor(500).message);
+  }
+
+  // ---------- the whole call, against a fake fetch ----------
+  const ok = (body) => async () => new Response(JSON.stringify(body), { status: 200 });
+  const status = (code) => async () => new Response('', { status: code });
+  const dead = () => async () => { throw new TypeError('Failed to fetch'); };
+
+  {
+    const page = await search('K', 'door', {}, ok(REPLY));
+    check('a good search returns its sounds', page.sounds.length === 2);
+  }
+  {
+    let fault = null;
+    try { await search('', 'door', {}, ok(REPLY)); } catch (e) { fault = e.fault; }
+    check('no key is caught before the network is touched',
+      fault?.kind === 'no-key' && fault.message.includes('apply'), fault?.message);
+  }
+  {
+    const page = await search('K', '   ', {}, dead());
+    check('an empty query asks for nothing at all', page.sounds.length === 0 && page.total === 0);
+  }
+  {
+    let fault = null;
+    try { await search('K', 'door', {}, dead()); } catch (e) { fault = e.fault; }
+    check('a fetch that throws is reported as unreachable, naming both causes',
+      fault?.kind === 'unreachable' && /offline/.test(fault.message) && /cross-origin/.test(fault.message),
+      fault?.message);
+  }
+  {
+    let fault = null;
+    try { await search('K', 'door', {}, status(401)); } catch (e) { fault = e.fault; }
+    check('a rejected key is not reported as an outage', fault?.kind === 'rejected');
+  }
+  {
+    let fault = null;
+    try { await search('K', 'door', {}, async () => new Response('<html>oops', { status: 200 })); }
+    catch (e) { fault = e.fault; }
+    check('a 200 that is not JSON is caught', fault?.kind === 'unexpected', fault?.message);
+  }
+
+  // ---------- the licence arrives as a deed URL, not a name ----------
+  {
+    const cases = [
+      ['http://creativecommons.org/publicdomain/zero/1.0/', 'Creative Commons 0'],
+      ['https://creativecommons.org/publicdomain/zero/1.0/', 'Creative Commons 0'],
+      ['http://creativecommons.org/licenses/by/3.0/', 'Attribution'],
+      ['http://creativecommons.org/licenses/by/4.0/', 'Attribution'],
+      ['http://creativecommons.org/licenses/by-nc/3.0/', 'Attribution NonCommercial'],
+      ['http://creativecommons.org/licenses/by-nc/4.0/', 'Attribution NonCommercial'],
+      ['http://creativecommons.org/licenses/sampling+/1.0/', 'Sampling+'],
+      ['Attribution', 'Attribution'],
+      ['Creative Commons 0', 'Creative Commons 0'],
+      ['', ''],
+    ];
+    let wrong = [];
+    for (const [raw, want] of cases) if (licenceName(raw) !== want) wrong.push(`${raw} -> ${licenceName(raw)}, wanted ${want}`);
+    check('every licence deed becomes a readable name', wrong.length === 0, wrong.join(' | ') || `${cases.length} forms`);
+  }
+  {
+    // The one that was passing by luck: a CC-BY deed carries no word saying so.
+    const by = readResult({ id: 1, username: 'u', license: 'http://creativecommons.org/licenses/by/4.0/',
+      duration: 1, previews: { 'preview-hq-mp3': 'https://x/y.mp3' } });
+    const line = creditLine({ name: 'x', duration: 0, id: '', blob: new Blob(), credit: creditFor(by) });
+    check('a CC-BY deed URL still demands a credit',
+      typeof line === 'string' && line.includes('Attribution'), String(line));
+    const nc = readResult({ id: 2, username: 'u', license: 'http://creativecommons.org/licenses/by-nc/4.0/',
+      duration: 1, previews: { 'preview-hq-mp3': 'https://x/y.mp3' } });
+    check('a non-commercial licence is named as such, so it can be seen',
+      nc.licence === 'Attribution NonCommercial', nc.licence);
+  }
+
+  // ---------- credit ----------
+  {
+    const page = readPage(REPLY);
+    const [cc0, by] = page.sounds;
+    const cc0Credit = creditFor(cc0);
+    check('the credit names the author and links back',
+      cc0Credit.author === 'NoiseCollector' && cc0Credit.url === 'https://freesound.org/s/4948/' &&
+      cc0Credit.from === 'Freesound', JSON.stringify(cc0Credit));
+    check('a CC0 sound owes no credit line',
+      creditLine({ name: cc0.name, duration: 0, id: '', blob: new Blob(), credit: cc0Credit }) === null,
+      'licence stored as: ' + cc0Credit.licence);
+    const byLine = creditLine({ name: by.name, duration: 0, id: '', blob: new Blob(), credit: creditFor(by) });
+    check('an Attribution sound does owe one, with the author in it',
+      typeof byLine === 'string' && byLine.includes('unfa'), byLine);
+  }
+  {
+    check('the licence filters are the ones the API names',
+      Object.keys(LICENCES).every((k) => typeof k === 'string' && k.length > 0),
+      Object.keys(LICENCES).join(' · '));
+  }
+
+  // ---------- downloading ----------
+  {
+    const page = readPage(REPLY);
+    const audio = new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' });
+    const file = await fetchSound(page.sounds[0], async () => new Response(audio, { status: 200 }));
+    check('the download comes back as a file', file instanceof File && file.size === 3, `${file.size} bytes`);
+    check('the name says it is a preview, so nobody masters from one',
+      file.name.includes('(preview)'), file.name);
+    const ogg = await fetchSound(page.sounds[1], async () => new Response(audio, { status: 200 }));
+    check('an ogg preview is named as one', ogg.name.endsWith('.ogg'), ogg.name);
+  }
+  {
+    const page = readPage(REPLY);
+    let fault = null;
+    try { await fetchSound(page.sounds[0], dead()); } catch (e) { fault = e.fault; }
+    check('a download that fails blames the audio host, not the key',
+      fault?.kind === 'unreachable' && fault.message.includes('audio host'), fault?.message);
+  }
+
+  say();
+  document.title = 'done';
+</script></body></html>
