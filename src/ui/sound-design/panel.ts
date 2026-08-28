@@ -18,6 +18,7 @@ import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalog
 import { describe } from '../../audio/describe.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { Sample } from '../../audio/samples.ts';
+import { search as searchFreesound, type Found, type LicenceName } from '../../audio/freesound.ts';
 import { helpButton } from '../help.ts';
 import type { View } from '../view.ts';
 
@@ -487,7 +488,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    */
   const sampleFind = el('input', {
     type: 'search',
-    class: 'pick-find',
+    // Two searches share this look and are different things: one filters the
+    // recordings already here, the other asks Freesound. Named apart so a
+    // stylesheet can treat them alike and everything else can tell them apart.
+    class: 'pick-find pick-find--held',
     attrs: { placeholder: 'Find a recording', 'aria-label': 'Find a recording' },
     on: {
       input: (event) => {
@@ -497,6 +501,166 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       },
     },
   }) as HTMLInputElement;
+
+  /* ---------- finding sounds on Freesound ---------- */
+
+  /*
+   * Searching a library of half a million recordings from inside the app.
+   *
+   * The same destination as dropping a file in, without the round trip
+   * through a downloads folder. Two things about it are worth saying on
+   * screen rather than only in the code, and both are said below: what comes
+   * back is a preview rather than the master, and the licence varies per
+   * sound and is the user's to honour. See `audio/freesound.ts`.
+   */
+  const KEY_STORE = 'toolcraft.st88.freesound';
+  let foundSounds: Found[] = [];
+
+  const keyInput = el('input', {
+    type: 'password',
+    class: 'pick-find pick-find--key',
+    attrs: { placeholder: 'Freesound API key', 'aria-label': 'Freesound API key', autocomplete: 'off' },
+  }) as HTMLInputElement;
+  try {
+    keyInput.value = localStorage.getItem(KEY_STORE) ?? '';
+  } catch {
+    // A browser with site data blocked. The field still works for this visit.
+  }
+  keyInput.addEventListener('change', () => {
+    try {
+      localStorage.setItem(KEY_STORE, keyInput.value.trim());
+    } catch {
+      // Nothing to do about it, and nothing worth interrupting anyone over.
+    }
+  });
+
+  const onlineFind = el('input', {
+    type: 'search',
+    class: 'pick-find pick-find--online',
+    attrs: { placeholder: 'Search Freesound', 'aria-label': 'Search Freesound' },
+  }) as HTMLInputElement;
+
+  const licencePick = el('select', {
+    class: 'room-select',
+    title: 'Which licences to search. CC0 asks nothing of you; the others do.',
+  }) as HTMLSelectElement;
+  for (const [value, label] of [
+    ['Creative Commons 0', 'CC0 — no credit needed'],
+    ['Attribution', 'CC-BY — credit required'],
+    ['', 'Any licence'],
+  ] as const) {
+    licencePick.appendChild(el('option', { text: label, attrs: { value } }));
+  }
+
+  const onlineResults = el('div', { class: 'found' });
+  // Its own class rather than the palette's "nothing matched" one: this line
+  // carries a count, a hint, or a fault, and only sometimes an empty result.
+  const onlineNote = el('div', { class: 'found__note' });
+
+  /** The one audio element every preview plays through, so two cannot overlap. */
+  const preview = el('audio', {}) as HTMLAudioElement;
+  preview.preload = 'none';
+
+  const drawFound = (): void => {
+    clear(onlineResults);
+    for (const sound of foundSounds) {
+      const owed = sound.licence && !/creative commons 0/i.test(sound.licence);
+      onlineResults.appendChild(
+        el('div', { class: 'found__row' }, [
+          button(
+            {
+              class: 'found__play',
+              title: 'Hear it',
+              on: {
+                click: () => {
+                  preview.src = sound.preview;
+                  void preview.play().catch(() => {
+                    setText(onlineNote, 'That preview would not play here.');
+                  });
+                },
+              },
+            },
+            ['\u25B6'],
+          ),
+          el('div', { class: 'found__what' }, [
+            el('div', { class: 'found__name', text: sound.name }),
+            el('div', {
+              class: 'found__by',
+              text:
+                `${sound.author} · ${sound.duration.toFixed(1)}s` +
+                (sound.licence ? ` · ${owed ? sound.licence : 'CC0'}` : ''),
+            }),
+          ]),
+          button(
+            {
+              class: 'chip chip--sm',
+              title: owed
+                ? `Adds it, and records that ${sound.author} must be credited`
+                : 'Adds it to your recordings',
+              on: { click: () => void session.addFromFreesound([sound]) },
+            },
+            ['Add'],
+          ),
+        ]),
+      );
+    }
+  };
+
+  const runSearch = async (): Promise<void> => {
+    const query = onlineFind.value.trim();
+    if (!query) return;
+    setText(onlineNote, 'searching…');
+    clear(onlineResults);
+    try {
+      const licence = licencePick.value;
+      const page = await searchFreesound(keyInput.value.trim(), query, {
+        ...(licence ? { licence: licence as LicenceName } : {}),
+        maxSeconds: 30,
+        perPage: 20,
+      });
+      foundSounds = [...page.sounds];
+      drawFound();
+      setText(
+        onlineNote,
+        page.sounds.length
+          ? `${page.sounds.length} of ${page.total}. Previews, not masters.`
+          : 'nothing found',
+      );
+    } catch (error) {
+      foundSounds = [];
+      setText(onlineNote, error instanceof Error ? error.message : 'that did not work');
+    }
+  };
+
+  onlineFind.addEventListener('keydown', (event) => {
+    if ((event as KeyboardEvent).key === 'Enter') void runSearch();
+  });
+
+  const onlineBody = el('div', { class: 'found__panel' }, [
+    keyInput,
+    el('div', { class: 'pick-actions' }, [onlineFind, licencePick]),
+    onlineNote,
+    onlineResults,
+    preview,
+  ]);
+  onlineBody.hidden = true;
+
+  const onlineToggle = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title: 'Search Freesound and add sounds without leaving the app',
+      on: {
+        click: () => {
+          onlineBody.hidden = !onlineBody.hidden;
+          if (!onlineBody.hidden && !keyInput.value) {
+            setText(onlineNote, 'A free API key from freesound.org/apiv2/apply/ goes in the box above.');
+          }
+        },
+      },
+    },
+    ['Find sounds online'],
+  );
 
   /* ---------- out of a recording ---------- */
 
@@ -1195,6 +1359,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         helpButton('recordings', 'your own recordings'),
       ]),
       el('div', { class: 'pick-actions' }, [loadFolder, folderInput, credits]),
+      el('div', { style: { marginTop: '6px' } }, [onlineToggle]),
+      onlineBody,
       heardBody,
       heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
