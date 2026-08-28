@@ -13,7 +13,19 @@ import {
 import { specForCue, usesSample } from './audio/sources.ts';
 import { MINE_ID } from './constants.ts';
 import { forgetWork, keepSamples, keepVideo } from './keep.ts';
-import { addSample, decodeSample, forgetSample, sampleById, samples, setSamples } from './audio/samples.ts';
+import {
+  addSample,
+  creditFromName,
+  creditLine,
+  decodeSample,
+  forgetSample,
+  sampleById,
+  samples,
+  setSamples,
+  type Sample,
+  tagsFromPath,
+} from './audio/samples.ts';
+import { looksLikeZip, readZip } from './audio/zip.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -54,6 +66,22 @@ import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from '.
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
 import { listen } from './audio/listen.ts';
+
+/**
+ * How many decoded buffers an import holds on to.
+ *
+ * A two second stereo buffer at 48 kHz is 768 kB. Past this the audio is
+ * decoded again when something asks for it, which is what everything restored
+ * from a previous visit already does.
+ */
+const KEEP_DECODED = 32;
+
+/** Past this many files an import says how far along it is. */
+const PROGRESS_FROM = 40;
+
+/** What is worth pulling out of an archive. */
+const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
+
 import { rebuild, type Made } from './audio/rebuild.ts';
 import { emptyDetection, type Store } from './store.ts';
 
@@ -293,35 +321,80 @@ export class SoundDesignSession {
   /**
    * Take on recordings somebody dropped in.
    *
-   * Decoded here rather than lazily, because the length is what the timeline
-   * draws a placed sound with and somebody who has just chosen a file expects
-   * to see how long it is. Anything the browser cannot decode is named and
-   * left out rather than throwing: a folder of files will have something in it
-   * that is not audio, and the other five should still arrive.
+   * Built for an archive rather than for a handful. Someone assembling a real
+   * palette arrives with a Freesound pack or a folder off the BBC archive —
+   * hundreds of files, nested in folders, quite possibly still zipped — and an
+   * importer that takes one file at a time turns that into an afternoon.
+   *
+   * So: zips are opened, folders keep their shape as tags, the Freesound
+   * naming convention is read for who to credit, progress is reported because
+   * four hundred files is long enough to look broken, and anything that is not
+   * audio is named and skipped rather than stopping the rest.
    */
   async addSamples(files: readonly File[]): Promise<void> {
     if (!files.length) return;
     this.#wake();
-    const ctx = this.#engine.context;
+
+    const found = await this.#unpack(files);
+    if (!found.length) {
+      this.#store.set({ status: 'nothing in there could be read' });
+      return;
+    }
+
+    /*
+     * Decoding needs a context and a browser withholds one until something has
+     * been clicked. `#wake()` above usually provides it, but an import is
+     * itself the first click often enough to matter, so a throwaway offline
+     * context stands in — the same fallback `decodeSample` uses, and the
+     * difference between a folder importing and a folder silently refusing.
+     */
+    const ctx = this.#engine.context ?? new OfflineAudioContext(1, 1, 48000);
     const failed: string[] = [];
+    const taken: string[] = [];
     let added = 0;
 
-    for (const file of files) {
-      const id = newId('s');
+    for (const [at, entry] of found.entries()) {
+      if (found.length > PROGRESS_FROM && at % 20 === 0) {
+        this.#store.set({ status: `reading ${at + 1} of ${found.length}…` });
+        // Let the page draw. Without this the whole import is one frame and
+        // the count goes from nothing straight to the total.
+        await new Promise((done) => setTimeout(done, 0));
+      }
+
       let buffer: AudioBuffer | null = null;
       try {
-        buffer = ctx ? await ctx.decodeAudioData(await file.arrayBuffer()) : null;
+        buffer = await ctx.decodeAudioData(await entry.blob.arrayBuffer());
       } catch {
         buffer = null;
       }
       if (!buffer) {
-        failed.push(file.name);
+        failed.push(entry.path);
         continue;
       }
+
+      const { name, credit } = creditFromName(entry.path);
+      const tags = tagsFromPath(entry.path);
       addSample(
-        { id, name: file.name.replace(/\.[^.]+$/, '').slice(0, 40), duration: buffer.duration, blob: file },
-        buffer,
+        {
+          id: newId('s'),
+          name: name || entry.path,
+          duration: buffer.duration,
+          blob: entry.blob,
+          ...(credit ? { credit } : {}),
+          ...(tags.length ? { tags } : {}),
+        },
+        /*
+         * Past a certain number the decoded audio is not kept.
+         *
+         * A two second stereo buffer at 48 kHz is 768 kB, so four hundred of
+         * them is three hundred megabytes of decoded audio for a library
+         * nobody has played a note of yet. Beyond this they are decoded again
+         * when something actually asks for one, which `decodeSample` already
+         * does for everything restored from last time.
+         */
+        at < KEEP_DECODED ? buffer : null,
       );
+      if (credit?.author) taken.push(credit.author);
       added++;
     }
 
@@ -329,9 +402,86 @@ export class SoundDesignSession {
     this.#store.set({
       samples: [...samples()],
       status: added
-        ? `${added} recording${added === 1 ? '' : 's'} added${failed.length ? `, ${failed.length} could not be read` : ''}`
+        ? `${added} recording${added === 1 ? '' : 's'} added` +
+          (failed.length ? `, ${failed.length} could not be read` : '') +
+          (taken.length ? ` · ${new Set(taken).size} author(s) to credit` : '')
         : `nothing could be read${failed.length ? `: ${failed[0]}` : ''}`,
     });
+  }
+
+  /**
+   * Everything worth decoding out of what was handed over, zips opened.
+   *
+   * A file picked from a folder carries its path in `webkitRelativePath` and
+   * one picked on its own does not, so the path is whichever of those exists.
+   * That path is the whole point: it is where the archive kept its categories.
+   */
+  async #unpack(files: readonly File[]): Promise<{ path: string; blob: Blob }[]> {
+    const out: { path: string; blob: Blob }[] = [];
+
+    for (const file of files) {
+      const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      const data = await file.arrayBuffer();
+
+      if (!looksLikeZip(new Uint8Array(data))) {
+        out.push({ path, blob: file });
+        continue;
+      }
+
+      this.#store.set({ status: `opening ${file.name}…` });
+      const read = await readZip(data, (inside) => AUDIO_FILE.test(inside));
+      const stem = file.name.replace(/\.zip$/i, '');
+      for (const entry of read.entries) {
+        out.push({
+          // Kept under the archive's own name, so two packs with a `hits`
+          // folder in each do not merge into one tag.
+          path: `${stem}/${entry.path}`,
+          blob: new Blob([entry.bytes as BlobPart]),
+        });
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Write out who is owed a credit.
+   *
+   * CC-BY, which most of Freesound is, requires the author be named wherever
+   * the work is used. That is an obligation on whoever exports the video, not
+   * on this app, but an app that knows the answer and does not offer it has
+   * made the obligation harder to meet than it needs to be.
+   *
+   * Sounds under CC0 are left out: they ask for nothing, and a list padded
+   * with them is one nobody reads. A recording whose licence was never
+   * recorded is included, because an unknown licence is a reason to check.
+   */
+  saveCredits(): void {
+    const lines: string[] = [];
+    for (const sample of samples()) {
+      const line = creditLine(sample);
+      if (line) lines.push(line);
+    }
+
+    if (!lines.length) {
+      this.#store.set({
+        status: samples().length
+          ? 'no recording here asks to be credited'
+          : 'no recordings to credit',
+      });
+      return;
+    }
+
+    const text =
+      'Sounds used in this piece\n' +
+      '=========================\n\n' +
+      lines.map((line) => `- ${line}`).join('\n') +
+      '\n\nRecordings under CC0 or public domain are not listed: they ask for\n' +
+      'no credit. Anything listed without a licence is one this app was never\n' +
+      'told about — check it before publishing.\n';
+
+    saveBlob(new Blob([text], { type: 'text/plain' }), `${this.#stem()}-credits.txt`);
+    this.#store.set({ status: `${lines.length} credit${lines.length === 1 ? '' : 's'} written` });
   }
 
   /** Take a recording back out. Sounds already placed from it stay put. */
@@ -344,7 +494,16 @@ export class SoundDesignSession {
   }
 
   #keepSamples(): void {
-    void keepSamples(samples().map(({ id, name, duration, blob }) => ({ id, name, duration, blob })));
+    /*
+     * Everything but the decoded audio.
+     *
+     * This picked out four fields by name once, which silently dropped the
+     * credit and the tags on the way to the store — the library came back
+     * after a reload with its names and its lengths and no idea who had made
+     * any of it. Spreading and removing what cannot be written is the shape
+     * that does not go wrong when the sample gains a field.
+     */
+    void keepSamples(samples().map(({ ...rest }) => rest));
   }
 
   /**
@@ -355,7 +514,7 @@ export class SoundDesignSession {
    * until something has been clicked, and a piece that refused to open until
    * then would be worse than one whose sounds arrive a moment late.
    */
-  restoreSamples(list: readonly { id: string; name: string; duration: number; blob: Blob }[]): void {
+  restoreSamples(list: readonly Sample[]): void {
     setSamples(list);
     if (list.length) this.#store.set({ samples: [...samples()] });
   }

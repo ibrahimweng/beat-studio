@@ -1,3 +1,4 @@
+import type { Credit } from './audio/samples.ts';
 import { fromSession, toSession } from './timeline/project.ts';
 import type { Project } from './timeline/types.ts';
 import type { Take } from './types.ts';
@@ -454,6 +455,17 @@ interface HeldSample {
   name: string;
   duration: number;
   blob: Blob;
+  /**
+   * Who to credit and under what licence.
+   *
+   * Kept because it is an obligation rather than a nicety: a CC-BY sound owes
+   * its author a credit wherever it ends up, and a library that forgets which
+   * of four hundred sounds those are has made the obligation impossible to
+   * meet. See `audio/samples.ts`.
+   */
+  credit?: Credit;
+  /** The folders it came out of, which is where an archive files its sounds. */
+  tags?: readonly string[];
 }
 
 /**
@@ -465,7 +477,19 @@ interface HeldSample {
  */
 export async function keepSamples(list: readonly HeldSample[]): Promise<boolean> {
   const done = await inStore(SAMPLE_STORE, 'readwrite', (store) =>
-    store.put(list.map(({ id, name, duration, blob }) => ({ id, name, duration, blob })), CLIP_KEY),
+    store.put(
+      list.map(({ id, name, duration, blob, credit, tags }) => ({
+        id,
+        name,
+        duration,
+        blob,
+        // Written only when there is something to write, so a library of your
+        // own recordings does not carry four hundred empty objects.
+        ...(credit ? { credit } : {}),
+        ...(tags && tags.length ? { tags: [...tags] } : {}),
+      })),
+      CLIP_KEY,
+    ),
   );
   return done !== null;
 }
@@ -483,6 +507,11 @@ export async function heldSamples(): Promise<HeldSample[]> {
       name: typeof s.name === 'string' ? s.name : 'recording',
       duration: typeof s.duration === 'number' && s.duration > 0 ? s.duration : 0,
       blob: s.blob,
+      // Absent on anything kept before these existed, which is why both are
+      // optional rather than defaulted: a recording with no credit recorded is
+      // different from one known to need none.
+      ...(s.credit && typeof s.credit === 'object' ? { credit: s.credit } : {}),
+      ...(Array.isArray(s.tags) ? { tags: s.tags.filter((t) => typeof t === 'string') } : {}),
     }));
 }
 

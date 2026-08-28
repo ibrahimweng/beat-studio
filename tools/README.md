@@ -779,6 +779,41 @@ Two things about measuring it, both of which cost time here:
   back empty while the UI was drawing the recording and IndexedDB was holding
   it. Assert on what is drawn and on the exported file.
 
+## Importing an archive
+
+There is no page for this: it needs a real file input and a real IndexedDB, so
+it lives in the Playwright harness rather than here. What it covers, and what
+it caught:
+
+- A zip is opened on import, its non-audio entries skipped, and the folders
+  inside it become tags — `Foley/Doors/oak.wav` arrives filed under `foley` and
+  `doors`, because that is where an archive already keeps its categories.
+- Freesound names every download `<id>__<username>__<name>`, so a library
+  assembled by hand from the site arrives knowing who to credit without the API
+  or the readme. The licence is not in the name and stays unset, because
+  guessing between CC0, CC-BY and non-commercial would be worse than admitting
+  the file did not say.
+- 400 files import in 1.4 seconds and restore in 0.8. Only 60 buttons are drawn
+  at once; the search reaches the rest.
+
+Three faults it found:
+
+- `#keepSamples` picked out four fields by name, which silently dropped the
+  credit and the tags on the way to the store. The library came back after a
+  reload with its names and its lengths and no idea who had made any of it.
+  Spreading and removing what cannot be written is the shape that does not go
+  wrong the next time a sample gains a field.
+- `owesCredit` tested the start of the licence string for `cc0`, and Freesound
+  writes it as "Creative Commons 0" — so every public domain sound was about to
+  be listed as owing a credit it does not owe.
+- A Freesound name is shown with its dashes turned into spaces, so someone
+  searching for `sound-37` — what they can see in their downloads folder — got
+  nothing. Both sides are flattened before matching now.
+
+And one that was the test's fault, not the app's: placed cues are `.cue`, not
+`.tl__cue`, so "a recording can be placed" failed while placing worked
+perfectly. Check a selector against the DOM before believing what it reports.
+
 ## attack-check.html
 
 Whether a voice reads as an event or as a tone that starts, by how far its

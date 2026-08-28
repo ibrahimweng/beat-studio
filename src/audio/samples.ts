@@ -31,6 +31,30 @@
  * specs name.
  */
 
+/**
+ * Where a recording came from, and what may be done with it.
+ *
+ * Not decoration. A library assembled from Freesound is a mix of licences —
+ * CC0 asks for nothing, CC-BY requires the author be credited wherever the
+ * work is used, and some sounds are non-commercial only. The BBC archive is
+ * personal, educational and research use only, whatever it is mixed into.
+ * Someone laying four hundred effects against a client's video cannot hold
+ * that in their head, and an app that drops the information on import has
+ * made the obligation impossible to meet rather than removed it.
+ *
+ * So it travels with the sound, and {@link creditLine} can write it out.
+ */
+export interface Credit {
+  /** Who made it. */
+  author?: string;
+  /** The licence, as the archive names it. */
+  licence?: string;
+  /** Where it came from, to find it again and to link it. */
+  url?: string;
+  /** Which archive. */
+  from?: string;
+}
+
 /** A recording the app has been given, and what is known about it. */
 export interface Sample {
   /** How a spec names it. Stable for as long as the sample exists. */
@@ -41,6 +65,91 @@ export interface Sample {
   duration: number;
   /** The file it arrived as, for keeping it between visits. */
   blob: Blob;
+  /** Who to credit, if anyone. */
+  credit?: Credit;
+  /**
+   * What it is, for finding it again.
+   *
+   * Taken from the folders it sat in, because that is where a sound library
+   * keeps its categories: a file at `Foley/Doors/oak-slam.wav` is already
+   * filed under doors by whoever built the archive, and throwing that away on
+   * import means asking someone to re-file four hundred sounds by hand.
+   */
+  tags?: readonly string[];
+}
+
+/**
+ * What a Freesound download is called, and what that tells us.
+ *
+ * Freesound names every download `<id>__<username>__<name>`, which carries the
+ * author and a permanent link without needing the API or the readme that comes
+ * with a pack. A library assembled by hand from the site therefore arrives
+ * already knowing who to credit, which is the difference between attribution
+ * being automatic and being a chore nobody does.
+ *
+ * The licence is not in the name, so it stays unset: Freesound is a mix of
+ * CC0, CC-BY and non-commercial, and guessing which would be worse than
+ * admitting the file did not say.
+ */
+const FREESOUND = /^(\d+)__([^_]+(?:_[^_]+)*?)__(.+)$/;
+
+export function creditFromName(path: string): { name: string; credit?: Credit } {
+  const file = path.split('/').pop() ?? path;
+  const stem = file.replace(/\.[^.]+$/, '');
+  const found = FREESOUND.exec(stem);
+  if (!found) return { name: stem.slice(0, 60) };
+  return {
+    name: found[3].replace(/[_-]+/g, ' ').trim().slice(0, 60),
+    credit: {
+      author: found[2],
+      url: `https://freesound.org/s/${found[1]}/`,
+      from: 'Freesound',
+    },
+  };
+}
+
+/** The folders a file sat in, as what it is. */
+export function tagsFromPath(path: string): string[] {
+  return path
+    .split('/')
+    .slice(0, -1)
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0 && part.length < 32 && part !== '.');
+}
+
+/**
+ * Whether a licence asks to be credited.
+ *
+ * Written as "does it need attribution" rather than "is it CC0", because the
+ * first version tested the start of the string for `cc0` and Freesound writes
+ * it as "Creative Commons 0" — so every public domain sound in the library was
+ * about to be listed as owing a credit it does not owe. Matching anywhere, and
+ * on all the spellings the two archives actually use.
+ */
+function owesCredit(licence: string): boolean {
+  if (!licence.trim()) return true;
+  return !/(cc-?0|creative commons 0|public ?domain|no rights reserved)/i.test(licence);
+}
+
+/**
+ * One line of credit, or nothing when none is owed.
+ *
+ * CC0 and public domain ask for nothing, so they produce no line: a credits
+ * file padded with sounds that did not need crediting is one nobody reads.
+ * A sound whose licence was never recorded does produce one, because an
+ * unknown licence is a reason to check rather than a reason to assume.
+ */
+export function creditLine(sample: Sample): string | null {
+  const credit = sample.credit;
+  if (!credit) return null;
+  const licence = credit.licence ?? '';
+  if (!owesCredit(licence)) return null;
+  const parts = [sample.name];
+  if (credit.author) parts.push(`by ${credit.author}`);
+  if (licence) parts.push(`(${licence})`);
+  if (credit.from) parts.push(`— ${credit.from}`);
+  if (credit.url) parts.push(credit.url);
+  return parts.join(' ');
 }
 
 /**
