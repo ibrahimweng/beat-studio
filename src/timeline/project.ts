@@ -642,9 +642,23 @@ export function fromSession(
   if (!raw || typeof raw !== 'object') return null;
   const file = raw as Partial<SessionFile>;
   if (file.format !== 'beat-studio-session' || !file.project) return null;
+  if (typeof file.project !== 'object') return null;
 
   const base = emptyProject();
   const p = file.project as Partial<Project>;
+
+  /*
+   * A file that says it has sounds and layers, but not as lists, is broken
+   * rather than empty.
+   *
+   * Reading it leniently used to mean every field failed its check, every one
+   * fell back to a default, and the app reported "session loaded, 0 sounds" —
+   * telling somebody their work opened fine when what they had handed it was
+   * unreadable. Absent is still allowed: a piece with no sounds yet is a real
+   * thing to save. Present and the wrong shape is not.
+   */
+  if (p.cues !== undefined && !Array.isArray(p.cues)) return null;
+  if (p.layers !== undefined && !Array.isArray(p.layers)) return null;
 
   // Layers first: a sound can only be kept if the layer it names survived.
   const layers = readLayers(p.layers, base.layers);

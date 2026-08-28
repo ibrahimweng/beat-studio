@@ -320,8 +320,14 @@ export class Session {
     if (!this.recorder.start(bpm)) return;
 
     // Layered takes play underneath so the new pass can be played against them.
+    // One that came back from last time has no audio yet, so it is decoded on
+    // the way in rather than silently sitting out the pass.
     for (const take of takes) {
-      if (take.layered && take.buffer) this.engine.playBuffer(take.buffer);
+      if (!take.layered) continue;
+      if (take.buffer) this.engine.playBuffer(take.buffer);
+      else void this.#withAudio(take.id).then((ready) => {
+        if (ready?.buffer) this.engine.playBuffer(ready.buffer);
+      });
     }
 
     this.store.set({ recording: true, dock: 'takes', status: 'recording…' });
@@ -343,10 +349,36 @@ export class Session {
   }
 
   playTake(id: string): void {
+    void this.#withAudio(id).then((take) => {
+      if (!take?.buffer) return;
+      this.engine.playBuffer(take.buffer);
+      this.effects.flashTake(id, take.dur);
+    });
+  }
+
+  /**
+   * A take with its audio ready, decoding it first if it has none.
+   *
+   * A take that came back from last time is kept as the recording it was, not
+   * as decoded audio: decoded is hundreds of times larger and can be made
+   * again in a moment. It is made again here, the first time the take is
+   * wanted, because decoding needs an audio context and a browser will not
+   * give one until something has been clicked.
+   */
+  async #withAudio(id: string): Promise<Take | null> {
     const take = this.store.state.takes.find((t) => t.id === id);
-    if (!take?.buffer) return;
-    this.engine.playBuffer(take.buffer);
-    this.effects.flashTake(id, take.dur);
+    if (!take) return null;
+    if (take.buffer) return take;
+
+    this.engine.start();
+    const buffer = await this.engine.decode(take.blob);
+    if (!buffer) {
+      this.store.set({ status: `${take.name} could not be played back` });
+      return null;
+    }
+    const ready = { ...take, buffer };
+    this.store.set({ takes: this.store.state.takes.map((t) => (t.id === id ? ready : t)) });
+    return ready;
   }
 
   toggleLayer(id: string): void {

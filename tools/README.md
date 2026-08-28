@@ -558,6 +558,47 @@ message about the timeline — a session opened, an export finished, a clip that
 would not fit — was written somewhere nobody on that screen could see it. It
 is now in the timeline bar.
 
+## Checking the things a review turned up
+
+Six faults came out of using the app rather than reading it. Each is worth
+re-checking the same way, because none of them shows up in a type checker and
+four of them look fine until you try the exact thing.
+
+- **Two tabs.** Open the app twice on one browser profile. The second says so
+  in a strip across the top and writes nothing; `toolcraft.st88.work` must
+  still hold the first tab's piece however much is placed in the second.
+  "Keep here instead" hands it over and writes what that tab has, including
+  what it did while shut out. Closing the keeping tab hands it back within a
+  heartbeat (four seconds) without anybody pressing anything. Before this,
+  measured: a second tab's sounds vanished from the store while still being
+  drawn on screen.
+- **Narrow windows.** At 880, 700 and 640 pixels the sound design panel must
+  still be there with sounds to pick and an export button. The *instrument*
+  inspector must still hide — that one really is supporting detail. Before
+  this, one rule hid both, and the timeline screen at 880px could place sounds
+  and do nothing else with them.
+- **The small "?".** It has to clear 3:1 against its background. Measured by
+  compositing it on a canvas rather than by parsing the colour: these are
+  `oklab` with alpha, and reading the numbers out of the string gives ratios
+  above 300:1, which is not a thing. The first pass measured 2.1:1. It is now
+  9.9:1.
+- **Export.** Press WAV three times. One file. The buttons disable while a
+  render runs and come back after.
+- **Takes.** Record a pass, reload, it is still listed with its name and
+  waveform and it plays. What is written down is the recording, not the
+  decoded audio — 24 kB for a five-hit take rather than megabytes — so check
+  the stored record has no `buffer` field. "New project" must leave takes
+  alone.
+- **A broken session file.** `{"format":"beat-studio-session","project":
+  {"cues":"not an array","layers":null}}` must be refused, not welcomed. It
+  used to validate every field away and then report "session loaded, 0
+  sounds".
+
+One migration to check while any of this is being changed: the IndexedDB
+version went from 1 to 2 when takes were added. Build a version 1 database with
+a clip in it by hand, then load the app, and the clip must still be there
+afterwards with a `takes` store beside it.
+
 ## make-icons.mjs
 
 Draws the site icons.

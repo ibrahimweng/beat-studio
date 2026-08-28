@@ -616,3 +616,36 @@ button {
   font-family: inherit;
   color: inherit;
 }
+
+/*
+ * The line that says this tab is not the one keeping the piece.
+ *
+ * Above everything, including the floating video window and the rail, because
+ * it is the one message in the app that means work is not being saved.
+ * Floating rather than in the layout: it is a rare state, and reflowing the
+ * whole shell for it would move the timeline under somebody's pointer.
+ */
+.keep-notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--rec) 45%, var(--line));
+  background: color-mix(in srgb, var(--rec) 16%, var(--panel));
+  font-size: 12px;
+  color: var(--txt);
+}
+
+.keep-notice__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rec);
+}
+
+.keep-notice__what {
+  min-width: 0;
+  flex: 1 1 auto;
+}

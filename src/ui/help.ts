@@ -175,6 +175,8 @@ const SECTIONS: readonly Section[] = [
       ['Save session', 'A file, for keeping a piece beyond this browser or moving it to another machine. It carries the packs and your sounds with it.'],
       ['Open session', 'Reads one back. It replaces the piece, so there is nothing to undo to afterwards.'],
       ['A clip too large to keep', 'Says so when it happens. The timeline is kept either way, and only the clip has to be found again.'],
+      ['Two tabs at once', 'One tab keeps the piece. Any other says so in a red line at the top, and works normally without writing anything down.'],
+      ['"Keep here instead"', 'On that line. It hands the keeping to the tab you are in, so the work in front of you is the work that is kept.'],
     ],
   },
   {
@@ -200,6 +202,7 @@ const SECTIONS: readonly Section[] = [
       ['Seed beat', 'Fills in something to play against, for when you want a pulse rather than a blank grid.'],
       ['Takes', 'Hit record, play over the loop, hit record again. What you played is kept as a take.'],
       ['What a take can do', 'Play it back, export it as WAV, MP3 or MIDI, or throw it away.'],
+      ['They last', 'Takes come back after a reload, like everything else. "New project" leaves them alone: they belong to the instruments, not to the piece.'],
       ['Count‑in and take length', 'On the right, under Clock. A count‑in gives you a bar before it starts listening.'],
     ],
   },
