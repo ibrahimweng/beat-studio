@@ -17,8 +17,29 @@ import {
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
+import type { Sample } from '../../audio/samples.ts';
 import { helpButton } from '../help.ts';
 import type { View } from '../view.ts';
+
+/**
+ * How many recordings are drawn at once.
+ *
+ * Every pick is a live button the palette filter walks on each keystroke, so a
+ * library of four hundred is four hundred nodes measured to show the dozen
+ * anybody is looking at. The search is how the rest are reached.
+ */
+const SHOW_AT_MOST = 60;
+
+/** What a recording knows about itself, for a tooltip. */
+function creditTitle(sample: Sample): string | undefined {
+  const parts: string[] = [];
+  if (sample.credit?.author) parts.push(`by ${sample.credit.author}`);
+  if (sample.credit?.licence) parts.push(sample.credit.licence);
+  if (sample.credit?.from) parts.push(sample.credit.from);
+  if (sample.tags?.length) parts.push(sample.tags.join(' · '));
+  return parts.length ? parts.join(' — ') : undefined;
+}
+
 
 /** Every drum voice the engine has, not just the eight the sequencer drives. */
 const KIT_PICKS = KIT_SOUNDS.map((sound) => ({ name: sound.pad, label: sound.label }));
@@ -124,10 +145,16 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     source: CueSource,
     chosen: (current: CueSource) => boolean,
     preset: CuePreset | null = null,
+    /** What to say on hover, for anything that knows more than fits on it. */
+    title?: string,
   ): Pick => ({
     node: button(
       // Choosing plays it, so a list this long can be worked through by ear.
-      { class: 'cell pick', on: { click: () => session.chooseSource(source, preset) } },
+      {
+        class: 'cell pick',
+        ...(title ? { title } : {}),
+        on: { click: () => session.chooseSource(source, preset) },
+      },
       [el('span', { text: label })],
     ),
     label,
@@ -370,17 +397,41 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   /* ---------- recordings of your own ---------- */
 
   const sampleSections = el('div', {});
+
+  /** What is typed in the recordings search, lower case. */
+  let sampleQuery = '';
+  /** The last thing painted, so the search can repaint without new state. */
+  let lastPacks: AppState['packs'] = [];
+  let lastMine: AppState['mine'] = [];
+  let lastSamples: AppState['samples'] = [];
+
+  const takeFiles = (input: HTMLInputElement): void => {
+    void session.addSamples(Array.from(input.files ?? []));
+    input.value = '';
+  };
+
+  // Zips as well as loose audio, because a Freesound pack arrives as one and
+  // nobody should have to unpack four hundred files by hand first.
   const sampleInput = el('input', {
     type: 'file',
     style: { display: 'none' },
-    attrs: { accept: 'audio/*', multiple: '' },
-    on: {
-      change: (event) => {
-        const input = event.currentTarget as HTMLInputElement;
-        void session.addSamples(Array.from(input.files ?? []));
-        input.value = '';
-      },
-    },
+    attrs: { accept: 'audio/*,.zip,application/zip', multiple: '' },
+    on: { change: (event) => takeFiles(event.currentTarget as HTMLInputElement) },
+  }) as HTMLInputElement;
+
+  /*
+   * A whole folder, which is how a sound archive actually arrives.
+   *
+   * `webkitdirectory` is the only way a browser offers this, and it is set as
+   * an attribute rather than a property because it is not in the typed DOM.
+   * Files picked this way carry `webkitRelativePath`, which is what lets the
+   * folders an archive filed its sounds under survive the import as tags.
+   */
+  const folderInput = el('input', {
+    type: 'file',
+    style: { display: 'none' },
+    attrs: { multiple: '', webkitdirectory: '', directory: '' },
+    on: { change: (event) => takeFiles(event.currentTarget as HTMLInputElement) },
   }) as HTMLInputElement;
 
   const loadSamples = button(
@@ -388,12 +439,64 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       class: 'chip chip--sm',
       style: { width: '100%' },
       title:
-        'Put your own recordings on the timeline. They get the same level, room, ' +
-        'push and automation everything else does, and stay in this browser.',
+        'Put your own recordings on the timeline — audio files or a zip. They get ' +
+        'the same level, room, push and automation everything else does, and stay ' +
+        'in this browser.',
       on: { click: () => sampleInput.click() },
     },
     ['Add recordings'],
   );
+
+  const loadFolder = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title:
+        'Add a whole folder of recordings at once. The folders they sit in ' +
+        'become tags, so an archive keeps the way it was filed.',
+      on: { click: () => folderInput.click() },
+    },
+    ['Add a folder'],
+  );
+
+  /*
+   * What is owed to whom, as a file.
+   *
+   * A CC-BY sound requires its author be credited wherever the work is used,
+   * and a library of four hundred is past the point where anyone remembers
+   * which ones those are. This writes the list. Sounds under CC0 are left out
+   * because they ask for nothing and a list padded with them is one nobody
+   * reads. See `audio/samples.ts`.
+   */
+  const credits = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title: 'Write out the authors and licences of every recording that asks to be credited',
+      on: { click: () => session.saveCredits() },
+    },
+    ['Save credits'],
+  );
+
+  /*
+   * Finding one sound among hundreds.
+   *
+   * A palette of forty voices is a wall you can read. Four hundred recordings
+   * is not, and the difference is that a recording cannot be found by knowing
+   * what it is made of — only by what it is called and where it was filed.
+   */
+  const sampleFind = el('input', {
+    type: 'search',
+    class: 'pick-find',
+    attrs: { placeholder: 'Find a recording', 'aria-label': 'Find a recording' },
+    on: {
+      input: (event) => {
+        sampleQuery = (event.currentTarget as HTMLInputElement).value.trim().toLowerCase();
+        paintedSamples = null;
+        paintPacks(lastPacks, lastMine, lastSamples);
+      },
+    },
+  }) as HTMLInputElement;
 
   /* ---------- out of a recording ---------- */
 
@@ -1086,7 +1189,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       sampleSections,
-      el('div', { style: { marginTop: '6px' } }, [loadSamples, sampleInput, helpButton('recordings', 'your own recordings')]),
+      el('div', { style: { marginTop: '6px' } }, [
+        loadSamples,
+        sampleInput,
+        helpButton('recordings', 'your own recordings'),
+      ]),
+      el('div', { class: 'pick-actions' }, [loadFolder, folderInput, credits]),
       heardBody,
       heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
@@ -1114,6 +1222,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     mine: AppState['mine'],
     recordings: AppState['samples'],
   ): void {
+    lastPacks = packs;
+    lastMine = mine;
+    lastSamples = recordings;
     sections.length = builtIn;
     clear(mineSection);
     clear(packSections);
@@ -1175,19 +1286,62 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         },
         ['×'],
       );
+
+      /*
+       * Matched on the name and on the folders it came out of, so a search for
+       * "door" finds both `oak-door.wav` and everything filed under `Doors`.
+       *
+       * Both sides are flattened the same way first. A Freesound name arrives
+       * as `sound-37` and is shown as `sound 37`, so someone typing what they
+       * can see in their downloads folder was finding nothing at all.
+       */
+      const flat = (text: string): string => text.toLowerCase().replace(/[_\-\s]+/g, ' ').trim();
+      const query = flat(sampleQuery);
+      const matching = query
+        ? recordings.filter(
+            (sample) =>
+              flat(sample.name).includes(query) ||
+              (sample.tags ?? []).some((tag) => flat(tag).includes(query)),
+          )
+        : recordings;
+
+      /*
+       * Only ever this many buttons.
+       *
+       * Every pick is a live button that the filter walks on every keystroke,
+       * so a library of four hundred is four hundred nodes being measured to
+       * show the twelve anyone is looking at. The search is how the rest are
+       * reached, and the count says how many are behind it.
+       */
+      const shown = matching.slice(0, SHOW_AT_MOST);
+      const title =
+        matching.length === recordings.length
+          ? `Recordings · ${recordings.length}`
+          : `Recordings · ${matching.length} of ${recordings.length}`;
+
+      sampleSections.appendChild(sampleFind);
       sampleSections.appendChild(
         pickGroup(
-          `Recordings · ${recordings.length}`,
-          recordings.map((sample) =>
+          shown.length < matching.length ? `${title} · showing ${shown.length}` : title,
+          shown.map((sample) =>
             pickButton(
               `${sample.name} ${sample.duration.toFixed(1)}s`,
               { kind: 'sample', name: sample.id },
               (c) => c.kind === 'sample' && c.name === sample.id,
+              null,
+              // Who made it and under what licence, where it can be read
+              // without taking up a line in a list of four hundred.
+              creditTitle(sample),
             ),
           ),
           forget,
         ),
       );
+      if (!matching.length) {
+        sampleSections.appendChild(
+          el('div', { class: 'pick-none', text: `Nothing matching “${sampleQuery}”` }),
+        );
+      }
     }
   }
 

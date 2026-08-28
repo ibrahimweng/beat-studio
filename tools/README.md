@@ -779,6 +779,120 @@ Two things about measuring it, both of which cost time here:
   back empty while the UI was drawing the recording and IndexedDB was holding
   it. Assert on what is drawn and on the exported file.
 
+## Importing an archive
+
+There is no page for this: it needs a real file input and a real IndexedDB, so
+it lives in the Playwright harness rather than here. What it covers, and what
+it caught:
+
+- A zip is opened on import, its non-audio entries skipped, and the folders
+  inside it become tags — `Foley/Doors/oak.wav` arrives filed under `foley` and
+  `doors`, because that is where an archive already keeps its categories.
+- Freesound names every download `<id>__<username>__<name>`, so a library
+  assembled by hand from the site arrives knowing who to credit without the API
+  or the readme. The licence is not in the name and stays unset, because
+  guessing between CC0, CC-BY and non-commercial would be worse than admitting
+  the file did not say.
+- A CSV or TSV shipped with the archive is read and used to name the sounds,
+  which is what makes the BBC archive usable at all: its files are called
+  things like `07076051.wav` and the descriptions live in a separate list.
+  Which column holds the filename is found by seeing which one is full of the
+  files actually being imported, rather than by matching headings — there is no
+  single format to match, and content-matching fails safely, so a track listing
+  or a licence list in the same zip contributes nothing rather than renaming
+  the library after its columns.
+- 400 files import in 1.4 seconds and restore in 0.8. Only 60 buttons are drawn
+  at once; the search reaches the rest.
+
+Three faults it found:
+
+- `#keepSamples` picked out four fields by name, which silently dropped the
+  credit and the tags on the way to the store. The library came back after a
+  reload with its names and its lengths and no idea who had made any of it.
+  Spreading and removing what cannot be written is the shape that does not go
+  wrong the next time a sample gains a field.
+- `owesCredit` tested the start of the licence string for `cc0`, and Freesound
+  writes it as "Creative Commons 0" — so every public domain sound was about to
+  be listed as owing a credit it does not owe.
+- A Freesound name is shown with its dashes turned into spaces, so someone
+  searching for `sound-37` — what they can see in their downloads folder — got
+  nothing. Both sides are flattened before matching now.
+
+And one that was the test's fault, not the app's: placed cues are `.cue`, not
+`.tl__cue`, so "a recording can be placed" failed while placing worked
+perfectly. Check a selector against the DOM before believing what it reports.
+
+## attack-check.html
+
+Whether a voice reads as an event or as a tone that starts, by how far its
+spectral centroid falls over the first 30 ms and how sharp its onset is.
+
+Written to justify giving the twenty-eight single-layer voices a contact layer
+— the mallet touching the bell, separate from the bell ringing. **It measured
+the opposite and the change was reverted.** Kept so the idea is not had twice:
+
+- A modal source already has a broad, bright onset. Five partials starting at
+  once is close enough to a step to be broadband on its own. `bell` measures
+  5460 Hz at its onset with no contact layer at all; adding one at a sensible
+  level moved it to 5466 Hz and raised the energy in the first 3 ms by 0.7%.
+  Driven to a gain of 10 — clipping, peak 4.26 — it reached 5829 Hz. The
+  contact is not wrong, it is masked.
+- Randomising each partial's phase was tried next, on the theory that partials
+  all starting at phase 0 sum into an unnaturally coherent spike. With five
+  widely spaced inharmonic ratios they do not: peak 0.393 in phase against
+  0.420 random.
+- **"28 of the 40 voices are a single layer" does not mean what it looks like.**
+  Counting `one()` calls counts how a voice is written down, not whether it has
+  structure. `impact` scores 1.44 because it carries an explicit transient
+  layer, but `bell` scores 0.74 with one layer and nothing else.
+- A low number is not a fault. `glass` scores 0.07 because glass does not dim
+  as it rings, which is the whole difference between glass and wood; `thud` is
+  documented as having no transient; `click` is a contact with nothing to
+  settle into.
+
+One trap in the measurement itself, which produced a confident null result
+first: the FFT window was 2048 samples, which is 42.7 ms — longer than the 3 ms
+event being looked for, so the contact was averaged in with twelve times as
+much ringing and every voice measured exactly as it had before the layer
+existed. A window has to be shorter than the thing it measures. It is 256
+samples now.
+
+## room-check.html
+
+Whether the rooms are rooms, or decaying noise with a new name.
+
+Measures the three things that separate a space from noise that fades: that
+discrete reflections arrive where the room's size says they should, that the
+tail thickens instead of starting at full density, and that the top end dies
+before the bottom does.
+
+Four traps, every one of which gave a confident wrong answer first.
+
+- **Counting non-zero samples does not measure density on a filtered tail.** A
+  one-pole at 250 Hz takes 13 ms to ring below 1e-9, so any gap shorter than
+  that reads as full and every room came back at 1.00 density from its first
+  sample. Crest factor — peak over RMS in a window — survives filtering and
+  says what is actually there.
+- **Looking for a sample that stands out finds the sparse tail, not the
+  reflections.** It reported a first arrival at 3.3 ms for every room,
+  cathedral included. Differencing against the same room built with `early: 0`
+  isolates the taps — but only after matching the two on a late window, because
+  adding taps changes the energy the buffer is normalised to and the raw
+  difference is otherwise mostly a global rescale.
+- **Waiting for a band to fall a full 60 dB does not work when the buffer ends
+  first.** Every band read as "however long the buffer is", so the top looked
+  like 0.83 of the bottom's life when the curves themselves were nearer a half.
+  T30 — the slope from -5 to -35 dB, doubled — is what an acoustician uses and
+  what this uses. It also found a real fault: the buffer was cut at the nominal
+  length while the bass rings 1.22 times longer, so every room ended by
+  stopping rather than fading.
+- **Measurement bands leak.** At 6 dB an octave the "8 kHz" band carries enough
+  2 kHz to floor the result. These are 30 dB an octave. The same mistake was in
+  the synthesis: splitting the tail into bands with one-pole crossovers and
+  giving each its own decay measured 0.91 when it was designed for 0.53,
+  because the high band was mostly low band. A filter that closes over the
+  length of the tail has no crossover to leak through.
+
 ## make-icons.mjs
 
 Draws the site icons.

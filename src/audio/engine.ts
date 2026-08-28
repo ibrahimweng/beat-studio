@@ -1,5 +1,6 @@
 import type { KnobName, NoteKind, PadName, SliderName, Voice } from '../types.ts';
 import { applySettings, buildChain, type Chain, type ChainSettings } from './chain.ts';
+import type { RoomName } from './room.ts';
 import { click, drum, pianoSynth, pluck } from './voices.ts';
 
 /** Sample set requested from smplr, and how it is shown in the inspector. */
@@ -54,6 +55,15 @@ export class AudioEngine {
   #sfGuitar: SoundfontPlayer | null = null;
 
   knobs: Record<KnobName, number> = { reverb: 0.22, tone: 0.5 };
+
+  /**
+   * The space the reverb send feeds.
+   *
+   * A name rather than a knob because rooms do not sit on one axis — see
+   * `room.ts`. Held here beside the knobs so the offline renderer is handed
+   * the same one that is playing.
+   */
+  room: RoomName = 'hall';
   sliders: Record<SliderName, number> = { vol: 0.8, low: 0.5, mid: 0.5, high: 0.5 };
 
   /** Called when the engine label changes (standby → loading → loaded). */
@@ -156,10 +166,17 @@ export class AudioEngine {
       low: this.sliders.low,
       mid: this.sliders.mid,
       high: this.sliders.high,
+      room: this.room,
     };
   }
 
   // ---------- mixer ----------
+
+  /** Move the send into another space. */
+  setRoom(name: RoomName): void {
+    this.room = name;
+    this.applyTilt();
+  }
 
   setKnob(name: KnobName, value: number): void {
     this.knobs[name] = Math.max(0, Math.min(1, value));

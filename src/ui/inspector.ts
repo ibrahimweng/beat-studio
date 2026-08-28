@@ -4,6 +4,7 @@ import type { Metro } from '../types.ts';
 import { createKnob, createSliderV } from './controls.ts';
 import { button, el, setText, toggleClass } from './dom.ts';
 import { helpButton } from './help.ts';
+import { ROOM_NAMES, type RoomName } from '../audio/room.ts';
 import { waveMark } from './icons.ts';
 import type { View } from './view.ts';
 
@@ -97,9 +98,45 @@ export function createInspector(session: Session): View {
     onChange: (v) => session.setKnob('tone', v),
   });
 
+  /*
+   * Which space, as a name rather than a knob.
+   *
+   * The differences that matter between rooms do not lie on one axis: a plate
+   * is not a small hall, and a booth is not a quiet cathedral. Six named ones
+   * say more than a size control could, and each is a real construction —
+   * see `audio/room.ts`.
+   */
+  const room = el('select', {
+    class: 'room-select',
+    title: 'Which space the reverb send feeds',
+  }) as HTMLSelectElement;
+  for (const name of ROOM_NAMES) {
+    room.appendChild(
+      el('option', {
+        text: name[0].toUpperCase() + name.slice(1),
+        attrs: { value: name },
+      }),
+    );
+  }
+  room.value = session.engine.room;
+  room.addEventListener('change', () => {
+    session.powerUp();
+    session.setRoom(room.value as RoomName);
+  });
+
   const effects = el('div', { class: 'knob-grid' }, [
-    el('div', {}, [el('div', { class: 'section-title', text: 'Reverb' }), reverb.el]),
+    el('div', {}, [
+      el('div', { class: 'section-title' }, [
+        el('span', { text: 'Reverb' }),
+        helpButton('engine', 'the reverb send and the room it feeds'),
+      ]),
+      reverb.el,
+    ]),
     el('div', {}, [el('div', { class: 'section-title', text: 'Tilt' }), tilt.el]),
+    el('div', { class: 'knob-grid__wide' }, [
+      el('div', { class: 'section-title', text: 'Room' }),
+      room,
+    ]),
   ]);
 
   // ---------- clock ----------

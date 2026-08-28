@@ -1,0 +1,139 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>attack check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * Does a voice read as an event, or as a tone that starts?
+   *
+   * Written to justify giving the twenty-eight single-layer voices a contact
+   * layer — the noise of the mallet touching the bell, separate from the bell
+   * ringing — on the theory that a single layer cannot be an event. It
+   * measured the opposite, and the change was taken back out. What follows is
+   * the evidence, kept so the idea is not had twice.
+   *
+   * `drop` is how far the spectral centroid falls between the onset and 30 ms
+   * in, over 5 ms windows, in octaves. `crest` is the peak in the first 10 ms
+   * over the RMS of the whole sound.
+   *
+   * The finding: a modal source already has a broad, bright onset. Five
+   * partials all starting at once is close enough to a step to be broadband
+   * on its own, so a bell measured 5460 Hz at its onset with no contact layer
+   * at all. Adding one at a sensible level moved that to 5466 Hz and raised
+   * the energy in the first 3 ms by 0.7%. Driven to a gain of 10 — clipping,
+   * peak 4.26 — it reached 5829 Hz. There is nothing wrong with the contact;
+   * it is masked, because the thing it was meant to add was already there.
+   *
+   * Randomising the phase of each partial was tried next, on the theory that
+   * partials all starting at phase 0 sum into an unnaturally coherent spike.
+   * With five widely spaced inharmonic ratios they do not: peak 0.393 in
+   * phase against 0.420 random, crest 12.6 against 13.4.
+   *
+   * So "28 of the 40 voices are a single layer" turned out not to mean what it
+   * looks like it means. Counting `one()` calls counts how a voice is written
+   * down, not whether it has structure — `impact` scores 1.44 here because it
+   * carries an explicit transient layer, but `bell` scores 0.74 with one layer
+   * and nothing else, and `glass` scores 0.07 because glass genuinely does not
+   * dim as it rings, which is the whole difference between glass and wood.
+   *
+   * A low number here is not a fault to fix. It is a fact about the voice, and
+   * for several of them it is the point of the voice.
+   */
+  import { DESIGN_SPECS } from '/src/audio/design-voices.ts';
+  import { DESIGN_NAMES } from '/src/timeline/types.ts';
+  import { renderVoice } from '/src/audio/voice-spec.ts';
+  import { fft, mono } from '/src/audio/listen.ts';
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const RATE = 48000;
+
+  /*
+   * Centre of gravity of the spectrum, in Hz, over a short window.
+   *
+   * 256 samples, which is 5.3 ms. This was 2048 to begin with and that is
+   * 42.7 ms — longer than the whole event being looked for, so a 3 ms contact
+   * was averaged away with the twelve times as much ringing that followed it
+   * and every voice measured exactly as it had before the contact existed.
+   * A window has to be shorter than the thing it is measuring.
+   */
+  function centroid(data, from) {
+    const N = 256;
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const at = from + i;
+      const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N);
+      re[i] = (at < data.length ? data[at] : 0) * w;
+    }
+    fft(re, im);
+    let num = 0, den = 0;
+    for (let k = 1; k < N / 2; k++) {
+      const mag = Math.hypot(re[k], im[k]);
+      const hz = (k * RATE) / N;
+      num += hz * mag; den += mag;
+    }
+    return den > 0 ? num / den : 0;
+  }
+
+  async function render(name, options) {
+    const spec = DESIGN_SPECS[name](options);
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * (spec.duration + 0.4)), RATE);
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    renderVoice(ctx, gain, spec, 0, () => 0.5);
+    return mono(await ctx.startRendering());
+  }
+
+  const rows = [];
+  const OPT = { length: 0.5, tune: 0, gain: 1 };
+  for (const name of DESIGN_NAMES) {
+    const d = await render(name, OPT);
+    // Find the first sample that is actually sounding, so a voice that grows
+    // out of silence is measured from where it starts rather than from zero.
+    let start = 0;
+    let peak = 0;
+    for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+    for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > peak * 0.02) { start = i; break; }
+
+    const early = centroid(d, start);
+    const later = centroid(d, start + Math.round(RATE * 0.03));
+    const drop = early > 0 && later > 0 ? Math.log2(early / later) : 0;
+
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+    const rms = Math.sqrt(sum / d.length);
+    let front = 0;
+    const upto = Math.min(d.length, start + Math.round(RATE * 0.01));
+    for (let i = start; i < upto; i++) front = Math.max(front, Math.abs(d[i]));
+    const crest = rms > 0 ? front / rms : 0;
+
+    rows.push({ name, drop, crest });
+    say('measuring… ' + rows.length + '/' + DESIGN_NAMES.length);
+  }
+
+  const pad = (s, n) => String(s).padEnd(n);
+  const num = (v, d = 2) => v.toFixed(d);
+  const lines = [];
+  lines.push('EVERY VOICE, brightest first at the onset');
+  lines.push(pad('voice', 12) + pad('drop(oct)', 11) + 'crest');
+  for (const r of [...rows].sort((a, b) => b.drop - a.drop)) {
+    lines.push(pad(r.name, 12) + pad(num(r.drop), 11) + num(r.crest, 1));
+  }
+
+  /*
+   * The voices that are modelling something being struck or plucked. These
+   * are the ones a contact layer belongs on, and the ones to read.
+   */
+  const STRUCK = ['bell', 'glass', 'wood', 'wire', 'string', 'thunk', 'pop', 'click', 'impact', 'thud', 'slam'];
+  lines.push('');
+  lines.push('STRUCK AND PLUCKED VOICES. A low drop is not a fault: glass and');
+  lines.push('wire keep their top end on purpose, thud is documented as having');
+  lines.push('no transient, and click is a contact with nothing to settle into.');
+  lines.push(pad('voice', 12) + pad('drop(oct)', 11) + 'crest');
+  for (const name of STRUCK) {
+    const r = rows.find((x) => x.name === name);
+    if (!r) continue;
+    lines.push(pad(name, 12) + pad(num(r.drop), 11) + num(r.crest, 1));
+  }
+  lines.push('');
+  lines.push('Use this to see whether a change to a voice altered its onset,');
+  lines.push('not as a score to raise.');
+  say(lines.join('\n'));
+  document.title = 'done';
+</script></body></html>
