@@ -583,6 +583,14 @@ same size and place, 40 voices: median 0.3%
 So the palette is well separated — a median of 0.3% across every pair — and
 the duplicates are concentrated in two corners rather than spread about.
 
+Per-placement variation, added afterwards, took that to 38 entries in 8
+clusters and the worst pair from 100% to 99.4%, so nothing in the library is
+identical to anything else any more. It broke the fifteen clicks and ticks
+apart into three. It made the risers and swells *worse*, from 7 in a cluster to
+21: a half-semitone across a two-second sweep differentiates nothing, and it
+blurred what little the size axis was doing there. That corner is the size
+axis's to fix, not variation's.
+
 Both corners have the same cause, which is worth knowing before changing
 anything: the size axis multiplies length, and `click` is 0.02s to begin with,
 which is `MIN_LENGTH`. Five sizes of it span 0.02s to 0.042s, and at eight
@@ -603,11 +611,47 @@ how alike the two are: median 98.9%
 most different: ratchet 30.7%, glitch 37.4%, motor 73.0%
 ```
 
-A cue draws its noise from its own id, so the noise-heavy voices do vary. Every
-voice built from oscillators and envelopes does not: it is the same sound every
-time it is placed, and six of them in a row read as one sound pasted six times.
-Run this again after adding any per-placement variation; the median is the
-number to watch, and it wants to come down a long way.
+It now runs every voice twice at two settings — the control off, which is what
+the app did before `src/audio/vary.ts` existed, and on at its default — so the
+two sides cannot drift apart between runs. What it reports:
+
+```
+TWO TAKES OF ONE SOUND        off        on
+  how alike they are       98.9%     94.8%   (median)
+  bit for bit the same        13         0   of 40
+  level between takes     0.06dB    0.47dB   (median)
+  nearer its own voice than any other: 34 off, 37 on, of 40
+```
+
+Three things to read out of that.
+
+The second measure exists because the first cannot see the tail. The
+fingerprint is twenty bands from 40 Hz to 10 kHz, so a third of a semitone is a
+tenth of a band: moving a `sub` or a `beep` by that much leaves the print at
+99.8% while the two are no longer the same file at all. Peak level says what
+actually moved.
+
+The identity count is the half that stops this being a win on paper. Two takes
+of a sound have to still be that sound, so beside "how alike are two
+placements" sits "how alike is a placement to a *different* voice", and the
+first has to stay clear of the second. It went up rather than down, which is
+the result worth having: nothing lost an identity it had.
+
+Three voices — `fire`, `ratchet`, `motor` — read as nearer another voice than
+themselves with the control **off**. That is the noise seed alone, and it was
+true before any of this. Do not read it as damage from the variation.
+
+Three findings came out of building it, all of them from this page:
+
+- **One take for the whole voice, not one per layer.** A glitch is a dozen
+  bursts described as a dozen layers; drawing separately for each scattered
+  them and two placements came back 0% alike.
+- **A cloud's density and a run's rate must not move.** They say when every
+  event lands, so nudging them relocates all of them: a ratchet came back 4%
+  alike to itself.
+- **How much depends on what the voice is made of.** Grains and impulses
+  already redraw from the noise seed; giving them the full amount pushed
+  `fire` and `static` past being themselves. They get 40% of it.
 
 ## Checking the things a review turned up
 

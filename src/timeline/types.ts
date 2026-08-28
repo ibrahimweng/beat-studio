@@ -168,6 +168,21 @@ export interface Cue {
    * cannot reproduce any of its low end.
    */
   drive: number;
+  /**
+   * How much this placement differs from another of the same sound, 0 to 1.
+   *
+   * A recorded library gives you five door slams and they differ. Placing the
+   * same synthesised sound six times gave six copies of one file, and six of
+   * those in a row is what makes synthesised effects read as fake however good
+   * any one of them is. This nudges the pitch, the brightness, the decay and
+   * what a struck thing is made of, by an amount drawn from the cue's own id —
+   * so it is the same sound every time *this* one is played, and a different
+   * take from the one beside it.
+   *
+   * At zero the voice is exactly what its author wrote, which is what you want
+   * for a sound repeated on purpose.
+   */
+  vary: number;
   /** Silenced without being deleted, for comparing. */
   muted: boolean;
 }

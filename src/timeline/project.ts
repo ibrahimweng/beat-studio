@@ -92,9 +92,21 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
     length: design ? DESIGN_DEFAULT_LENGTH[design] : (packed?.duration ?? 0.4),
     anchor: design ? DESIGN_DEFAULT_ANCHOR[design] : 'start',
     ...(design ? DESIGN_CHARACTER[design] : DEFAULT_CHARACTER[source.kind]),
+    vary: DEFAULT_VARY,
     muted: false,
   };
 }
+
+/**
+ * How much a new sound varies from another placement of itself.
+ *
+ * On rather than off, because the fault it fixes is the default behaviour:
+ * placing one sound six times gave six copies of one file. Modest, because the
+ * point is a second take of the same thing rather than a different thing —
+ * about a third of a semitone, a tenth off the brightness and the decay.
+ * Somebody who wants one sound exactly can turn it down to nothing.
+ */
+export const DEFAULT_VARY = 0.3;
 
 /**
  * A cue as a library entry asked for it, or exactly as its voice makes it.
@@ -625,6 +637,10 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
       // placed from now on starts with its voice's own character.
       space: readNumber(cue.space, 0, 0, 1),
       drive: readNumber(cue.drive, 0, 0, 1),
+      // Nothing, for the same reason: a piece saved before sounds varied from
+      // one placement to the next should open sounding exactly as it did, and
+      // not have every hit in it quietly shift.
+      vary: readNumber(cue.vary, 0, 0, 1),
       muted: cue.muted === true,
     });
   }

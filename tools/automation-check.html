@@ -22,9 +22,14 @@
   const base = (() => {
     const p = { ...emptyProject(), duration: 4 };
     const id = p.layers[0].id;
+    /* The probe has to be one constant sound, so `vary` is pinned off: this
+       is measuring what a layer's automation does to a level, and a probe
+       that came out a fraction different every time would be measuring the
+       probe. Placed sounds vary by default now, which is the point of it —
+       see `src/audio/vary.ts` — and exactly what a yardstick must not do. */
     p.cues = [0, 1, 2, 3].map((t) => ({
       ...makeCue(t, id, { kind: 'design', name: 'static' }),
-      length: 1, gain: 1, space: 0, drive: 0,
+      length: 1, gain: 1, space: 0, drive: 0, vary: 0,
     }));
     return p;
   })();
@@ -176,6 +181,8 @@
   /** One short sound, then silence, so a tail has somewhere to be heard. */
   const hit = {
     ...makeCue(0.2, base.layers[0].id, { kind: 'design', name: 'impact' }),
+    // Pinned, for the reason above: a yardstick must not vary.
+    vary: 0,
     length: 0.3, gain: 1, space: 0, drive: 0,
   };
 
@@ -343,6 +350,8 @@
    */
   const steady = {
     ...makeCue(0.2, base.layers[0].id, { kind: 'design', name: 'sub' }),
+    // Pinned, for the reason above: a yardstick must not vary.
+    vary: 0,
     length: 3.5, gain: 1, space: 0, drive: 0,
   };
 

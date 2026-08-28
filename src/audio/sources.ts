@@ -11,6 +11,7 @@ import {
 import type { PadName } from '../types.ts';
 import { designSpec } from './design-voices.ts';
 import { packSpec, shapeSpec } from './pack.ts';
+import { varySpec } from './vary.ts';
 import {
   layerShaper,
   renderVoice,
@@ -32,8 +33,19 @@ import { guitarSpec, kitSpec, pianoSpec } from './voices.ts';
  * knowing about it.
  */
 export function specForCue(cue: Cue, gain: number): VoiceSpec | null {
-  const spec = stacked(cue, gain);
-  if (!spec) return null;
+  const built = stacked(cue, gain);
+  if (!built) return null;
+
+  /*
+   * This placement's own take of the voice.
+   *
+   * Here rather than inside each voice, because it is a property of the
+   * placement and not of the sound: the same cue gives the same take every
+   * time it is played, and the cue beside it gives another. Drawn from the
+   * id, which is the same thing the noise is drawn from and the same reason
+   * an exported file matches what was heard. See `vary.ts`.
+   */
+  const spec = varySpec(built, cue.vary, seedFrom(cue.id));
 
   // The room and the push belong to the placed sound rather than to the
   // voice, so they go after whatever the voice brought with it — and after

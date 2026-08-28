@@ -33,10 +33,15 @@
   ];
   const SPAN = 11;
 
+  /* `vary` is pinned off. This is measuring whether the listener reads a
+     length and a level correctly, which needs the sounds it is given to be
+     the ones it was told they are. Placed sounds vary by default now — see
+     `src/audio/vary.ts` — and a yardstick that varied would be measuring
+     itself. */
   const cueFor = (p, id) => ({
     ...makeCue(0, 'check', { kind: 'design', name: p.voice }),
     id, gain: 1, tune: p.tune, length: p.length, space: p.space,
-    drive: 0, anchor: 'start',
+    drive: 0, anchor: 'start', vary: 0,
   });
 
   say('making the recording…');
