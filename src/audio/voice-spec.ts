@@ -1,3 +1,4 @@
+import { roomOfLength } from './room.ts';
 import { bufferAt } from './samples.ts';
 /**
  * A voice, written down rather than coded.
@@ -469,24 +470,7 @@ export function roomImpulse(
   damping: number,
   random: () => number,
 ): AudioBuffer {
-  const length = Math.ceil(ctx.sampleRate * Math.max(0.01, seconds));
-  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
-  const roll = Math.min(Math.max(damping, 0), 0.99);
-
-  for (let c = 0; c < 2; c++) {
-    const data = buffer.getChannelData(c);
-    for (let i = 0; i < length; i++) {
-      data[i] = (random() * 2 - 1) * Math.exp(-i / (length * 0.28));
-    }
-    if (roll > 0) {
-      let previous = 0;
-      for (let i = 0; i < length; i++) {
-        previous = data[i] * (1 - roll) + previous * roll;
-        data[i] = previous;
-      }
-    }
-  }
-  return buffer;
+  return roomOfLength(ctx, seconds, damping, random);
 }
 
 /** A room, built from decaying noise the convolver can multiply a sound by. */

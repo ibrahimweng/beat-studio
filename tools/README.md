@@ -779,6 +779,42 @@ Two things about measuring it, both of which cost time here:
   back empty while the UI was drawing the recording and IndexedDB was holding
   it. Assert on what is drawn and on the exported file.
 
+## room-check.html
+
+Whether the rooms are rooms, or decaying noise with a new name.
+
+Measures the three things that separate a space from noise that fades: that
+discrete reflections arrive where the room's size says they should, that the
+tail thickens instead of starting at full density, and that the top end dies
+before the bottom does.
+
+Four traps, every one of which gave a confident wrong answer first.
+
+- **Counting non-zero samples does not measure density on a filtered tail.** A
+  one-pole at 250 Hz takes 13 ms to ring below 1e-9, so any gap shorter than
+  that reads as full and every room came back at 1.00 density from its first
+  sample. Crest factor — peak over RMS in a window — survives filtering and
+  says what is actually there.
+- **Looking for a sample that stands out finds the sparse tail, not the
+  reflections.** It reported a first arrival at 3.3 ms for every room,
+  cathedral included. Differencing against the same room built with `early: 0`
+  isolates the taps — but only after matching the two on a late window, because
+  adding taps changes the energy the buffer is normalised to and the raw
+  difference is otherwise mostly a global rescale.
+- **Waiting for a band to fall a full 60 dB does not work when the buffer ends
+  first.** Every band read as "however long the buffer is", so the top looked
+  like 0.83 of the bottom's life when the curves themselves were nearer a half.
+  T30 — the slope from -5 to -35 dB, doubled — is what an acoustician uses and
+  what this uses. It also found a real fault: the buffer was cut at the nominal
+  length while the bass rings 1.22 times longer, so every room ended by
+  stopping rather than fading.
+- **Measurement bands leak.** At 6 dB an octave the "8 kHz" band carries enough
+  2 kHz to floor the result. These are 30 dB an octave. The same mistake was in
+  the synthesis: splitting the tail into bands with one-pole crossovers and
+  giving each its own decay measured 0.91 when it was designed for 0.53,
+  because the high band was mostly low band. A filter that closes over the
+  length of the tail has no crossover to leak through.
+
 ## make-icons.mjs
 
 Draws the site icons.

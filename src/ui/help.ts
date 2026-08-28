@@ -228,7 +228,10 @@ const SECTIONS: readonly Section[] = [
     title: 'The engine, the mix and the meters',
     rows: [
       ['Power', 'A browser will not make a sound until something is clicked. This is that click.'],
-      ['Reverb and Tilt', 'The room everything is played in, and the balance between low and high across the whole instrument.'],
+      ['Reverb', 'How much of the room you hear. The room itself is chosen below it.'],
+      ['Room', 'Which space. Booth is a cupboard, Room is a room, Chamber is a big one, Hall is a concert hall and Cathedral keeps going for five seconds. Plate is not a space at all — it is the metal sheet studios used before digital reverb, dense and bright with no walls to hear.'],
+      ['Why the rooms sound different', 'Each is built the way a real space behaves: the first echoes off the nearest walls arrive at a time that tells you how big it is, the tail thickens instead of starting as noise, and the top end dies before the bottom does. That last one is why a long room sounds warm rather than hissy.'],
+      ['Tilt', 'The balance between low and high across the whole instrument.'],
       ['Equalizer', 'Three bands over the instruments. It does not touch the timeline or the export.'],
       ['Volume', 'How loud the instruments are here. Nothing on the timeline hears it.'],
       ['The meters', 'What is actually coming out, per lane. If a light is red the sound is clipping.'],

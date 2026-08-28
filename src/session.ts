@@ -1,3 +1,4 @@
+import type { RoomName } from './audio/room.ts';
 import { AudioEngine, type AudioEngineOptions } from './audio/engine.ts';
 import { Recorder } from './audio/recorder.ts';
 import { Transport } from './audio/transport.ts';
@@ -464,6 +465,11 @@ export class Session {
 
   setKnob(name: 'reverb' | 'tone', value: number): void {
     this.engine.setKnob(name, value);
+  }
+
+  /** Move the reverb send into another space. */
+  setRoom(name: RoomName): void {
+    this.engine.setRoom(name);
   }
 
   setSlider(name: 'vol' | 'low' | 'mid' | 'high', value: number): void {

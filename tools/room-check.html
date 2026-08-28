@@ -1,0 +1,221 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>room check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /*
+   * Are the rooms rooms, or is it still decaying noise with a new name?
+   *
+   * Three things separate a space from noise that fades, and this measures all
+   * three, because every one of them was got wrong at least once on the way in
+   * and only measuring found it.
+   *
+   *  1. Early reflections. Discrete arrivals off the nearest walls, whose
+   *     timing is what a listener hears as size. Both old models had none.
+   *  2. Density that builds. A real tail starts sparse and thickens. Noise is
+   *     at full density from its first sample, and that is the "shhh".
+   *  3. A top end that goes first. Air and soft surfaces take the highs, so a
+   *     real hall's tail is warm. One decay rate for everything keeps the hiss
+   *     alive exactly as long as the body.
+   *
+   * Traps met while writing this, all of which produced a confident wrong
+   * answer first:
+   *
+   *  - Counting non-zero samples does not measure density on a filtered tail.
+   *    A one-pole at 250 Hz takes 13 ms to ring below 1e-9, so every gap
+   *    shorter than that reads as full and every room came back at 1.00.
+   *    Crest factor — peak over RMS in a window — survives filtering.
+   *  - Finding "the first discrete arrival" by looking for a sample that
+   *    stands out finds the sparse *tail*, not the reflections, and reported
+   *    3.3 ms for every room including a cathedral. Differencing against the
+   *    same room built with early:0 isolates the taps — but only after
+   *    matching the two for level on a late window, because adding taps
+   *    changes the energy the buffer is normalised to and the difference is
+   *    otherwise a global rescale.
+   *  - Waiting for a band to fall a full 60 dB does not work: the buffer ends
+   *    first, so every band reads as "however long the buffer is" and the top
+   *    looked 0.83 of the bottom when the curves were nearer a half. T30 —
+   *    the slope from -5 to -35 dB, doubled — is what an acoustician uses and
+   *    is what this uses.
+   *  - Measurement bands leak too. At 6 dB an octave the "8 kHz" band carries
+   *    enough 2 kHz to floor the result. These are 30 dB an octave.
+   */
+  import { buildRoom, ROOMS, ROOM_NAMES } from '/src/audio/room.ts';
+  const say = (t) => { document.getElementById('out').textContent = t; };
+  const RATE = 48000;
+  const ctx = new OfflineAudioContext(1, 1, RATE);
+
+  function sequence(seed) {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const seeded = () => sequence(0x51a3f00d);
+
+  const lp = (x, f, times) => {
+    const a = Math.exp((-2 * Math.PI * f) / RATE);
+    let y = Float32Array.from(x);
+    for (let t = 0; t < times; t++) {
+      let s = 0; const o = new Float32Array(y.length);
+      for (let i = 0; i < y.length; i++) { s = y[i] * (1 - a) + s * a; o[i] = s; }
+      y = o;
+    }
+    return y;
+  };
+  /** An octave band around f, at 30 dB an octave each side. */
+  const octave = (x, f) => {
+    const low = lp(x, f * 1.5, 5);
+    const below = lp(low, f / 1.5, 5);
+    const out = new Float32Array(x.length);
+    for (let i = 0; i < x.length; i++) out[i] = low[i] - below[i];
+    return out;
+  };
+
+  /** T30: the slope from -5 to -35 dB, doubled. */
+  const t30 = (x) => {
+    const win = Math.round(RATE * 0.02);
+    const env = [];
+    for (let i = 0; i + win < x.length; i += win) {
+      let s = 0; for (let j = i; j < i + win; j++) s += x[j] * x[j];
+      env.push(Math.sqrt(s / win));
+    }
+    const peak = Math.max(...env);
+    if (peak <= 0) return 0;
+    const db = env.map((v) => 20 * Math.log10(Math.max(v, 1e-12) / peak));
+    const sm = db.map((_, i) => {
+      let s = 0, n = 0;
+      for (let j = Math.max(0, i - 3); j <= Math.min(db.length - 1, i + 3); j++) { s += db[j]; n++; }
+      return s / n;
+    });
+    const cross = (level) => { for (let k = 0; k < sm.length; k++) if (sm[k] <= level) return (k * win) / RATE; return null; };
+    const a = cross(-5), b = cross(-35);
+    return a === null || b === null || b <= a ? 0 : (b - a) * 2;
+  };
+
+  const crest = (x, atMs, winMs = 8) => {
+    const start = Math.round((RATE * atMs) / 1000);
+    const win = Math.round((RATE * winMs) / 1000);
+    if (start + win >= x.length) return null;
+    let peak = 0, sum = 0;
+    for (let i = start; i < start + win; i++) { const v = Math.abs(x[i]); if (v > peak) peak = v; sum += x[i] * x[i]; }
+    const rms = Math.sqrt(sum / win);
+    return rms > 0 ? peak / rms : null;
+  };
+
+  const pad = (s, n) => String(s).padEnd(n);
+  const num = (v, d = 2) => (v === null ? '-' : v.toFixed(d));
+  const lines = [];
+  const out = (t = '') => { lines.push(t); say(lines.join('\n')); };
+
+  out('DECAY BY OCTAVE (T30 seconds). The top must go before the bottom.');
+  out(pad('room', 12) + ['125Hz', '500Hz', '2kHz', '8kHz', '8k/125'].map((h) => pad(h, 8)).join(''));
+  let bandFails = 0;
+  for (const name of ROOM_NAMES) {
+    const x = buildRoom(ctx, ROOMS[name], seeded()).getChannelData(0);
+    const r = [125, 500, 2000, 8000].map((f) => t30(octave(x, f)));
+    const ratio = r[3] / r[0];
+    if (!(ratio < 0.85)) bandFails++;
+    out(pad(name, 12) + r.map((v) => pad(num(v), 8)).join('') + pad(num(ratio), 8));
+  }
+  out(bandFails ? `FAIL: ${bandFails} room(s) ring as long at the top as the bottom` : 'ok: every room loses its top first');
+
+  out('');
+  out('DENSITY as crest factor. High is discrete arrivals, about 2 is noise.');
+  out(pad('room', 12) + [2, 6, 15, 40, 100, 250].map((m) => pad(m + 'ms', 7)).join(''));
+  let buildFails = 0;
+  for (const name of ROOM_NAMES) {
+    const x = buildRoom(ctx, ROOMS[name], seeded()).getChannelData(0);
+    const at = [2, 6, 15, 40, 100, 250].map((m) => crest(x, m));
+    const early = at[0], late = at[4] ?? at[3];
+    if (!(early !== null && late !== null && early > late * 2)) buildFails++;
+    out(pad(name, 12) + at.map((v) => pad(num(v, 1), 7)).join(''));
+  }
+  out(buildFails ? `FAIL: ${buildFails} room(s) are as dense at 2 ms as at 100 ms` : 'ok: every tail thickens');
+
+  out('');
+  out('EARLY REFLECTIONS, isolated against the same room with early:0.');
+  out(pad('room', 12) + pad('taps', 6) + pad('first(ms)', 11) + pad('designed', 10) + 'last(ms)');
+  let erFails = 0;
+  for (const name of ROOM_NAMES) {
+    const spec = ROOMS[name];
+    const a = buildRoom(ctx, spec, seeded()).getChannelData(0);
+    const b = buildRoom(ctx, { ...spec, early: 0 }, seeded()).getChannelData(0);
+    const n = Math.min(a.length, b.length);
+    // Match on a late window, where no tap lands, so the difference is taps
+    // and not the change in what the buffer was normalised to.
+    const from = Math.round(RATE * 0.15), to = Math.min(n, Math.round(RATE * 0.25));
+    let sa = 0, sb = 0;
+    for (let i = from; i < to; i++) { sa += a[i] * a[i]; sb += b[i] * b[i]; }
+    const k = sb > 0 ? Math.sqrt(sa / sb) : 1;
+    const diff = new Float32Array(n);
+    for (let i = 0; i < n; i++) diff[i] = a[i] - b[i] * k;
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(diff[i]));
+    const taps = [];
+    const upto = Math.min(n, Math.round(RATE * 0.12));
+    for (let i = 0; i < upto; i++) {
+      if (Math.abs(diff[i]) > peak * 0.06) {
+        const at = i / RATE;
+        if (!taps.length || at - taps[taps.length - 1] > 0.0004) taps.push(at);
+      }
+    }
+    const designed = (0.0016 + spec.size * 0.023) * 1000;
+    const first = taps.length ? taps[0] * 1000 : null;
+    if (spec.early > 0 && !(taps.length >= 6 && first !== null && Math.abs(first - designed) < 6)) erFails++;
+    if (spec.early === 0 && taps.length > 0) erFails++;
+    out(pad(name, 12) + pad(taps.length, 6) + pad(num(first, 1), 11) +
+        pad(spec.early > 0 ? num(designed, 1) : 'none', 10) +
+        (taps.length ? num(taps[taps.length - 1] * 1000, 1) : '-'));
+  }
+  out(erFails ? `FAIL: ${erFails} room(s) do not put their reflections where the size says` : 'ok: reflections arrive where the size says');
+
+  out('');
+  out('ENERGY. Rooms must swap without the send changing level.');
+  const energies = [];
+  for (const name of ROOM_NAMES) {
+    const buf = buildRoom(ctx, ROOMS[name], seeded());
+    let s = 0;
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+    }
+    energies.push(Math.sqrt(s));
+    out(pad(name, 12) + num(Math.sqrt(s), 4));
+  }
+  const worst = Math.max(...energies) / Math.min(...energies);
+  out(worst < 1.02 ? 'ok: every room drives the send equally' : `FAIL: loudest room is ${num(worst)}x the quietest`);
+
+  out('');
+  out('DETERMINISM. The same description must give the same buffer, or an');
+  out('export cannot match what was heard.');
+  let sameFails = 0;
+  for (const name of ROOM_NAMES) {
+    const a = buildRoom(ctx, ROOMS[name], seeded()).getChannelData(0);
+    const b = buildRoom(ctx, ROOMS[name], seeded()).getChannelData(0);
+    let same = a.length === b.length;
+    if (same) for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { same = false; break; }
+    if (!same) sameFails++;
+    out(pad(name, 12) + (same ? 'identical' : 'DIFFERENT — FAIL'));
+  }
+
+  out('');
+  out('STEREO. The two sides must differ, or the room is mono.');
+  let mono = 0;
+  for (const name of ROOM_NAMES) {
+    const buf = buildRoom(ctx, ROOMS[name], seeded());
+    const l = buf.getChannelData(0), r = buf.getChannelData(1);
+    let dot = 0, ll = 0, rr = 0;
+    for (let i = 0; i < l.length; i++) { dot += l[i] * r[i]; ll += l[i] * l[i]; rr += r[i] * r[i]; }
+    const c = dot / Math.sqrt(ll * rr);
+    if (Math.abs(c) > 0.3) mono++;
+    out(pad(name, 12) + 'correlation ' + num(c, 3));
+  }
+
+  out('');
+  const fails = bandFails + buildFails + erFails + sameFails + mono + (worst < 1.02 ? 0 : 1);
+  out(fails === 0 ? 'ALL CHECKS PASS' : `${fails} CHECK(S) FAILED`);
+  document.title = 'done';
+</script></body></html>

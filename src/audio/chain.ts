@@ -1,4 +1,5 @@
-import { makeImpulseResponse } from './voices.ts';
+import { buildRoom, ROOMS, type RoomName } from './room.ts';
+import { sequence } from './voice-spec.ts';
 
 /** Mixer positions, shared by live playback and offline rendering. */
 export interface ChainSettings {
@@ -11,6 +12,14 @@ export interface ChainSettings {
   low: number;
   mid: number;
   high: number;
+  /**
+   * Which space the send feeds.
+   *
+   * Named rather than a number, because the useful differences between rooms
+   * are not on one axis: a plate is not a small hall and a booth is not a
+   * quiet cathedral. See `room.ts`.
+   */
+  room: RoomName;
 }
 
 export const DEFAULT_CHAIN: ChainSettings = {
@@ -20,6 +29,7 @@ export const DEFAULT_CHAIN: ChainSettings = {
   low: 0.5,
   mid: 0.5,
   high: 0.5,
+  room: 'hall',
 };
 
 export interface Chain {
@@ -33,6 +43,10 @@ export interface Chain {
   reverbSend: GainNode;
   master: GainNode;
   mix: GainNode;
+  /** The convolver, so the space can be swapped without rebuilding the chain. */
+  reverb: ConvolverNode;
+  /** Which room is currently loaded, so an unchanged one is not rebuilt. */
+  room: RoomName;
 }
 
 /**
@@ -60,7 +74,9 @@ export function buildChain(ctx: BaseAudioContext, settings: ChainSettings): Chai
 
   const mix = ctx.createGain();
   const reverb = ctx.createConvolver();
-  reverb.buffer = makeImpulseResponse(ctx, 2.4, 2.8);
+  // Seeded from a constant, so the same room is the same buffer in playback
+  // and in an offline render and the two cannot come out different.
+  reverb.buffer = buildRoom(ctx, ROOMS[settings.room], sequence(0x51a3f00d));
   const reverbSend = ctx.createGain();
   const master = ctx.createGain();
 
@@ -73,13 +89,26 @@ export function buildChain(ctx: BaseAudioContext, settings: ChainSettings): Chai
   reverb.connect(mix);
   mix.connect(master);
 
-  const chain: Chain = { input, output: master, eqLow, eqMid, eqHigh, reverbSend, master, mix };
+  const chain: Chain = { input, output: master, eqLow, eqMid, eqHigh, reverbSend, master, mix, reverb, room: settings.room };
   applySettings(chain, settings);
   return chain;
 }
 
 /** Push mixer positions onto an existing chain. */
 export function applySettings(chain: Chain, s: ChainSettings): void {
+  /*
+   * Building a room is a pass over a few hundred thousand samples, which is
+   * nothing once and audible as a stall if it happens on every knob move. So
+   * it is rebuilt only when the name actually changes.
+   */
+  if (s.room !== chain.room) {
+    chain.reverb.buffer = buildRoom(
+      chain.reverb.context,
+      ROOMS[s.room],
+      sequence(0x51a3f00d),
+    );
+    chain.room = s.room;
+  }
   chain.reverbSend.gain.value = s.reverb * 0.9;
   chain.master.gain.value = s.vol;
   const tilt = (s.tone - 0.5) * 2;
