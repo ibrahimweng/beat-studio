@@ -26,6 +26,7 @@ import {
   tagsFromPath,
 } from './audio/samples.ts';
 import { looksLikeZip, readZip } from './audio/zip.ts';
+import { readTable, stemOf, type Described } from './audio/sidecar.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -81,6 +82,9 @@ const PROGRESS_FROM = 40;
 
 /** What is worth pulling out of an archive. */
 const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
+
+/** A table that might say what the files in an archive actually are. */
+const TABLE_FILE = /\.(csv|tsv)$/i;
 
 import { rebuild, type Made } from './audio/rebuild.ts';
 import { emptyDetection, type Store } from './store.ts';
@@ -335,10 +339,29 @@ export class SoundDesignSession {
     if (!files.length) return;
     this.#wake();
 
-    const found = await this.#unpack(files);
+    const { audio: found, tables } = await this.#unpack(files);
     if (!found.length) {
       this.#store.set({ status: 'nothing in there could be read' });
       return;
+    }
+
+    /*
+     * What the archive's own spreadsheet says these are.
+     *
+     * A library that names its files by catalogue number keeps the meaning in
+     * a table beside them — the BBC archive is thirty three thousand files
+     * called things like `07076051.wav` — and imported without it you get a
+     * library that cannot be searched. See `audio/sidecar.ts`.
+     */
+    const described = new Map<string, Described>();
+    if (tables.length) {
+      const stems = new Set(found.map((entry) => stemOf(entry.path)));
+      for (const table of tables) {
+        for (const [stem, about] of readTable(table, stems)) described.set(stem, about);
+      }
+      if (described.size) {
+        this.#store.set({ status: `${described.size} named from the archive's own list…` });
+      }
     }
 
     /*
@@ -373,11 +396,15 @@ export class SoundDesignSession {
       }
 
       const { name, credit } = creditFromName(entry.path);
+      const about = described.get(stemOf(entry.path));
       const tags = tagsFromPath(entry.path);
+      // What the archive itself calls it beats what its filename does: a
+      // catalogue number is a name only in the sense that it is unique.
+      if (about?.category) tags.push(about.category);
       addSample(
         {
           id: newId('s'),
-          name: name || entry.path,
+          name: about?.description || name || entry.path,
           duration: buffer.duration,
           blob: entry.blob,
           ...(credit ? { credit } : {}),
@@ -416,23 +443,34 @@ export class SoundDesignSession {
    * one picked on its own does not, so the path is whichever of those exists.
    * That path is the whole point: it is where the archive kept its categories.
    */
-  async #unpack(files: readonly File[]): Promise<{ path: string; blob: Blob }[]> {
-    const out: { path: string; blob: Blob }[] = [];
+  async #unpack(
+    files: readonly File[],
+  ): Promise<{ audio: { path: string; blob: Blob }[]; tables: string[] }> {
+    const audio: { path: string; blob: Blob }[] = [];
+    const tables: string[] = [];
 
     for (const file of files) {
       const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
       const data = await file.arrayBuffer();
 
       if (!looksLikeZip(new Uint8Array(data))) {
-        out.push({ path, blob: file });
+        if (TABLE_FILE.test(path)) tables.push(await file.text());
+        else audio.push({ path, blob: file });
         continue;
       }
 
       this.#store.set({ status: `opening ${file.name}…` });
-      const read = await readZip(data, (inside) => AUDIO_FILE.test(inside));
+      const read = await readZip(
+        data,
+        (inside) => AUDIO_FILE.test(inside) || TABLE_FILE.test(inside),
+      );
       const stem = file.name.replace(/\.zip$/i, '');
       for (const entry of read.entries) {
-        out.push({
+        if (TABLE_FILE.test(entry.path)) {
+          tables.push(new TextDecoder().decode(entry.bytes));
+          continue;
+        }
+        audio.push({
           // Kept under the archive's own name, so two packs with a `hits`
           // folder in each do not merge into one tag.
           path: `${stem}/${entry.path}`,
@@ -441,7 +479,7 @@ export class SoundDesignSession {
       }
     }
 
-    return out;
+    return { audio, tables };
   }
 
   /**

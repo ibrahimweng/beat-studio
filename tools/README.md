@@ -793,6 +793,14 @@ it caught:
   or the readme. The licence is not in the name and stays unset, because
   guessing between CC0, CC-BY and non-commercial would be worse than admitting
   the file did not say.
+- A CSV or TSV shipped with the archive is read and used to name the sounds,
+  which is what makes the BBC archive usable at all: its files are called
+  things like `07076051.wav` and the descriptions live in a separate list.
+  Which column holds the filename is found by seeing which one is full of the
+  files actually being imported, rather than by matching headings — there is no
+  single format to match, and content-matching fails safely, so a track listing
+  or a licence list in the same zip contributes nothing rather than renaming
+  the library after its columns.
 - 400 files import in 1.4 seconds and restore in 0.8. Only 60 buttons are drawn
   at once; the search reaches the rest.
 
