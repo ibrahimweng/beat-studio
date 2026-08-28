@@ -86,6 +86,14 @@ export interface AppState {
   /** Sounds read out of a recording, and rebuilt out of the palette. */
   extract: Extraction;
   /**
+   * This tab is the one writing the piece down.
+   *
+   * False when another tab has the app open and claimed the keeping first.
+   * Both tabs work; only one writes, because two writing to one place means
+   * the last to save quietly wins and the other's work is gone.
+   */
+  keeping: boolean;
+  /**
    * The video floats in its own window rather than sitting on the stage.
    *
    * Only meaningful on the sound design screen, where there is a stage to
@@ -172,6 +180,7 @@ export function initialState(): AppState {
     mine: [],
     extract: { busy: null, sounds: [], from: null },
     videoWindow: false,
+    keeping: true,
   };
 }
 

@@ -859,29 +859,44 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   });
 
   /** A row of buttons that write the same thing in two formats. */
+  /** Every button that starts a render, so none of them runs while one is. */
+  const exportButtons: HTMLButtonElement[] = [];
+
   const formats = (
     label: string,
     title: string,
     write: (format: 'wav' | 'mp3') => void,
     accent = false,
-  ): HTMLElement =>
-    el('div', { style: { marginTop: '10px' }, title }, [
+  ): HTMLElement => {
+    const wav = button(
+      {
+        class: accent ? 'btn-accent' : 'chip chip--sm',
+        style: { flex: '1 1 0' },
+        on: { click: () => write('wav') },
+      },
+      ['WAV'],
+    );
+    const mp3 = button(
+      { class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => write('mp3') } },
+      ['MP3'],
+    );
+    exportButtons.push(wav, mp3);
+    return el('div', { style: { marginTop: '10px' }, title }, [
       el('div', { class: 'setting-row__label', text: label }),
-      el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [
-        button(
-          {
-            class: accent ? 'btn-accent' : 'chip chip--sm',
-            style: { flex: '1 1 0' },
-            on: { click: () => write('wav') },
-          },
-          ['WAV'],
-        ),
-        button(
-          { class: 'chip chip--sm', style: { flex: '1 1 0' }, on: { click: () => write('mp3') } },
-          ['MP3'],
-        ),
-      ]),
+      el('div', { style: { display: 'flex', gap: '4px', marginTop: '6px' } }, [wav, mp3]),
     ]);
+  };
+
+  const markerButton = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title: 'A spreadsheet of every sound and the frame it lands on, for whoever picks this up next',
+      on: { click: () => session.exportMarkers() },
+    },
+    ['Marker list'],
+  );
+  exportButtons.push(markerButton);
 
   const exportBody = el('div', { class: 'card', style: { padding: '12px 14px 14px' } }, [
     /*
@@ -930,17 +945,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       'Every impact in one file, every whoosh in another, so they can be balanced against each other later',
       (f) => void session.exportPerSound(f, settings),
     ),
-    el('div', { style: { marginTop: '10px' } }, [
-      button(
-        {
-          class: 'chip chip--sm',
-          style: { width: '100%' },
-          title: 'A spreadsheet of every sound and the frame it lands on, for whoever picks this up next',
-          on: { click: () => session.exportMarkers() },
-        },
-        ['Marker list'],
-      ),
-    ]),
+    el('div', { style: { marginTop: '10px' } }, [markerButton]),
     exportStatus,
   ]);
 
@@ -1014,7 +1019,16 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ),
   ]);
 
-  const root = el('aside', { class: 'inspector' }, [
+  /*
+   * Marked as the panel the work happens in, not a panel of readouts.
+   *
+   * A narrow window hides the instrument inspector, which is fair: reverb, EQ
+   * and the engine light are things you glance at. This one is where a sound
+   * is chosen, described, stacked, edited and exported, so hiding it leaves a
+   * timeline you can drop sounds onto and nothing else — no way to say which
+   * sound, no way to get a file out. See `layout.css`.
+   */
+  const root = el('aside', { class: 'inspector inspector--work' }, [
     el('div', {}, [
       heading('Place', 'place'),
       search,
@@ -1180,6 +1194,15 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         setText(cueTime, 'Click the timeline to place a sound.');
       }
 
+      /*
+       * Nothing else may be started while an export runs.
+       *
+       * Three clicks on WAV used to start three renders at once and write
+       * three identical files — minutes of wasted work on a long clip, and
+       * three save prompts to dismiss.
+       */
+      const busy = state.exporting !== null;
+      for (const node of exportButtons) node.disabled = busy;
       setText(exportStatus, state.exporting ?? '');
     },
   };

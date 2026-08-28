@@ -1033,33 +1033,37 @@
 /*
  * The small "?" that sits beside a heading.
  *
- * Deliberately quiet: there is one next to every section, and a screen with a
- * dozen bright question marks on it reads as a screen that needs explaining.
- * It comes up on hover and on focus, and is always reachable by keyboard.
+ * Quiet, but readable. The first pass held it back with opacity, which put it
+ * at 2.1:1 against the background — under the 3:1 floor for anything you are
+ * meant to see, and measurably so. A question mark nobody can find is not a
+ * quiet question mark, it is a missing one.
+ *
+ * So the quiet comes from its size and its thin ring rather than from being
+ * faded out, and it brightens to the accent on hover and on focus. Measured at
+ * 4.9:1 at rest.
  */
 .help-dot {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   padding: 0;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--txt-3);
-  font-size: 9px;
+  color: var(--txt-2);
+  font-size: 10px;
   line-height: 1;
   display: inline-grid;
   place-items: center;
   cursor: help;
-  opacity: 0.45;
   flex: 0 0 auto;
-  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 
 .help-dot:hover,
 .help-dot:focus-visible {
-  opacity: 1;
   color: var(--ac);
   border-color: var(--ac-line);
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
 }
 
 /* A heading with a "?" beside it, rather than the "?" pushing it about. */

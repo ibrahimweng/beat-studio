@@ -10,8 +10,20 @@ import { createMixer } from './ui/mixer.ts';
 import { createRail } from './ui/rail.ts';
 import { createSoundDesignBar } from './ui/sound-design/bar.ts';
 import { createDivider } from './ui/sound-design/divider.ts';
-import { flushProject, heldProject, heldVideo, keepProject } from './keep.ts';
+import {
+  flushProject,
+  heldProject,
+  heldTakes,
+  heldVideo,
+  isKeeping,
+  keepProject,
+  keepTakes,
+  startKeeping,
+  stopKeeping,
+  takeOverKeeping,
+} from './keep.ts';
 import { createHelp } from './ui/help.ts';
+import { createKeepNotice } from './ui/keep-notice.ts';
 import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
 import { createVideoStage } from './ui/sound-design/stage.ts';
 import { createVideoWindow } from './ui/video-window.ts';
@@ -94,14 +106,26 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 
   soundDesign.attachVideo(videoStage.video);
 
+  const main = el('div', { class: 'main' });
+  const keepNotice = createKeepNotice({
+    onTakeOver: () => takeOverKeeping(session.store.state.project),
+  });
+
   const views: View[] = [
     rail, topbar, stage, dock, mixer, inspector,
-    soundDesignBar, videoStage, timeline, soundDesignPanel,
+    soundDesignBar, videoStage, timeline, soundDesignPanel, keepNotice,
   ];
 
-  const main = el('div', { class: 'main' });
   const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
-  root.appendChild(shell);
+  /*
+   * The notice sits above the app rather than over it.
+   *
+   * Floated at the top it covered the timecode, the frame rate and the
+   * snapping — controls somebody might well want while deciding which tab to
+   * keep. A state that lasts until it is dealt with should take its own room
+   * rather than borrow somebody else's.
+   */
+  root.appendChild(el('div', { class: 'frame' }, [keepNotice.el, shell]));
 
   /**
    * What is currently on screen: the mode, and whether the video is floating.
@@ -204,6 +228,11 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
      * of them ends up not being kept.
      */
     if (previous && state.project !== previous.project) keepProject(state.project);
+    // Takes are their own store: they belong to the instruments rather than to
+    // the piece, and survive "New project" the way the patterns do.
+    if (previous && state.takes !== previous.takes && isKeeping()) {
+      void keepTakes(state.takes);
+    }
   };
 
   /*
@@ -215,11 +244,27 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
    * an edit. The clip cannot come with it: it lives in a store that has to be
    * waited for, so it follows a moment later.
    */
+  /*
+   * Claim the keeping before reading anything back.
+   *
+   * A second tab on the same piece is the one way this app can lose work: both
+   * write to one place, the last to save wins, and the other tab carries on
+   * drawing sounds that are no longer stored anywhere. So one tab keeps, the
+   * rest say so and offer to take over. See `keep.ts`.
+   */
+  session.store.set({ keeping: startKeeping((keeping) => session.store.set({ keeping })) });
+
   const kept = heldProject();
   if (kept) soundDesign.restoreProject(kept);
 
   const unsubscribe = session.store.subscribe((state, previous) => render(state, previous));
   render(session.state, null);
+
+  // Takes come back with the rest. Their audio is decoded when one is first
+  // played, since decoding needs an audio context and that needs a gesture.
+  void heldTakes().then((takes) => {
+    if (takes.length && !session.store.state.takes.length) session.store.set({ takes });
+  });
 
   if (kept?.videoName) {
     void heldVideo().then(async (file) => {
@@ -251,7 +296,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
    * `keep.ts` would otherwise lose the last edit — and a reload is the case
    * this is all here for.
    */
-  const onLeaving = (): void => flushProject();
+  const onLeaving = (): void => {
+    flushProject();
+    // Handing the claim over on the way out means the tab left behind starts
+    // keeping at once rather than after the claim goes stale.
+    stopKeeping();
+  };
   const onHidden = (): void => {
     if (document.visibilityState === 'hidden') flushProject();
   };
@@ -267,8 +317,10 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     unsubscribe();
     window.removeEventListener('pagehide', onLeaving);
     document.removeEventListener('visibilitychange', onHidden);
-    // Anything the settling delay was still holding on to.
+    // Anything the settling delay was still holding on to, and then let the
+    // claim go so the next tab picks it up without waiting it out.
     flushProject();
+    stopKeeping();
     tour.close();
     help.close();
     // The help listens on the document for the small "?" buttons, which

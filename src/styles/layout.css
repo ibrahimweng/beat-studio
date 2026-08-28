@@ -1,7 +1,20 @@
 /* Application shell: rail | (topbar / stage / dock / mixer) | inspector */
 
-.app {
+/*
+ * Everything, with room above it for a notice when there is one.
+ *
+ * The app itself takes whatever height is left, so a strip appearing at the
+ * top moves the app down rather than covering the bar it lands on.
+ */
+.frame {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   background: var(--bg);
   color: var(--txt);
@@ -252,15 +265,39 @@
   gap: 16px;
 }
 
-/* Narrow windows: the inspector is supporting detail, so it goes first. */
+/*
+ * Narrow windows.
+ *
+ * The instrument inspector is supporting detail — the engine light, the reverb
+ * and tilt knobs, the EQ — so it goes first and nothing is lost but a glance.
+ *
+ * The sound design panel is not. It is where a sound is chosen, described,
+ * stacked, edited and exported, and hiding it leaves a timeline you can drop
+ * sounds onto and nothing else: no way to say which sound, no way to get a
+ * file out. Measured at 880px, that screen was a dead end. So it narrows
+ * instead, and keeps narrowing, but it never goes away.
+ */
 @media (max-width: 900px) {
-  .inspector {
+  .inspector:not(.inspector--work) {
     display: none;
+  }
+
+  .inspector--work {
+    flex: 0 1 250px;
+    min-width: 214px;
+    padding: 12px 12px 20px;
   }
 }
 
 @media (max-width: 640px) {
   .rail {
     width: 52px;
+  }
+
+  .inspector--work {
+    flex: 0 1 208px;
+    min-width: 186px;
+    padding: 10px 10px 18px;
+    font-size: 12px;
   }
 }

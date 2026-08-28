@@ -81,11 +81,23 @@ between projects — the sounds you saved, the packs you loaded, the patterns
 on the instruments — is left alone, because starting a new piece is not the
 same as forgetting your own sounds.
 
-Two things are worth knowing. A very long clip can be larger than the browser
-will store, and when that happens it says so in the timeline bar: the piece is
-kept either way, and only the clip has to be loaded again. And a browser
-clearing its own storage can take the clip and leave the piece, in which case
-the timeline comes back on its own and asks for the clip.
+Takes come back too, and so do your patterns, your packs and the sounds you
+saved. Everything except the audio engine's own idea of what is playing.
+
+**Two tabs.** Only one tab keeps the piece. Open the app a second time and that
+tab says so in a red line across the top, and works normally without writing
+anything down. "Keep here instead", on that line, hands the keeping over and
+writes whatever that tab has, including anything done while it was shut out.
+Close the tab that was keeping and the other picks it up on its own within a
+few seconds. Without this, two tabs both wrote to one place, the last to save
+won, and the other tab carried on drawing sounds that were no longer stored
+anywhere.
+
+Two other things are worth knowing. A very long clip can be larger than the
+browser will store, and when that happens it says so in the timeline bar: the
+piece is kept either way, and only the clip has to be loaded again. And a
+browser clearing its own storage can take the clip and leave the piece, in
+which case the timeline comes back on its own and asks for the clip.
 
 "Save session" is still there, and still worth using: it writes a file, which
 is how a piece moves to another machine or outlives this browser.
@@ -643,10 +655,12 @@ Two settings change how recording works.
 
 ### Save your work
 
-Your patterns, your tempo, the sounds you saved and the packs you loaded are
-all kept in the browser, as is whatever is on the timeline. Takes are not:
-they are recorded audio, and they last as long as the page does, so export the
-ones you want to keep.
+Your patterns, your tempo, the sounds you saved, the packs you loaded, whatever
+is on the timeline and your takes are all kept in the browser. A take is kept
+as the recording it was rather than as decoded audio, which is why it is a few
+tens of kilobytes rather than a few tens of megabytes; the audio is worked out
+again the first time you play it back. "New project" leaves takes alone: they
+belong to the instruments, not to the piece.
 
 There are three export formats.
 
@@ -743,7 +757,8 @@ src/
   constants.ts     lanes, pad mapping, chords, tuning, the starter pattern
   pattern.ts       creating and editing patterns
   persist.ts       reading and writing saved state
-  keep.ts          keeping the piece and its clip between visits
+  keep.ts          keeping the piece, its clip and the takes between visits,
+                   and settling which tab does the keeping
   types.ts         shared types
   sound-design-session.ts every action the sound design screen can perform
   audio/
@@ -774,6 +789,7 @@ src/
     save.ts        handing a file to the browser
   ui/              one file per part of the interface
     help.ts        the help panel, and the small "?" that opens it at a section
+    keep-notice.ts the line saying another tab is keeping the piece
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
   styles/          design tokens and stylesheets
