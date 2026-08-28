@@ -991,7 +991,16 @@
  * the packs off the bottom of the screen.
  */
 .pick-row--scroll {
-  max-height: 190px;
+  /*
+   * A whole number of rows.
+   *
+   * A half-cut row reads as a rendering fault rather than as a list that
+   * continues. Measured, a pick is 26px and the gap is 4px, so rows repeat
+   * every 30px; with 2px of padding either side, N rows come to exactly 30N.
+   * Five of them here. 190px and then 164px were both guesses and both landed
+   * mid-row.
+   */
+  max-height: 150px;
   overflow-y: auto;
   /* Away from the scrollbar, and enough that a focus ring is not clipped. */
   padding: 2px 6px 2px 2px;
@@ -1290,4 +1299,92 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------- groups that open one at a time ---------- */
+
+.pick-group__title--opens {
+  display: flex;
+  align-items: center;
+  /* Not space-between, which the plain title uses to push a pack's remove
+     control to the far edge — here it would fling the group's own name there. */
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pick-group__caret,
+.section-title__caret {
+  width: 0;
+  height: 0;
+  flex: none;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  opacity: 0.5;
+  transition: transform 120ms ease;
+}
+
+.pick-group:not(.pick-group--shut) > .pick-group__title--opens .pick-group__caret,
+.folds:not(.folds--shut) .section-title__caret {
+  transform: rotate(90deg);
+}
+
+.pick-group--shut > .pick-row {
+  display: none;
+}
+
+/* ---------- sections that fold, and stay as you left them ---------- */
+
+.folds__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-title--folds {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folds--shut > .folds__body {
+  display: none;
+}
+
+/*
+ * The three import actions and their help dot.
+ *
+ * Three equal columns clipped "Save credits" to "Save cre" at this width, so
+ * they wrap instead: as many as fit, each wide enough to read.
+ */
+.pick-actions--three {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.pick-actions--three .chip {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.found__audio {
+  display: none;
 }

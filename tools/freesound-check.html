@@ -20,6 +20,7 @@
     FreesoundError, LICENCES, licenceName,
   } from '/src/audio/freesound.ts';
   import { creditLine } from '/src/audio/samples.ts';
+  import { serveFreesound, askFrom } from '/src/audio/freesound-proxy.ts';
 
   const results = [];
   const check = (name, pass, detail = '') => results.push({ name, pass, detail });
@@ -50,36 +51,26 @@
     ],
   };
 
-  // ---------- the URL ----------
+  // ---------- the URL, which is now this app's own ----------
+  const HERE = 'http://app.example';
   {
-    const u = new URL(searchUrl('KEY123', 'door slam'));
-    check('the search hits the documented endpoint',
-      u.origin + u.pathname === 'https://freesound.org/apiv2/search/text/', u.origin + u.pathname);
-    check('the key goes in the query, so no preflight is needed',
-      u.searchParams.get('token') === 'KEY123', 'token=' + u.searchParams.get('token'));
-    check('the query is passed through', u.searchParams.get('query') === 'door slam');
-    check('only the fields that are used are asked for',
-      (u.searchParams.get('fields') ?? '').includes('previews') &&
-      !(u.searchParams.get('fields') ?? '').includes('analysis'),
-      u.searchParams.get('fields'));
-    check('no filter is sent when none was asked for', u.searchParams.get('filter') === null);
+    const u = new URL(searchUrl('door slam'), HERE);
+    check('the search goes to this app, not to freesound.org',
+      u.origin === HERE && u.pathname === '/api/freesound', u.origin + u.pathname);
+    check('no key anywhere in it',
+      !u.search.toLowerCase().includes('token') && !u.search.toLowerCase().includes('key'), u.search);
+    check('the query is passed through', u.searchParams.get('query' ) === null && u.searchParams.get('q') === 'door slam', u.search);
+    check('no licence filter unless one was asked for', u.searchParams.get('licence') === null);
   }
   {
-    const u = new URL(searchUrl('K', 'rain', { licence: 'Creative Commons 0', maxSeconds: 5 }));
-    const f = u.searchParams.get('filter');
-    check('a licence and a length become one filter',
-      f === 'license:"Creative Commons 0" duration:[0 TO 5]', f);
+    const u = new URL(searchUrl('rain', { licence: 'Creative Commons 0' }), HERE);
+    check('a licence is passed for the server to turn into a filter',
+      u.searchParams.get('licence') === 'Creative Commons 0', u.search);
   }
   {
-    const u = new URL(searchUrl('K', 'x', { perPage: 9999, page: -3 }));
-    check('a silly page size is brought back into range',
-      u.searchParams.get('page_size') === '150' && u.searchParams.get('page') === '1',
-      `size ${u.searchParams.get('page_size')}, page ${u.searchParams.get('page')}`);
-  }
-  {
-    const u = new URL(searchUrl('K', 'a b & c=d'));
+    const u = new URL(searchUrl('a b & c=d'), HERE);
     check('a query with punctuation survives being put in a URL',
-      u.searchParams.get('query') === 'a b & c=d', u.searchParams.get('query'));
+      u.searchParams.get('q') === 'a b & c=d', u.searchParams.get('q'));
   }
 
   // ---------- reading a reply ----------
@@ -118,8 +109,10 @@
 
   // ---------- what the faults say ----------
   {
-    check('a bad key says the key is bad, and where to get one',
-      faultFor(401).kind === 'rejected' && faultFor(401).message.includes('apply'), faultFor(401).message);
+    // The key is the deployment's now, so the message names whose it is:
+    // nobody using the app can fix a key they do not have.
+    check('a refused key is named as the deployment\u2019s, not the user\u2019s',
+      faultFor(401).kind === 'rejected' && faultFor(401).message.includes('deployment'), faultFor(401).message);
     check('403 is read as a key problem too', faultFor(403).kind === 'rejected');
     check('a quota says to wait', faultFor(429).kind === 'quota', faultFor(429).message);
     check('anything else carries its status', faultFor(500).message.includes('500'), faultFor(500).message);
@@ -131,34 +124,36 @@
   const dead = () => async () => { throw new TypeError('Failed to fetch'); };
 
   {
-    const page = await search('K', 'door', {}, ok(REPLY));
+    const page = await search('door', {}, ok(REPLY));
     check('a good search returns its sounds', page.sounds.length === 2);
   }
   {
+    const reply = async () => new Response(
+      JSON.stringify({ error: 'not-configured', message: 'This deployment has no Freesound key set, so searching the web is off.' }),
+      { status: 503 });
     let fault = null;
-    try { await search('', 'door', {}, ok(REPLY)); } catch (e) { fault = e.fault; }
-    check('no key is caught before the network is touched',
-      fault?.kind === 'no-key' && fault.message.includes('apply'), fault?.message);
+    try { await search('door', {}, reply); } catch (e) { fault = e.fault; }
+    check('a deployment with no key reports it as off, not as broken',
+      fault?.kind === 'off' && fault.message.includes('no Freesound key'), fault?.message);
   }
   {
-    const page = await search('K', '   ', {}, dead());
+    const page = await search('   ', {}, dead());
     check('an empty query asks for nothing at all', page.sounds.length === 0 && page.total === 0);
   }
   {
     let fault = null;
-    try { await search('K', 'door', {}, dead()); } catch (e) { fault = e.fault; }
-    check('a fetch that throws is reported as unreachable, naming both causes',
-      fault?.kind === 'unreachable' && /offline/.test(fault.message) && /cross-origin/.test(fault.message),
-      fault?.message);
+    try { await search('door', {}, dead()); } catch (e) { fault = e.fault; }
+    check('a fetch that throws is the app\u2019s own server, same origin now',
+      fault?.kind === 'unreachable' && /server/.test(fault.message), fault?.message);
   }
   {
     let fault = null;
-    try { await search('K', 'door', {}, status(401)); } catch (e) { fault = e.fault; }
+    try { await search('door', {}, status(401)); } catch (e) { fault = e.fault; }
     check('a rejected key is not reported as an outage', fault?.kind === 'rejected');
   }
   {
     let fault = null;
-    try { await search('K', 'door', {}, async () => new Response('<html>oops', { status: 200 })); }
+    try { await search('door', {}, async () => new Response('<html>oops', { status: 200 })); }
     catch (e) { fault = e.fault; }
     check('a 200 that is not JSON is caught', fault?.kind === 'unexpected', fault?.message);
   }
@@ -230,8 +225,77 @@
     const page = readPage(REPLY);
     let fault = null;
     try { await fetchSound(page.sounds[0], dead()); } catch (e) { fault = e.fault; }
-    check('a download that fails blames the audio host, not the key',
-      fault?.kind === 'unreachable' && fault.message.includes('audio host'), fault?.message);
+    check('a download that fails says so without blaming the key',
+      fault?.kind === 'unreachable', fault?.message);
+  }
+
+  // ---------- the proxy, which is where the key lives ----------
+  const ask = (q) => askFrom(new URL('http://x/api/freesound?' + q));
+  const bodyOf = (reply) => typeof reply.body === 'string' ? JSON.parse(reply.body) : reply.body;
+
+  {
+    const reply = await serveFreesound(ask('what=search&q=door'), undefined, dead());
+    check('with no key set, it says so rather than failing',
+      reply.status === 503 && bodyOf(reply).error === 'not-configured', bodyOf(reply).message);
+  }
+  {
+    /*
+     * The open-proxy check. Without it anyone could hand this endpoint any
+     * address and have the deployment fetch it for them.
+     */
+    const cases = [
+      ['https://example.com/evil.mp3', false],
+      ['http://freesound.org/x.mp3', false],
+      ['https://freesound.org.evil.com/x.mp3', false],
+      ['https://notfreesound.org/x.mp3', false],
+      ['file:///etc/passwd', false],
+      ['http://169.254.169.254/latest/meta-data/', false],
+      ['not a url at all', false],
+      ['https://freesound.org/data/previews/1/1_-hq.mp3', true],
+      ['https://cdn.freesound.org/previews/4/4948_-hq.mp3', true],
+    ];
+    const wrong = [];
+    for (const [from, shouldPass] of cases) {
+      const reply = await serveFreesound(
+        ask('what=sound&from=' + encodeURIComponent(from)), 'KEY',
+        async () => new Response(new Uint8Array([1,2,3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } }),
+      );
+      const passed = reply.status === 200;
+      if (passed !== shouldPass) wrong.push(`${from} -> ${reply.status}`);
+    }
+    check('only Freesound addresses are fetched', wrong.length === 0,
+      wrong.join(' | ') || `${cases.length} addresses, ${cases.filter(c=>c[1]).length} allowed`);
+  }
+  {
+    let sent = null;
+    await serveFreesound(ask('what=search&q=door+slam&licence=Creative Commons 0'), 'SECRET', async (u) => {
+      sent = u; return new Response(JSON.stringify({ count: 0, results: [] }), { status: 200 });
+    });
+    check('the search carries the key and the filter', 
+      (sent??'').includes('token=SECRET') && (sent??'').includes('Creative+Commons+0'), (sent??'').slice(0, 100));
+    check('and a length filter, so it does not return field recordings',
+      (sent??'').includes('duration'), 'duration:[0 TO 30]');
+  }
+  {
+    // The key must never come back out, and an upstream error can quote the
+    // request — which has the key in it — straight back at us.
+    const reply = await serveFreesound(ask('what=search&q=x'), 'SECRET', async () =>
+      new Response('detail: bad token in https://freesound.org/apiv2/?token=SECRET', { status: 401 }));
+    const text = typeof reply.body === 'string' ? reply.body : '';
+    check('an upstream error never echoes the key back',
+      !text.includes('SECRET'), text.slice(0, 80));
+    check('but it does say the key was refused', bodyOf(reply).message.includes('refused'), bodyOf(reply).message);
+  }
+  {
+    const reply = await serveFreesound(ask('what=search&q=x'), 'K', async () => new Response('', { status: 429 }));
+    check('a quota is passed on as a quota', reply.status === 429 && bodyOf(reply).message.includes('rate limiting'),
+      bodyOf(reply).message);
+  }
+  {
+    const reply = await serveFreesound(ask('what=nonsense'), 'K', dead());
+    check('an unknown request is refused before any fetch', reply.status === 400, bodyOf(reply).message);
+    const empty = await serveFreesound(ask('what=search&q=  '), 'K', dead());
+    check('an empty query costs no request', empty.status === 200 && bodyOf(empty).results.length === 0);
   }
 
   say();

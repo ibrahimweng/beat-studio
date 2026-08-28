@@ -7,15 +7,14 @@
  *
  * ---
  *
- * **What is verified here and what is not.** Everything below that shapes a
- * request or reads a response is tested against recorded and synthetic
- * replies in `tools/freesound-check.html`: the URL that gets built, the
- * parsing, the credit that comes out, what happens on a bad key, on a quota,
- * on an empty result, on a malformed body. The one thing that could not be
- * tested is the network call itself, because freesound.org is not reachable
- * from where this was written. So the request shape is written from the
- * published API and may be wrong in some detail, and the failure path is
- * built to say which of those two it is rather than to fail quietly.
+ * **The key is not here.** This talks to the app's own `/api/freesound`,
+ * which holds the key in the deployment's environment and asks Freesound on
+ * the browser's behalf — see `freesound-proxy.ts`. A key compiled into the
+ * bundle would still be in the browser, and one typed into a field is a
+ * credential put in front of somebody who came here to place a door slam.
+ *
+ * It also means every request this makes is same-origin, so there is no
+ * cross-origin question to answer for the search or for the audio.
  *
  * **Previews, not originals.** Freesound serves a preview of every sound
  * without authentication; the original file needs an OAuth2 round trip with a
@@ -35,16 +34,8 @@
 import type { Credit } from './samples.ts';
 
 /** Where the API lives. */
-const API = 'https://freesound.org/apiv2';
-
-/**
- * The fields asked for.
- *
- * Named explicitly because the default response carries a great deal nobody
- * here needs — analysis vectors, spectral images, similar-sound links — and a
- * page of those is a slow request for no reason.
- */
-const FIELDS = 'id,name,username,license,duration,previews,url,filesize,tags';
+/** The app's own endpoint. What is beyond it is the proxy's business. */
+const API = '/api/freesound';
 
 /** One sound as Freesound describes it. */
 export interface Found {
@@ -63,7 +54,7 @@ export interface Found {
 
 /** What went wrong, in terms someone can act on. */
 export type FreesoundFault =
-  | { kind: 'no-key'; message: string }
+  | { kind: 'off'; message: string }
   | { kind: 'rejected'; message: string }
   | { kind: 'quota'; message: string }
   | { kind: 'unreachable'; message: string }
@@ -110,34 +101,22 @@ export interface SearchOptions {
 }
 
 /**
- * The URL for a search.
+ * The URL for a search, on this app's own origin.
  *
- * Exported so it can be tested without a network, which is most of what can
- * be tested about a client for an API that cannot be reached from here.
- *
- * The key goes in the query string rather than an `Authorization` header on
- * purpose. A custom header makes the request non-simple, so the browser sends
- * a preflight `OPTIONS` first, and a preflight is one more thing that has to
- * be allowed on the far end. The published API accepts the key either way, so
- * this takes the way with fewer moving parts.
+ * Exported so it can be checked without a network.
  */
-export function searchUrl(key: string, query: string, options: SearchOptions = {}): string {
-  const filters: string[] = [];
-  if (options.licence) filters.push(`license:"${options.licence}"`);
-  if (options.maxSeconds) filters.push(`duration:[0 TO ${options.maxSeconds}]`);
-
-  const params = new URLSearchParams({
-    query,
-    fields: FIELDS,
-    page_size: String(Math.min(150, Math.max(1, options.perPage ?? 30))),
-    page: String(Math.max(1, options.page ?? 1)),
-    token: key,
-  });
-  if (filters.length) params.set('filter', filters.join(' '));
-
-  return `${API}/search/text/?${params.toString()}`;
+export function searchUrl(query: string, options: SearchOptions = {}): string {
+  const params = new URLSearchParams({ what: 'search', q: query });
+  if (options.licence) params.set('licence', options.licence);
+  return `${API}?${params.toString()}`;
 }
 
+/** The URL for one sound's audio, fetched through the same endpoint. */
+export function soundUrl(sound: Found): string {
+  return `${API}?${new URLSearchParams({ what: 'sound', from: sound.preview }).toString()}`;
+}
+
+/** Whether a value is an object we can read fields off. */
 /**
  * A licence, as something readable, whatever form it arrived in.
  *
@@ -242,13 +221,13 @@ export function faultFor(status: number): FreesoundFault {
   if (status === 401 || status === 403) {
     return {
       kind: 'rejected',
-      message: 'Freesound would not accept that API key. Check it at freesound.org/apiv2/apply/',
+      message: "This deployment's Freesound key was refused.",
     };
   }
   if (status === 429) {
     return {
       kind: 'quota',
-      message: 'Freesound is rate limiting this key. Wait a minute and try again.',
+      message: 'Freesound is rate limiting this deployment. Wait a minute and try again.',
     };
   }
   return { kind: 'unexpected', message: `Freesound answered with ${status}` };
@@ -261,40 +240,43 @@ export function faultFor(status: number): FreesoundFault {
  * is the only way any of this could be checked from where it was written.
  */
 export async function search(
-  key: string,
   query: string,
   options: SearchOptions = {},
   fetching: typeof fetch = fetch,
 ): Promise<Page> {
-  if (!key.trim()) {
-    throw new FreesoundError({
-      kind: 'no-key',
-      message: 'A Freesound API key is needed. Get one free at freesound.org/apiv2/apply/',
-    });
-  }
   if (!query.trim()) return { sounds: [], total: 0, more: false };
 
   let reply: Response;
   try {
-    reply = await fetching(searchUrl(key, query.trim(), options));
+    reply = await fetching(searchUrl(query.trim(), options));
   } catch {
-    /*
-     * A fetch that throws rather than answering is not the same as a refusal,
-     * and the browser will not say which it was: a blocked cross-origin
-     * request and an unplugged network both arrive here as a bare TypeError.
-     * Saying both, rather than guessing one, is the difference between
-     * somebody checking the right thing and rewriting their key twice.
-     */
+    // Same-origin now, so this is the app's own server being unreachable
+    // rather than anything to do with Freesound or with a browser policy.
     throw new FreesoundError({
       kind: 'unreachable',
-      message:
-        'Could not reach Freesound. Either this browser is offline, or the ' +
-        'request was blocked before it left — a cross-origin block looks the ' +
-        'same from here. Anything downloaded by hand can still be dropped in.',
+      message: 'Could not reach the server. Everything already in your library still works.',
     });
   }
 
-  if (!reply.ok) throw new FreesoundError(faultFor(reply.status));
+  if (!reply.ok) {
+    /*
+     * The proxy says what went wrong in terms of the deployment, which is
+     * where the fault actually lies now: nobody using the app can fix a key
+     * they do not have, so the message says whose problem it is.
+     */
+    let said = '';
+    let kind: FreesoundFault['kind'] = 'unexpected';
+    try {
+      const body = (await reply.json()) as { error?: string; message?: string };
+      said = typeof body.message === 'string' ? body.message : '';
+      if (body.error === 'not-configured') kind = 'off';
+      else if (reply.status === 401 || reply.status === 403) kind = 'rejected';
+      else if (reply.status === 429) kind = 'quota';
+    } catch {
+      // A proxy that did not answer in JSON is answering for something else.
+    }
+    throw new FreesoundError(said ? { kind, message: said } : faultFor(reply.status));
+  }
 
   try {
     return readPage(await reply.json());
@@ -333,7 +315,7 @@ export async function fetchSound(
 ): Promise<File> {
   let reply: Response;
   try {
-    reply = await fetching(sound.preview);
+    reply = await fetching(soundUrl(sound));
   } catch {
     throw new FreesoundError({
       kind: 'unreachable',
