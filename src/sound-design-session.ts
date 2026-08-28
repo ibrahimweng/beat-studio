@@ -1009,9 +1009,31 @@ export class SoundDesignSession {
     this.preview(source, preset);
   }
 
-  /** Hear a sound as it would arrive, without putting it anywhere. */
+  /**
+   * Hear a sound as it would arrive, without putting it anywhere.
+   *
+   * Given room to be its full length, which takes explaining.
+   *
+   * Four voices — riser, swell, reverse and zip — finish on their marker
+   * rather than starting from it, because the whole point of a riser is to
+   * lead into something. {@link cueLength} therefore clamps them to how much
+   * timeline lies before them: a riser dropped at 0.3 s is 0.3 s long, since
+   * it cannot begin before the piece does. That is right for a placed sound.
+   *
+   * It is wrong here. This cue is never placed anywhere — it exists to be
+   * heard once — so building it at zero gave it no room at all, and clicking
+   * any of those four in the palette played the 0.2 second stub their own
+   * minimum length allows instead of the sound. A hundred of the thousand
+   * library entries could not be auditioned, which is most of the reason
+   * riser, swell and reverse measured as indistinguishable from each other:
+   * three 0.2 second noise blips are indistinguishable.
+   *
+   * Placing it at its own length puts its start at zero and gives it all of
+   * itself, for the two anchors alike.
+   */
   preview(source: CueSource, preset: CuePreset | null = null): void {
-    this.audition(dressCue(makeCue(0, this.#store.state.activeLayerId, source), preset));
+    const cue = dressCue(makeCue(0, this.#store.state.activeLayerId, source), preset);
+    this.audition(cue.anchor === 'end' ? { ...cue, time: cue.length } : cue);
   }
 
   /**

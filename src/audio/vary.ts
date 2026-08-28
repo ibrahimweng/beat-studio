@@ -247,9 +247,23 @@ function varySource(source: SourceSpec, take: Take, seed: number, amount: number
       // together. Nothing else here is honest to move.
       return { ...source, rate: (source.rate ?? 1) * take.bend };
 
-    // A buffer read backwards, and plain noise, are already a different draw
-    // every time from the seed the cue had. Only the envelope and the filter
-    // around them move.
+    case 'reverse':
+      /*
+       * The pitch of the body being reversed.
+       *
+       * This was left alone, on the grounds that a buffer read backwards
+       * redraws its noise from the cue's seed and so arrives varied without
+       * help. That stopped being true when the voice became a struck body at
+       * roughly a tenth noise rather than a tone at six tenths: with so
+       * little noise left to redraw, two placements measured 99.9% alike —
+       * six copies of one file, which is the thing all of this exists to
+       * prevent. It is an object now, so it varies the way the other struck
+       * objects do.
+       */
+      return { ...source, freq: source.freq * take.bend };
+
+    // Plain noise is already a different draw every time from the seed the
+    // cue had. Only the envelope and the filter around it move.
     default:
       return source;
   }

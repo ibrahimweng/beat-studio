@@ -97,11 +97,11 @@ export interface NoiseSource {
  */
 export interface ReverseSource {
   kind: 'reverse';
-  /** Hz of the tone mixed in with the noise. */
+  /** Hz of the lowest partial of the body being struck. */
   freq: number;
   /** How sharply it decays before being turned round. */
   shape: number;
-  /** How much of it is noise, 0 to 1. The rest is the tone. */
+  /** How much of it is noise, 0 to 1. The rest is the body ringing. */
   air: number;
 }
 
@@ -608,6 +608,23 @@ function through(
   cursor.connect(dest);
 }
 
+/**
+ * What is decaying before it gets turned round.
+ *
+ * Inharmonic, and each partial with a life of its own — the higher ones die
+ * first, as they do on anything struck. Reversed, that becomes the thing this
+ * voice is for: the top arrives last, so the sound brightens as it grows and
+ * then stops. A single sine cannot do that. It was one, and the result was a
+ * hum inside a noise swell rather than a hit backwards.
+ */
+const REVERSED_BODY: readonly (readonly [ratio: number, gain: number, life: number])[] = [
+  [1, 1, 1],
+  [2.37, 0.55, 0.62],
+  [3.91, 0.3, 0.42],
+  [5.62, 0.17, 0.3],
+  [8.09, 0.09, 0.22],
+];
+
 function reverseBuffer(
   ctx: BaseAudioContext,
   seconds: number,
@@ -617,11 +634,21 @@ function reverseBuffer(
   const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
-  const step = (2 * Math.PI * source.freq) / ctx.sampleRate;
   const tone = 1 - source.air;
+  const rate = ctx.sampleRate;
+
   for (let i = 0; i < length; i++) {
-    const decay = Math.pow(1 - i / length, source.shape);
-    data[i] = ((random() * 2 - 1) * source.air + Math.sin(i * step) * tone) * decay;
+    const along = i / length;
+    const decay = Math.pow(1 - along, source.shape);
+
+    let body = 0;
+    for (const [ratio, gain, life] of REVERSED_BODY) {
+      // Shorter life, faster decay, so the partial is gone sooner.
+      body += Math.sin((i * (2 * Math.PI * source.freq * ratio)) / rate) *
+        gain * Math.pow(1 - along, source.shape / life);
+    }
+
+    data[i] = (random() * 2 - 1) * source.air * decay + body * tone * 0.55;
   }
   data.reverse();
   return buffer;

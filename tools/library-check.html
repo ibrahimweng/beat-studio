@@ -10,6 +10,7 @@
   import { DESIGN_NAMES, DESIGN_DEFAULT_LENGTH, DESIGN_CHARACTER } from '/src/timeline/types.ts';
   import { MAX_LENGTH, MIN_LENGTH, makeCue, dressCue } from '/src/timeline/project.ts';
   import { playCue } from '/src/audio/sources.ts';
+  import { placed } from '/tools/place.js';
 
   const results = [];
   const check = (name, pass, detail) => results.push({ name, pass, detail });
@@ -110,7 +111,7 @@
    * an afternoon could be spent tuning against the difference.
    */
   async function render(entry, id = `fixed:${entry.id ?? entry.voice}`) {
-    const cue = dressCue(makeCue(0, 'check', { kind: 'design', name: entry.voice }), entry);
+    const cue = placed(dressCue(makeCue(0, 'check', { kind: 'design', name: entry.voice }), entry));
     // The room is added after the sound, so the window has to hold both.
     const seconds = Math.min(6, entry.length + 0.5 + entry.space * 2.6);
     const ctx = new OfflineAudioContext(1, Math.ceil(RATE * seconds), RATE);
