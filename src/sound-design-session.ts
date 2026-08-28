@@ -28,7 +28,8 @@ import {
 } from './audio/samples.ts';
 import { looksLikeZip, readZip } from './audio/zip.ts';
 import { readTable, stemOf, type Described } from './audio/sidecar.ts';
-import { creditFor, fetchSound, FreesoundError, type Found } from './audio/freesound.ts';
+import { alreadyStocked, markStocked, SHELVES, STOCK_TOTAL } from './audio/stock.ts';
+import { creditFor, fetchSound, FreesoundError, search, type Found } from './audio/freesound.ts';
 import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
@@ -97,6 +98,8 @@ interface TakeEntry {
   name: string;
   credit?: Credit;
   tags?: readonly string[];
+  /** The id to file it under, when the caller needs to know it in advance. */
+  id?: string;
 }
 
 /** What is worth pulling out of an archive. */
@@ -417,6 +420,163 @@ export class SoundDesignSession {
   }
 
   /**
+   * Sounds fetched to be heard, not yet asked for.
+   *
+   * Clicking a Freesound result plays it and arms it, which means it has to
+   * be in the sample store — a placed sound names a recording by id, so
+   * nothing can be armed that is not there. But somebody working through
+   * twenty results wanted to hear twenty sounds, not to acquire twenty, and
+   * a library that fills up with everything you ever clicked is a library
+   * you have to tidy.
+   *
+   * So they go in, and their ids go here. What is in here is left out of what
+   * gets written down, and cleared when the search moves on. Placing one
+   * takes it off this list, which is the moment it stops being something you
+   * were listening to and becomes something you are using.
+   */
+  #onLoan = new Set<string>();
+
+  /**
+   * Hear a Freesound result now, and arm it.
+   *
+   * The same gesture as clicking anything else in the palette, which is what
+   * it should have been from the start: search, Keep, wait, scroll to the
+   * recordings, click it, place it was five steps to hear one sound, against
+   * one for a sound this app makes.
+   *
+   * The preview starts through an audio element the instant it is asked for,
+   * so there is sound while the file is still arriving. The download and the
+   * arming happen behind that.
+   */
+  async tryFreesound(sound: Found): Promise<void> {
+    this.#wake();
+    const already = samples().find((s) => s.credit?.url === sound.url);
+    if (already) {
+      this.chooseSource({ kind: 'sample', name: already.id });
+      return;
+    }
+
+    this.#store.set({ status: `fetching ${sound.name}…` });
+    try {
+      const file = await fetchSound(sound);
+      const id = newId('s');
+      const took = await this.#take([
+        {
+          path: file.name,
+          blob: file,
+          name: sound.name,
+          credit: creditFor(sound),
+          tags: ['preview', ...sound.tags.slice(0, 6).map((t) => t.toLowerCase())],
+          id,
+        },
+      ]);
+      if (!took) {
+        this.#store.set({ status: `could not read ${sound.name}` });
+        return;
+      }
+      this.#onLoan.add(id);
+      this.#store.set({ samples: [...samples()] });
+      // Armed and played, exactly as a palette sound is when it is clicked.
+      this.chooseSource({ kind: 'sample', name: id });
+    } catch (error) {
+      this.#store.set({
+        status: error instanceof Error ? error.message : `could not fetch ${sound.name}`,
+      });
+    }
+  }
+
+  /**
+   * Fill the shelves, once, behind whatever is going on.
+   *
+   * A first visit arrives to an empty recordings list, and the two ways to
+   * fix that — drop a folder in, or search and click — are both a job to do
+   * before any work starts. This does it instead: sixty CC0 recordings across
+   * the categories this kind of work reaches for, fetched in the background.
+   *
+   * Everything about it is deliberately unassertive. It does not run for
+   * anybody who already has recordings, it does not run twice, it never
+   * blocks, it says what it is doing in the status line and nowhere else, and
+   * a deployment with no key simply skips it. If it fails halfway, what
+   * arrived stays and it does not try again. See `audio/stock.ts`.
+   */
+  async stockLibrary(): Promise<void> {
+    if (alreadyStocked() || samples().length) return;
+    markStocked('done');
+
+    let got = 0;
+    for (const shelf of SHELVES) {
+      let page;
+      try {
+        page = await search(shelf.find, { licence: 'Creative Commons 0' });
+      } catch (error) {
+        /*
+         * A deployment with no key is the ordinary case, not a failure, and
+         * the app is complete without any of this — so it goes quiet rather
+         * than reporting something nobody asked for.
+         */
+        if (error instanceof FreesoundError && error.fault.kind === 'off') return;
+        continue;
+      }
+
+      for (const sound of page.sounds.slice(0, shelf.take)) {
+        try {
+          const file = await fetchSound(sound);
+          const took = await this.#take([
+            {
+              path: file.name,
+              blob: file,
+              name: sound.name,
+              credit: creditFor(sound),
+              // The shelf it came off, so the library arrives already filed.
+              tags: [shelf.of, 'preview', ...sound.tags.slice(0, 4).map((t) => t.toLowerCase())],
+            },
+          ]);
+          if (!took) continue;
+        } catch {
+          continue;
+        }
+        got++;
+        // Written down as it goes, so a tab closed halfway keeps what arrived.
+        this.#keepSamples();
+        this.#store.set({
+          samples: [...samples()],
+          status: `filling the shelves · ${got} of ${STOCK_TOTAL}`,
+        });
+        // Let the page draw and stay usable while this runs.
+        await new Promise((done) => setTimeout(done, 0));
+      }
+    }
+
+    this.#store.set({
+      samples: [...samples()],
+      status: got ? `${got} recordings ready to use` : '',
+    });
+  }
+
+  /** Forget anything fetched to be heard and never used. */
+  releaseLoans(): void {
+    if (!this.#onLoan.size) return;
+    const armed = this.#store.state.currentSource;
+    const inUse = new Set<string>();
+    for (const cue of this.project.cues) {
+      if (cue.source.kind === 'sample') inUse.add(cue.source.name);
+      for (const part of cue.source.with ?? []) {
+        if (part.kind === 'sample') inUse.add(part.name);
+      }
+    }
+    // Whatever is armed stays: it was clicked a moment ago and is about to be
+    // placed, which is the whole reason it was fetched.
+    if (armed.kind === 'sample') inUse.add(armed.name);
+
+    for (const id of [...this.#onLoan]) {
+      if (inUse.has(id)) continue;
+      forgetSample(id);
+      this.#onLoan.delete(id);
+    }
+    this.#store.set({ samples: [...samples()] });
+  }
+
+  /**
    * Take on sounds found on Freesound.
    *
    * The same destination as a dropped file, reached without the round trip
@@ -517,7 +677,7 @@ export class SoundDesignSession {
 
       addSample(
         {
-          id: newId('s'),
+          id: entry.id ?? newId('s'),
           name: entry.name || entry.path,
           duration: buffer.duration,
           blob: entry.blob,
@@ -646,7 +806,13 @@ export class SoundDesignSession {
      * any of it. Spreading and removing what cannot be written is the shape
      * that does not go wrong when the sample gains a field.
      */
-    void keepSamples(samples().map(({ ...rest }) => rest));
+    void keepSamples(
+      samples()
+        // Anything still on loan was fetched to be heard and has not been
+        // used, so it is not part of the library yet. See #onLoan.
+        .filter((sample) => !this.#onLoan.has(sample.id))
+        .map(({ ...rest }) => rest),
+    );
   }
 
   /**
@@ -1203,8 +1369,31 @@ export class SoundDesignSession {
     const cue = source ? makeCue(at, on, source) : this.#armedCue(at, on);
     this.#setProject({ ...this.project, cues: [...this.project.cues, cue] }, `place:${cue.id}`);
     this.#store.set({ selection: [cue.id] });
+    // Using a sound is what turns it from one you were listening to into one
+    // you have. See #onLoan.
+    this.#settle(cue);
     this.audition(cue);
     return cue;
+  }
+
+  /**
+   * A placed recording stops being on loan and is written down.
+   *
+   * Only the ones actually used, so auditioning a page of results leaves the
+   * library as it was and placing one adds exactly that one.
+   */
+  #settle(cue: Cue): void {
+    if (!this.#onLoan.size) return;
+    const used: string[] = [];
+    if (cue.source.kind === 'sample') used.push(cue.source.name);
+    for (const part of cue.source.with ?? []) {
+      if (part.kind === 'sample') used.push(part.name);
+    }
+    let kept = false;
+    for (const id of used) {
+      if (this.#onLoan.delete(id)) kept = true;
+    }
+    if (kept) this.#keepSamples();
   }
 
   /** Place a cue at the playhead. Used when playing an instrument while armed. */

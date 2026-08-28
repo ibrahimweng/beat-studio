@@ -270,7 +270,15 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   // Recordings likewise, and for the same reason: a piece using one draws it
   // at once from the length written down, and it gets its audio the first
   // time anything asks to hear it.
-  void heldSamples().then((list) => soundDesign.restoreSamples(list));
+  void heldSamples().then((list) => {
+    soundDesign.restoreSamples(list);
+    /*
+     * After what was kept, not before: the shelves are only filled for
+     * somebody who has no recordings at all, and until this has come back
+     * from the database nobody knows whether that is true.
+     */
+    void soundDesign.stockLibrary();
+  });
 
   if (kept?.videoName) {
     void heldVideo().then(async (file) => {

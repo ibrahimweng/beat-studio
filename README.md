@@ -882,6 +882,11 @@ browser's behalf, so the key is never in the bundle and never in anyone's
 browser — and because the page then talks only to its own origin, there is no
 cross-origin question to answer for the search or for the audio.
 
-Without a key the app runs exactly as it does now and the Freesound group
-never appears. Everything else — dragging in files, folders and zips — is
+With a key set, a first visit also fills the recordings with about sixty CC0
+sounds across the categories this kind of work reaches for, quietly and in the
+background. It happens once, never for somebody who already has recordings,
+and costs twelve searches rather than sixty.
+
+Without a key the app runs exactly as it does now: no Freesound group, no
+stocking, and everything else — dragging in files, folders and zips —
 unaffected.
