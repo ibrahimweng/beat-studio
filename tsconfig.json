@@ -18,6 +18,20 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    /*
+     * Required the moment anything here is compiled by something that emits.
+     *
+     * Every import in this codebase carries its `.ts` extension, which
+     * `allowImportingTsExtensions` permits — and that option is only legal
+     * alongside `noEmit`. Vite never emits through tsc, so nothing noticed
+     * until the first serverless function appeared: the platform's function
+     * builder has to emit JavaScript, hit TS5096 on the option itself, and
+     * failed the deployment in fourteen seconds while both CI builds stayed
+     * green. This rewrites `.ts` to `.js` on the way out, which makes the two
+     * options legal together and leaves the app build untouched, since with
+     * `noEmit` there is nothing to rewrite.
+     */
+    "rewriteRelativeImportExtensions": true,
     "resolveJsonModule": true
   },
   /*
