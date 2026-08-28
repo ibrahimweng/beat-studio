@@ -1,4 +1,5 @@
 import { packSpec } from '../audio/pack.ts';
+import { sampleById } from '../audio/samples.ts';
 import { PAD_MIDI } from '../constants.ts';
 import type { PadName } from '../types.ts';
 import type { AutoPoint } from './types.ts';
@@ -82,6 +83,9 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
   // A pack sound was written at a length of its own, so that is what it
   // starts at rather than a number this app picked.
   const packed = source.kind === 'pack' && source.pack ? packSpec(source.pack, source.name) : null;
+  // A recording was made at a length of its own, so that is what it starts at
+  // rather than a number this app picked.
+  const recorded = source.kind === 'sample' ? sampleById(source.name) : null;
   return {
     id: newId('c'),
     time: Math.max(0, time),
@@ -89,7 +93,9 @@ export function makeCue(time: number, layerId: string, source: CueSource): Cue {
     source,
     gain: 1,
     tune: 0,
-    length: design ? DESIGN_DEFAULT_LENGTH[design] : (packed?.duration ?? 0.4),
+    length: design
+      ? DESIGN_DEFAULT_LENGTH[design]
+      : (recorded?.duration ?? packed?.duration ?? 0.4),
     anchor: design ? DESIGN_DEFAULT_ANCHOR[design] : 'start',
     ...(design ? DESIGN_CHARACTER[design] : DEFAULT_CHARACTER[source.kind]),
     vary: DEFAULT_VARY,
@@ -573,6 +579,13 @@ function readPlainSource(source: Partial<CueSource>): CueSource | null {
     return typeof source.pack === 'string' && source.pack
       ? { kind: 'pack', name: source.name, pack: source.pack }
       : null;
+  }
+  if (source.kind === 'sample') {
+    // The recording itself may not be loaded yet, for the same reason a pack
+    // may not be: it lives in a store that has to be waited for. Only the
+    // shape is checked here, and a sound whose recording is missing is drawn
+    // and simply does not play.
+    return { kind: 'sample', name: source.name };
   }
   if (source.kind === 'pitched' && (source.name === 'piano' || source.name === 'guitar')) {
     return {

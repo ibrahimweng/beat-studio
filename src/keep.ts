@@ -291,9 +291,10 @@ function worthKeeping(project: Project): boolean {
 // ---------- the things too big for localStorage ----------
 
 const DB_NAME = 'toolcraft.st88';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const CLIP_STORE = 'clip';
 const TAKE_STORE = 'takes';
+const SAMPLE_STORE = 'samples';
 const CLIP_KEY = 'current';
 
 /** What is kept for a clip: the file itself, and what it was called. */
@@ -325,6 +326,7 @@ function openDb(): Promise<IDBDatabase | null> {
       // arriving from either earlier version ends up with the same shape.
       if (!db.objectStoreNames.contains(CLIP_STORE)) db.createObjectStore(CLIP_STORE);
       if (!db.objectStoreNames.contains(TAKE_STORE)) db.createObjectStore(TAKE_STORE);
+      if (!db.objectStoreNames.contains(SAMPLE_STORE)) db.createObjectStore(SAMPLE_STORE);
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
@@ -433,6 +435,54 @@ export async function heldTakes(): Promise<Take[]> {
       layered: take.layered === true,
       // Made again the first time it is played. See {@link HeldTake}.
       buffer: null,
+    }));
+}
+
+// ---------- recordings ----------
+
+/**
+ * What is kept for a recording: the file, and what was measured from it.
+ *
+ * The file rather than the decoded audio, for the same reason a take is kept
+ * that way — decoded is hundreds of times larger and can be made again in a
+ * moment. The duration is written down because the timeline needs a length to
+ * draw a placed sound with, long before anything has been clicked and there is
+ * an audio context to decode with.
+ */
+interface HeldSample {
+  id: string;
+  name: string;
+  duration: number;
+  blob: Blob;
+}
+
+/**
+ * Keep the recordings somebody has given the app.
+ *
+ * Their own store, and not cleared by "New project": a recording is a sound
+ * you brought, like a pack or a sound you saved, and starting a new piece is
+ * not the same as forgetting it.
+ */
+export async function keepSamples(list: readonly HeldSample[]): Promise<boolean> {
+  const done = await inStore(SAMPLE_STORE, 'readwrite', (store) =>
+    store.put(list.map(({ id, name, duration, blob }) => ({ id, name, duration, blob })), CLIP_KEY),
+  );
+  return done !== null;
+}
+
+/** The recordings from last time, undecoded. */
+export async function heldSamples(): Promise<HeldSample[]> {
+  const held = (await inStore<HeldSample[]>(SAMPLE_STORE, 'readonly', (store) =>
+    store.get(CLIP_KEY),
+  )) as HeldSample[] | null;
+  if (!Array.isArray(held)) return [];
+  return held
+    .filter((s) => s && typeof s.id === 'string' && s.blob instanceof Blob)
+    .map((s) => ({
+      id: s.id,
+      name: typeof s.name === 'string' ? s.name : 'recording',
+      duration: typeof s.duration === 'number' && s.duration > 0 ? s.duration : 0,
+      blob: s.blob,
     }));
 }
 

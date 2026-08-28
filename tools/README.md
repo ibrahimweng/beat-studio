@@ -745,6 +745,40 @@ version went from 1 to 2 when takes were added. Build a version 1 database with
 a clip in it by hand, then load the app, and the clip must still be there
 afterwards with a `takes` store beside it.
 
+## Checking recorded sound
+
+No page for this one: it needs a real file chosen through a real file input,
+which is a browser away from anything this folder can do.
+
+Make a short WAV by hand — a tone with a decay is easiest to recognise — and:
+
+- It arrives, and the button shows its length. A file that is not audio in the
+  same batch is named and left out rather than taking the others with it.
+- Placed, it lands at its own length and renders with real audio in it. Check
+  the peak and where the sound stops, not just that a cue appeared.
+- An octave up plays it in about half the time. That is the whole meaning of
+  Tune on a recording, and it is easy to wire so that only the pitch moves.
+- It survives a reload, and so does the piece using it.
+- "New project" leaves the recordings and clears the timeline.
+
+**The one that matters most: export from a fresh page.** Load, place, reload,
+press export without touching anything else, and read the samples out of the
+file. Before this was fixed that came out silent, because decoding needs an
+audio context, a browser withholds one until something is clicked, and pressing
+export is a click that never starts the engine. Playing first hid it — the
+piece sounded correct and the file was empty.
+
+Two things about measuring it, both of which cost time here:
+
+- **The app writes 24-bit WAV.** Reading it as 16-bit walks off the sample
+  boundary and reports silence for a file that is not silent. Always check a
+  reader against a control — export a synthesised sound and confirm the same
+  code finds audio in *that* — before believing it about anything else.
+- **Never probe the app's modules from `page.evaluate`.** A dynamic `import()`
+  gets its own instance in a Vite dev server, so `samples()` read that way came
+  back empty while the UI was drawing the recording and IndexedDB was holding
+  it. Assert on what is drawn and on the exported file.
+
 ## make-icons.mjs
 
 Draws the site icons.

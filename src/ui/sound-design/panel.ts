@@ -367,6 +367,34 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     ['Load a sound pack'],
   );
 
+  /* ---------- recordings of your own ---------- */
+
+  const sampleSections = el('div', {});
+  const sampleInput = el('input', {
+    type: 'file',
+    style: { display: 'none' },
+    attrs: { accept: 'audio/*', multiple: '' },
+    on: {
+      change: (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        void session.addSamples(Array.from(input.files ?? []));
+        input.value = '';
+      },
+    },
+  }) as HTMLInputElement;
+
+  const loadSamples = button(
+    {
+      class: 'chip chip--sm',
+      style: { width: '100%' },
+      title:
+        'Put your own recordings on the timeline. They get the same level, room, ' +
+        'push and automation everything else does, and stay in this browser.',
+      on: { click: () => sampleInput.click() },
+    },
+    ['Add recordings'],
+  );
+
   /* ---------- out of a recording ---------- */
 
   /**
@@ -1057,6 +1085,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       pitchedSection,
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
+      sampleSections,
+      el('div', { style: { marginTop: '6px' } }, [loadSamples, sampleInput, helpButton('recordings', 'your own recordings')]),
       heardBody,
       heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
@@ -1070,6 +1100,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   let paintedLayers: AppState['project']['layers'] | null = null;
   let paintedPacks: AppState['packs'] | null = null;
   let paintedMine: AppState['mine'] | null = null;
+  let paintedSamples: AppState['samples'] | null = null;
 
   /**
    * Rebuild the pack sections.
@@ -1078,10 +1109,15 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    * one by one. Cutting the section list back to the built in ones first is
    * what stops a removed pack's sounds going on being filtered and lit.
    */
-  function paintPacks(packs: AppState['packs'], mine: AppState['mine']): void {
+  function paintPacks(
+    packs: AppState['packs'],
+    mine: AppState['mine'],
+    recordings: AppState['samples'],
+  ): void {
     sections.length = builtIn;
     clear(mineSection);
     clear(packSections);
+    clear(sampleSections);
 
     if (mine.length) {
       mineSection.appendChild(
@@ -1121,6 +1157,38 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         ),
       );
     }
+
+    /*
+     * Recordings, in one group with a length on each.
+     *
+     * The length is on the button because it is the one thing about a
+     * recording the app cannot change: a voice stretches to whatever it is
+     * asked for, and a file is as long as it is. Knowing that before placing
+     * one is the difference between choosing and discovering.
+     */
+    if (recordings.length) {
+      const forget = button(
+        {
+          class: 'tl__layer-btn tl__layer-btn--remove',
+          title: 'Remove the last recording added',
+          on: { click: () => session.removeSample(recordings[recordings.length - 1].id) },
+        },
+        ['×'],
+      );
+      sampleSections.appendChild(
+        pickGroup(
+          `Recordings · ${recordings.length}`,
+          recordings.map((sample) =>
+            pickButton(
+              `${sample.name} ${sample.duration.toFixed(1)}s`,
+              { kind: 'sample', name: sample.id },
+              (c) => c.kind === 'sample' && c.name === sample.id,
+            ),
+          ),
+          forget,
+        ),
+      );
+    }
   }
 
   return {
@@ -1130,10 +1198,15 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       const { project } = state;
       armed = { source: state.currentSource, preset: state.currentPreset };
 
-      if (state.packs !== paintedPacks || state.mine !== paintedMine) {
+      if (
+        state.packs !== paintedPacks ||
+        state.mine !== paintedMine ||
+        state.samples !== paintedSamples
+      ) {
+        paintedSamples = state.samples;
         paintedPacks = state.packs;
         paintedMine = state.mine;
-        paintPacks(state.packs, state.mine);
+        paintPacks(state.packs, state.mine, state.samples);
         applyFilter();
       }
 

@@ -96,6 +96,17 @@ const BY_KIND: Record<SourceSpec['kind'], number> = {
   reverse: 1,
   grains: 0.4,
   impulses: 0.4,
+  /*
+   * A recording, where variation means less than anywhere else.
+   *
+   * The whole point of the rest of this is that a synthesised sound placed
+   * twice was one file twice. A recording *is* one file, and no amount of
+   * moving it about makes it a second take of whatever was recorded. What can
+   * honestly change between two placements of one file is how loud it is and
+   * how fast it is played, which is what a person laying the same effect twice
+   * would reach for. A little of that, and nothing pretending to be more.
+   */
+  sample: 0.35,
 };
 
 /** What this placement does differently, drawn once for the whole voice. */
@@ -230,6 +241,11 @@ function varySource(source: SourceSpec, take: Take, seed: number, amount: number
         freq: source.freq * take.bend,
         ring: Math.max(0.001, source.ring * take.pace),
       };
+
+    case 'sample':
+      // Faster or slower, which for a recording is its pitch and its length
+      // together. Nothing else here is honest to move.
+      return { ...source, rate: (source.rate ?? 1) * take.bend };
 
     // A buffer read backwards, and plain noise, are already a different draw
     // every time from the seed the cue had. Only the envelope and the filter

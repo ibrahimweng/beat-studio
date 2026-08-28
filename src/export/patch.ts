@@ -290,6 +290,16 @@ function toLayer(layer: LayerSpec): PatchLayer[] {
     return [{ source: { type: 'sine' as const, frequency: hz(layer.source.freq) }, ...shared }];
   }
 
+  /*
+   * A recording cannot go into a patch at all, so it does not pretend to.
+   *
+   * The format describes a sound as a graph of standard parts. There is no
+   * part that means "this file", and writing the nearest synthesised thing
+   * would hand somebody a patch that plays a sound they never chose. Left out
+   * with a name, which is what the palette export reports at the end.
+   */
+  if (layer.source.kind === 'sample') return [];
+
   // A buffer read backwards has no equivalent, so it is rebuilt out of what
   // the format does have: noise and a tone, both growing out of nothing over
   // the whole length and stopping rather than fading.

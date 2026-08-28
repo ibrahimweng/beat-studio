@@ -1,7 +1,14 @@
 import type { PadName } from '../types.ts';
 
-/** Where a cue's sound comes from. */
-export type SourceKind = 'kit' | 'design' | 'pitched' | 'pack';
+/**
+ * What a placed sound is made from.
+ *
+ * The first four are made by the app. `sample` is a recording somebody gave
+ * it: the app can put an actual file on the timeline now, and it goes through
+ * everything a synthesised sound goes through — its level, its room, its push,
+ * the layer's automation over it, the same export.
+ */
+export type SourceKind = 'kit' | 'design' | 'pitched' | 'pack' | 'sample';
 
 /**
  * Sound design voices, tuned for motion graphics rather than music.
@@ -80,7 +87,10 @@ export type PitchedName = 'piano' | 'guitar';
 
 export interface CueSource {
   kind: SourceKind;
-  /** A pad name, a design voice name, a pitched instrument, or a pack sound. */
+  /**
+   * A pad name, a design voice name, a pitched instrument, a pack sound, or
+   * the id of a recording.
+   */
   name: PadName | DesignName | PitchedName | string;
   /** Pitched sources only: the note to play. */
   midi?: number;
@@ -496,6 +506,9 @@ export const DEFAULT_CHARACTER: Record<SourceKind, { space: number; drive: numbe
   kit: { space: 0.1, drive: 0 },
   pitched: { space: 0.2, drive: 0 },
   pack: { space: 0, drive: 0 },
+  // A recording arrives with whatever room it was recorded in already on it,
+  // so adding one here would be two rooms rather than a bigger one.
+  sample: { space: 0, drive: 0 },
 };
 
 export const DESIGN_NAMES: readonly DesignName[] = DESIGN_GROUPS.flatMap((g) => g.names);
