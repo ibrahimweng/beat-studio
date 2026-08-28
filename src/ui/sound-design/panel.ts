@@ -497,38 +497,48 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     clear(onlineRow);
     for (const sound of sounds) {
       const owed = sound.licence && !/creative commons 0/i.test(sound.licence);
-      const row = el('div', { class: 'found__row' }, [
-        button(
-          {
-            class: 'found__play',
-            title: 'Hear it without keeping it',
-            on: {
-              click: () => {
-                previewing.src = soundUrl(sound);
-                void previewing.play().catch(() => setText(onlineCount, 'that one would not play'));
-              },
+      /*
+       * The whole row is the button, because the whole row is one gesture.
+       *
+       * This was a play button, a label and a Keep button: search, Keep, wait,
+       * scroll to the recordings, find it, click it, place it — against one
+       * click for a sound this app makes. Now clicking a result plays it and
+       * arms it, exactly like clicking anything else in the palette, and it
+       * joins the library when it is placed rather than when it is merely
+       * listened to.
+       */
+      const row = button(
+        {
+          class: 'found__row',
+          title: owed
+            ? `Hear it and arm it. Placing it keeps it, and records that ${sound.author} must be credited.`
+            : 'Hear it and arm it. Placing it keeps it.',
+          on: {
+            click: () => {
+              /*
+               * Sound now, through the preview, while the file is still on its
+               * way. Waiting for a download before anything is audible is most
+               * of what made this feel slow, and the element streams.
+               */
+              previewing.src = soundUrl(sound);
+              void previewing.play().catch(() => {
+                // A blocked autoplay is not worth reporting: the fetch below
+                // is what the click was for, and it plays again once armed.
+              });
+              void session.tryFreesound(sound);
             },
           },
-          ['\u25B6'],
-        ),
-        el('div', { class: 'found__what' }, [
-          el('div', { class: 'found__name', text: sound.name }),
-          el('div', {
-            class: 'found__by',
-            text: `${sound.author} · ${sound.duration.toFixed(1)}s · ${owed ? sound.licence : 'CC0'}`,
-          }),
-        ]),
-        button(
-          {
-            class: 'chip chip--sm',
-            title: owed
-              ? `Keeps it, and records that ${sound.author} must be credited`
-              : 'Keeps it in your recordings',
-            on: { click: () => void session.addFromFreesound([sound]) },
-          },
-          ['Keep'],
-        ),
-      ]);
+        },
+        [
+          el('div', { class: 'found__what' }, [
+            el('div', { class: 'found__name', text: sound.name }),
+            el('div', {
+              class: 'found__by',
+              text: `${sound.author} · ${sound.duration.toFixed(1)}s · ${owed ? sound.licence : 'CC0'}`,
+            }),
+          ]),
+        ],
+      );
       onlineRow.appendChild(row);
     }
   };
@@ -541,6 +551,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       return;
     }
     onlineTimer = window.setTimeout(() => {
+      // Anything fetched for the last search and never used goes now, so the
+      // recordings do not fill with everything that was ever clicked.
+      session.releaseLoans();
       onlineTerm = term;
       setText(onlineCount, 'looking…');
       void searchFreesound(term)

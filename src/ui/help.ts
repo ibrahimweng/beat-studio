@@ -61,6 +61,7 @@ const SECTIONS: readonly Section[] = [
     id: 'recordings',
     title: 'Your own recordings',
     rows: [
+      ['They are already there', 'On a first visit the app quietly fetches about sixty CC0 recordings — doors, switches, glass, metal, footsteps, paper, cloth, water, wind, impacts, whooshes and room tone — so there is a real palette before you search for anything. It happens once, in the background, and never for somebody who already has recordings of their own.'],
       ['Add recordings', 'Under the packs. Anything the browser can play — WAV, MP3, whatever else it knows — or a zip, which is opened for you.'],
       ['Add a folder', 'A whole sound library at once, folders and all. Four hundred files takes about a second.'],
       ['The folders become tags', 'A file at Foley/Doors/oak-slam.wav is filed under foley and doors, because that is where an archive already keeps its categories. Searching finds either.'],
@@ -86,7 +87,8 @@ const SECTIONS: readonly Section[] = [
       ['They are previews', 'Freesound gives out a 128 kbps preview freely; the master needs an account on their site. A preview is enough to place against picture and is not enough to master from, so each one is tagged “preview”. Download the original and drop it in when you need it.'],
       ['The licence is on every row', 'CC0 asks nothing of you. Anything else names an author you must credit wherever the work ends up, and “Save credits” writes that list for you.'],
       ['No key to enter', 'The key lives on the server, not in this page. If the group never appears, the deployment has not been given one.'],
-      ['Keep', 'Downloads it into your recordings, with its author, licence and a link back to it recorded automatically.'],
+      ['Click one', 'Plays it and arms it straight away, the same as clicking any other sound here. No separate download step.'],
+      ['It is kept when you use it', 'Placing it on the timeline is what adds it to your recordings, with its author, licence and a link recorded automatically. Ones you only listened to are not kept, so working through a page of results leaves nothing behind.'],
     ],
   },
   {
