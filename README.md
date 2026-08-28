@@ -867,3 +867,21 @@ app still works and a message appears in the status line.
 The interface follows the Toolcraft design system. Everything visual is taken
 from it directly, including the colours and the type sizes. The original design
 files are in `design/`, and `design/README.md` explains what they are.
+
+## Searching Freesound
+
+The palette's search box also asks Freesound, and what it finds appears in its
+own group under the library. This is off until the deployment is given a key.
+
+Get a free key at <https://freesound.org/apiv2/apply/> and set it as
+`FREESOUND_KEY` in the deployment's environment variables. On Vercel that is
+Settings → Environment Variables; locally, `FREESOUND_KEY=... npm run dev`.
+
+The key stays on the server. `api/freesound.ts` asks Freesound on the
+browser's behalf, so the key is never in the bundle and never in anyone's
+browser — and because the page then talks only to its own origin, there is no
+cross-origin question to answer for the search or for the audio.
+
+Without a key the app runs exactly as it does now and the Freesound group
+never appears. Everything else — dragging in files, folders and zips — is
+unaffected.

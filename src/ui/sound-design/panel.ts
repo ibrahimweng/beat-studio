@@ -18,7 +18,12 @@ import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalog
 import { describe } from '../../audio/describe.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { Sample } from '../../audio/samples.ts';
-import { search as searchFreesound, type Found, type LicenceName } from '../../audio/freesound.ts';
+import {
+  FreesoundError,
+  search as searchFreesound,
+  soundUrl,
+  type Found,
+} from '../../audio/freesound.ts';
 import { helpButton } from '../help.ts';
 import type { View } from '../view.ts';
 
@@ -30,6 +35,14 @@ import type { View } from '../view.ts';
  * anybody is looking at. The search is how the rest are reached.
  */
 const SHOW_AT_MOST = 60;
+
+/**
+ * How long typing has to stop before Freesound is asked.
+ *
+ * Every keystroke would be a request, and a search for "d", "do", "doo" costs
+ * the deployment three of its quota to answer a question nobody asked.
+ */
+const ONLINE_WAIT = 450;
 
 /** What a recording knows about itself, for a tooltip. */
 function creditTitle(sample: Sample): string | undefined {
@@ -78,6 +91,84 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       el('span', { text }),
       helpButton(section, text.toLowerCase()),
     ]);
+
+  /**
+   * A part of the panel that can be folded away, and stays as you left it.
+   *
+   * Six things live down this panel and nobody is using all six at once:
+   * somebody placing sounds wants the palette and the selected sound, and
+   * somebody exporting wants none of the above. Folded, a part costs one line
+   * instead of a screen.
+   *
+   * What is open is remembered, because a panel that resets every visit
+   * teaches you not to bother arranging it. The default is open, so nothing
+   * is hidden from anybody who has never touched this.
+   */
+  const FOLD_STORE = 'toolcraft.st88.folded';
+
+  const foldedNow = (): Set<string> => {
+    try {
+      const held = localStorage.getItem(FOLD_STORE);
+      return new Set(held ? (JSON.parse(held) as string[]) : []);
+    } catch {
+      // Site data blocked, or something that is not a list. Nothing folded.
+      return new Set();
+    }
+  };
+
+  const folded = foldedNow();
+
+  const foldable = (
+    id: string,
+    text: string,
+    help: string,
+    body: HTMLElement,
+    style?: Record<string, string>,
+    /**
+     * Whether this one starts folded for somebody who has never touched it.
+     *
+     * Open by default almost everywhere, so nothing is hidden from a first
+     * visit. The exception is the grouped palette, which is a second way to
+     * reach sounds the search and the shelf above already reach — opening
+     * that by default is what made the panel too long to use.
+     */
+    shutFirst = false,
+  ): HTMLElement => {
+    const caret = el('i', { class: 'section-title__caret' });
+    const shut = folded.has(id) || (shutFirst && !folded.has(`${id}:open`));
+    const wrap = el('div', {
+      class: shut ? 'folds folds--shut' : 'folds',
+      ...(style ? { style } : {}),
+    });
+
+    const head = button(
+      { class: 'section-title section-title--folds', attrs: { 'aria-expanded': shut ? 'false' : 'true' } },
+      [caret, el('span', { text })],
+    );
+    head.addEventListener('click', () => {
+      const nowShut = !wrap.classList.contains('folds--shut');
+      toggleClass(wrap, 'folds--shut', nowShut);
+      head.setAttribute('aria-expanded', nowShut ? 'false' : 'true');
+      if (nowShut) {
+        folded.add(id);
+        folded.delete(`${id}:open`);
+      } else {
+        folded.delete(id);
+        // Marked open explicitly, so a section that starts folded stays open
+        // once somebody has opened it.
+        folded.add(`${id}:open`);
+      }
+      try {
+        localStorage.setItem(FOLD_STORE, JSON.stringify([...folded]));
+      } catch {
+        // It will simply not be remembered. Not worth interrupting anyone.
+      }
+    });
+
+    wrap.appendChild(el('div', { class: 'folds__head' }, [head, helpButton(help, text.toLowerCase())]));
+    wrap.appendChild(el('div', { class: 'folds__body' }, [body]));
+    return wrap;
+  };
 
   // ---------- sound picker ----------
 
@@ -167,11 +258,80 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   });
 
   /** A titled row of sounds, which disappears when the filter empties it. */
-  const pickGroup = (title: string, group: Pick[], extra?: HTMLElement): HTMLElement => {
-    const node = el('div', { class: 'pick-group' }, [
-      el('div', { class: 'pick-group__title' }, [el('span', { text: title }), ...(extra ? [extra] : [])]),
-      el('div', { class: 'pick-row' }, group.map((p) => p.node)),
+  /**
+   * Groups that open one at a time.
+   *
+   * Forty voices in eight groups, all open, was most of the panel's height and
+   * pushed everything below it out of sight — somebody looking for the import
+   * buttons had to scroll past four hundred pixels of sounds they were not
+   * looking for. Closed, each group is one line, and opening one closes the
+   * last, so browsing costs the height of the group you are actually reading.
+   *
+   * The search is unaffected: typing opens whatever matches, so nothing is
+   * hidden from anyone who knows what they want. Browsing is what became
+   * deliberate, not finding.
+   */
+  const openable: { node: HTMLElement; open: (yes: boolean) => void }[] = [];
+
+  const pickGroup = (
+    title: string,
+    group: Pick[],
+    extra?: HTMLElement,
+    /**
+     * Whether this group folds away.
+     *
+     * Opt in, and only the built-in voice groups take it. Your own sounds,
+     * your packs and your recordings are always open: they are few, they are
+     * yours, and hiding them behind a click was a regression the first
+     * version of this made — every group used one helper, so collapsing the
+     * palette collapsed the user's own library with it.
+     */
+    collapses = false,
+  ): HTMLElement => {
+    const row = el('div', { class: 'pick-row' }, group.map((p) => p.node));
+
+    if (!collapses) {
+      const node = el('div', { class: 'pick-group' }, [
+        el('div', { class: 'pick-group__title' }, [
+          el('span', { text: title }),
+          ...(extra ? [extra] : []),
+        ]),
+        row,
+      ]);
+      sections.push({ node, picks: group });
+      return node;
+    }
+
+    const caret = el('i', { class: 'pick-group__caret' });
+    const node = el('div', { class: 'pick-group pick-group--shut' }, [
+      button(
+        {
+          class: 'pick-group__title pick-group__title--opens',
+          attrs: { 'aria-expanded': 'false' },
+          on: {
+            click: () => {
+              const shut = node.classList.contains('pick-group--shut');
+              // One at a time, so the panel cannot grow back to what it was.
+              for (const other of openable) other.open(false);
+              if (shut) open(true);
+            },
+          },
+        },
+        [caret, el('span', { text: title })],
+      ),
+      row,
+      ...(extra ? [extra] : []),
     ]);
+
+    const open = (yes: boolean): void => {
+      toggleClass(node, 'pick-group--shut', !yes);
+      node.querySelector('.pick-group__title--opens')?.setAttribute(
+        'aria-expanded',
+        yes ? 'true' : 'false',
+      );
+    };
+
+    openable.push({ node, open });
     sections.push({ node, picks: group });
     return node;
   };
@@ -183,6 +343,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       group.names.map((name) =>
         pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
       ),
+      undefined,
+      true,
     ),
   );
 
@@ -193,6 +355,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         sameSource(c, { kind: 'kit', name: pick.name }),
       ),
     ),
+    undefined,
+    true,
   );
 
   const pitchedSection = pickGroup(
@@ -204,6 +368,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         (c) => sameSource(c, { kind: 'pitched', name: pick.name }),
       ),
     ),
+    undefined,
+    true,
   );
 
   /* ---------- library ---------- */
@@ -284,6 +450,138 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   // Drawn once up front, so the shelf is there to browse before anything is
   // typed and before the first state has arrived.
   fillLibrary('');
+
+  /* ---------- the same words, asked of Freesound ---------- */
+
+  /*
+   * Recordings from Freesound, under the sounds this app can make.
+   *
+   * One box. What the library has comes first, because it is instant and it
+   * is yours; what Freesound has follows, because it is half a million real
+   * recordings and it is a download and a credit away.
+   *
+   * A group of its own rather than mixed in, so nobody adds a stranger's
+   * CC-BY recording thinking it was one of the forty voices. The licence sits
+   * on every row for the same reason.
+   *
+   * There is no API key here. It lives in the deployment's environment and
+   * the browser asks this app's own `/api/freesound` — see
+   * `audio/freesound-proxy.ts`. A deployment without one is a normal state:
+   * this group simply never appears.
+   */
+  const onlineRow = el('div', { class: 'pick-row pick-row--scroll' });
+  const onlineCount = el('span', { class: 'hint' });
+  const onlinePicks: Pick[] = [];
+  const onlineSection = el('div', { class: 'pick-group' }, [
+    el('div', { class: 'pick-group__title' }, [
+      el('span', { text: 'From Freesound' }),
+      helpButton('freesound', 'sounds from Freesound'),
+      onlineCount,
+    ]),
+    onlineRow,
+  ]);
+
+  /** The one audio element previews play through, so two cannot overlap. */
+  const previewing = el('audio', { class: 'found__audio' }) as HTMLAudioElement;
+  previewing.preload = 'none';
+
+  /** Nothing is asked of the network until typing has stopped. */
+  let onlineTimer = 0;
+  /** What was last asked for, so a late reply for an old term is dropped. */
+  let onlineTerm = '';
+  /** Set once the deployment says it has no key, so it is asked only once. */
+  let onlineOff = false;
+
+  const drawOnline = (sounds: readonly Found[]): void => {
+    onlinePicks.length = 0;
+    clear(onlineRow);
+    for (const sound of sounds) {
+      const owed = sound.licence && !/creative commons 0/i.test(sound.licence);
+      const row = el('div', { class: 'found__row' }, [
+        button(
+          {
+            class: 'found__play',
+            title: 'Hear it without keeping it',
+            on: {
+              click: () => {
+                previewing.src = soundUrl(sound);
+                void previewing.play().catch(() => setText(onlineCount, 'that one would not play'));
+              },
+            },
+          },
+          ['\u25B6'],
+        ),
+        el('div', { class: 'found__what' }, [
+          el('div', { class: 'found__name', text: sound.name }),
+          el('div', {
+            class: 'found__by',
+            text: `${sound.author} · ${sound.duration.toFixed(1)}s · ${owed ? sound.licence : 'CC0'}`,
+          }),
+        ]),
+        button(
+          {
+            class: 'chip chip--sm',
+            title: owed
+              ? `Keeps it, and records that ${sound.author} must be credited`
+              : 'Keeps it in your recordings',
+            on: { click: () => void session.addFromFreesound([sound]) },
+          },
+          ['Keep'],
+        ),
+      ]);
+      onlineRow.appendChild(row);
+    }
+  };
+
+  const askOnline = (term: string): void => {
+    window.clearTimeout(onlineTimer);
+    if (!term || onlineOff) {
+      clear(onlineRow);
+      setText(onlineCount, '');
+      return;
+    }
+    onlineTimer = window.setTimeout(() => {
+      onlineTerm = term;
+      setText(onlineCount, 'looking…');
+      void searchFreesound(term)
+        .then((page) => {
+          // A reply for something typed three keystrokes ago is not an answer.
+          if (onlineTerm !== term) return;
+          drawOnline(page.sounds);
+          setText(
+            onlineCount,
+            page.sounds.length ? `${page.sounds.length} of ${page.total} · previews` : 'none found',
+          );
+          onlineSection.style.display = page.sounds.length ? '' : 'none';
+        })
+        .catch((error: unknown) => {
+          if (onlineTerm !== term) return;
+          clear(onlineRow);
+          // A deployment with no key is not a fault to keep reporting: the
+          // group goes away and stays away rather than saying so every time.
+          if (error instanceof FreesoundError && error.fault.kind === 'off') {
+            onlineOff = true;
+            onlineSection.style.display = 'none';
+            return;
+          }
+          setText(onlineCount, error instanceof Error ? error.message : 'that did not work');
+        });
+    }, ONLINE_WAIT);
+  };
+
+  /*
+   * Outside the `sections` list, because those are filtered from a list held
+   * in memory and this one has to go and ask. `fill` returning true keeps the
+   * group mounted while the answer is on its way.
+   */
+  sections.push({
+    node: onlineSection,
+    picks: onlinePicks,
+    fill: (term: string): boolean => {
+      askOnline(term);
+      return Boolean(term) && !onlineOff;
+    },
+  });
 
   /* ---------- made from what you said ---------- */
 
@@ -438,7 +736,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const loadSamples = button(
     {
       class: 'chip chip--sm',
-      style: { width: '100%' },
       title:
         'Put your own recordings on the timeline — audio files or a zip. They get ' +
         'the same level, room, push and automation everything else does, and stay ' +
@@ -451,7 +748,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const loadFolder = button(
     {
       class: 'chip chip--sm',
-      style: { width: '100%' },
       title:
         'Add a whole folder of recordings at once. The folders they sit in ' +
         'become tags, so an archive keeps the way it was filed.',
@@ -472,7 +768,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const credits = button(
     {
       class: 'chip chip--sm',
-      style: { width: '100%' },
       title: 'Write out the authors and licences of every recording that asks to be credited',
       on: { click: () => session.saveCredits() },
     },
@@ -501,166 +796,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       },
     },
   }) as HTMLInputElement;
-
-  /* ---------- finding sounds on Freesound ---------- */
-
-  /*
-   * Searching a library of half a million recordings from inside the app.
-   *
-   * The same destination as dropping a file in, without the round trip
-   * through a downloads folder. Two things about it are worth saying on
-   * screen rather than only in the code, and both are said below: what comes
-   * back is a preview rather than the master, and the licence varies per
-   * sound and is the user's to honour. See `audio/freesound.ts`.
-   */
-  const KEY_STORE = 'toolcraft.st88.freesound';
-  let foundSounds: Found[] = [];
-
-  const keyInput = el('input', {
-    type: 'password',
-    class: 'pick-find pick-find--key',
-    attrs: { placeholder: 'Freesound API key', 'aria-label': 'Freesound API key', autocomplete: 'off' },
-  }) as HTMLInputElement;
-  try {
-    keyInput.value = localStorage.getItem(KEY_STORE) ?? '';
-  } catch {
-    // A browser with site data blocked. The field still works for this visit.
-  }
-  keyInput.addEventListener('change', () => {
-    try {
-      localStorage.setItem(KEY_STORE, keyInput.value.trim());
-    } catch {
-      // Nothing to do about it, and nothing worth interrupting anyone over.
-    }
-  });
-
-  const onlineFind = el('input', {
-    type: 'search',
-    class: 'pick-find pick-find--online',
-    attrs: { placeholder: 'Search Freesound', 'aria-label': 'Search Freesound' },
-  }) as HTMLInputElement;
-
-  const licencePick = el('select', {
-    class: 'room-select',
-    title: 'Which licences to search. CC0 asks nothing of you; the others do.',
-  }) as HTMLSelectElement;
-  for (const [value, label] of [
-    ['Creative Commons 0', 'CC0 — no credit needed'],
-    ['Attribution', 'CC-BY — credit required'],
-    ['', 'Any licence'],
-  ] as const) {
-    licencePick.appendChild(el('option', { text: label, attrs: { value } }));
-  }
-
-  const onlineResults = el('div', { class: 'found' });
-  // Its own class rather than the palette's "nothing matched" one: this line
-  // carries a count, a hint, or a fault, and only sometimes an empty result.
-  const onlineNote = el('div', { class: 'found__note' });
-
-  /** The one audio element every preview plays through, so two cannot overlap. */
-  const preview = el('audio', {}) as HTMLAudioElement;
-  preview.preload = 'none';
-
-  const drawFound = (): void => {
-    clear(onlineResults);
-    for (const sound of foundSounds) {
-      const owed = sound.licence && !/creative commons 0/i.test(sound.licence);
-      onlineResults.appendChild(
-        el('div', { class: 'found__row' }, [
-          button(
-            {
-              class: 'found__play',
-              title: 'Hear it',
-              on: {
-                click: () => {
-                  preview.src = sound.preview;
-                  void preview.play().catch(() => {
-                    setText(onlineNote, 'That preview would not play here.');
-                  });
-                },
-              },
-            },
-            ['\u25B6'],
-          ),
-          el('div', { class: 'found__what' }, [
-            el('div', { class: 'found__name', text: sound.name }),
-            el('div', {
-              class: 'found__by',
-              text:
-                `${sound.author} · ${sound.duration.toFixed(1)}s` +
-                (sound.licence ? ` · ${owed ? sound.licence : 'CC0'}` : ''),
-            }),
-          ]),
-          button(
-            {
-              class: 'chip chip--sm',
-              title: owed
-                ? `Adds it, and records that ${sound.author} must be credited`
-                : 'Adds it to your recordings',
-              on: { click: () => void session.addFromFreesound([sound]) },
-            },
-            ['Add'],
-          ),
-        ]),
-      );
-    }
-  };
-
-  const runSearch = async (): Promise<void> => {
-    const query = onlineFind.value.trim();
-    if (!query) return;
-    setText(onlineNote, 'searching…');
-    clear(onlineResults);
-    try {
-      const licence = licencePick.value;
-      const page = await searchFreesound(keyInput.value.trim(), query, {
-        ...(licence ? { licence: licence as LicenceName } : {}),
-        maxSeconds: 30,
-        perPage: 20,
-      });
-      foundSounds = [...page.sounds];
-      drawFound();
-      setText(
-        onlineNote,
-        page.sounds.length
-          ? `${page.sounds.length} of ${page.total}. Previews, not masters.`
-          : 'nothing found',
-      );
-    } catch (error) {
-      foundSounds = [];
-      setText(onlineNote, error instanceof Error ? error.message : 'that did not work');
-    }
-  };
-
-  onlineFind.addEventListener('keydown', (event) => {
-    if ((event as KeyboardEvent).key === 'Enter') void runSearch();
-  });
-
-  const onlineBody = el('div', { class: 'found__panel' }, [
-    keyInput,
-    el('div', { class: 'pick-actions' }, [onlineFind, licencePick]),
-    onlineNote,
-    onlineResults,
-    preview,
-  ]);
-  onlineBody.hidden = true;
-
-  const onlineToggle = button(
-    {
-      class: 'chip chip--sm',
-      style: { width: '100%' },
-      title: 'Search Freesound and add sounds without leaving the app',
-      on: {
-        click: () => {
-          onlineBody.hidden = !onlineBody.hidden;
-          if (!onlineBody.hidden && !keyInput.value) {
-            setText(onlineNote, 'A free API key from freesound.org/apiv2/apply/ goes in the box above.');
-          }
-        },
-      },
-    },
-    ['Find sounds online'],
-  );
 
   /* ---------- out of a recording ---------- */
 
@@ -836,6 +971,14 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         if (keep) showing++;
       }
       section.node.style.display = showing ? '' : 'none';
+      /*
+       * A group that matches opens itself, and closes again when the box is
+       * cleared. Otherwise typing a word would hide every group that did not
+       * match and show an empty one that did, which reads as the search being
+       * broken rather than as the group being shut.
+       */
+      const group = openable.find((o) => o.node === section.node);
+      if (group) group.open(Boolean(term) && showing > 0);
     }
     // Buttons the filter just built have never been lit, and the next state
     // update may be a long way off if nothing is clicked.
@@ -1347,28 +1490,43 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       // Then the library, because a typed word is answered best by the list
       // that was built to be searched.
       librarySection,
-      ...designSections,
-      kitSection,
-      pitchedSection,
+      // Under the library: what this app can make comes before what has to be
+      // downloaded and credited.
+      onlineSection,
+      previewing,
+      /*
+       * The whole grouped palette behind one fold.
+       *
+       * Twelve groups were collapsed to one line each, which was still twelve
+       * lines and three hundred pixels of headings for something most people
+       * never open: the search and the library shelf above are how a sound is
+       * actually found. Browsing by kind is the fallback, so it costs one line
+       * until it is wanted, and inside it the groups still open one at a time.
+       */
+      foldable('kinds', 'Browse by kind', 'library',
+        el('div', {}, [...designSections, kitSection, pitchedSection]),
+        { marginTop: '8px' }, true),
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       sampleSections,
-      el('div', { style: { marginTop: '6px' } }, [
+      // One row of three. The help dot used to sit under a full-width button
+      // on a line of its own, which reads as a stray character.
+      el('div', { class: 'pick-actions pick-actions--three' }, [
         loadSamples,
         sampleInput,
+        loadFolder,
+        folderInput,
+        credits,
         helpButton('recordings', 'your own recordings'),
       ]),
-      el('div', { class: 'pick-actions' }, [loadFolder, folderInput, credits]),
-      el('div', { style: { marginTop: '6px' } }, [onlineToggle]),
-      onlineBody,
       heardBody,
       heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
     ]),
-    el('div', {}, [heading('Selected sound', 'sound'), cueBody]),
-    el('div', {}, [heading('Export', 'export'), exportBody]),
-    el('div', {}, [heading('Session', 'session'), sessionBody]),
-    el('div', {}, [heading('Palette', 'export'), paletteBody]),
+    foldable('sound', 'Selected sound', 'sound', cueBody),
+    foldable('export', 'Export', 'export', exportBody),
+    foldable('session', 'Session', 'session', sessionBody),
+    foldable('palette', 'Palette', 'export', paletteBody),
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;

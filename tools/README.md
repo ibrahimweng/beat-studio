@@ -857,10 +857,17 @@ Two things worth carrying forward:
 
 ## freesound-check.html
 
-The Freesound client, checked without Freesound.
+The Freesound client and its server-side proxy, checked without Freesound.
 
-freesound.org is not reachable from where this was written, so the live call
-is the one thing here that is **not** verified. Everything around it is: the
+freesound.org is not reachable from where this was written, so the call the
+proxy makes is the one thing here that is **not** verified.
+
+The proxy is where the key lives, so its checks are about what must never
+happen: that only `freesound.org` and its subdomains are ever fetched (a
+deployment endpoint that will fetch any URL handed to it is an open proxy, and
+the cases include `file://`, the cloud metadata address, and a hostname of
+`freesound.org.evil.com`), and that an upstream error never echoes the request
+back, since the request has the key in it. Everything around it is: the
 URL that gets built, what comes out of a well-formed reply, what happens to a
 malformed one, and that every failure says something a person can act on —
 a rejected key, a quota, an unreachable host and a body that is not JSON are
