@@ -90,6 +90,8 @@ export interface SoundDesignPanelView extends View {
   selectedPage: HTMLElement;
   /** Export, session and palette, which belong to no tab. */
   tail: HTMLElement;
+  /** Open the library at one moment group, unfolding whatever is in the way. */
+  openGroup(id: string): void;
 }
 
 export function createSoundDesignPanel(session: SoundDesignSession): SoundDesignPanelView {
@@ -129,6 +131,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   };
 
   const folded = foldedNow();
+
+  /** Each fold's own button, so something else can open one. */
+  const foldHeads = new Map<string, HTMLButtonElement>();
 
   const foldable = (
     id: string,
@@ -177,6 +182,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       }
     });
 
+    foldHeads.set(id, head);
     wrap.appendChild(el('div', { class: 'folds__head' }, [head, helpButton(help, text.toLowerCase())]));
     wrap.appendChild(el('div', { class: 'folds__body' }, [body]));
     return wrap;
@@ -375,9 +381,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
    * already knows this looks at a library. Four of its ten groups are named
    * after a mechanism, and somebody watching a logo land cannot use "Struck".
    */
-  const momentSections = MOMENT_GROUPS.map((group) =>
-    pickGroup(group.title, voicePicks(group.names), undefined, true, group.when),
-  );
+  const momentSections = MOMENT_GROUPS.map((group) => ({
+    id: group.id,
+    node: pickGroup(group.title, voicePicks(group.names), undefined, true, group.when),
+  }));
 
   const kitSection = pickGroup(
     'Kit',
@@ -429,7 +436,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
 
   let browse = browseNow();
 
-  const momentBox = el('div', {}, momentSections);
+  const momentBox = el('div', {}, momentSections.map((section) => section.node));
   const kindBox = el('div', {}, designSections);
 
   const browseWays: { way: Browse; node: HTMLButtonElement }[] = (
@@ -475,6 +482,32 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     kitSection,
     pitchedSection,
   ]);
+
+  /**
+   * Show one moment group, whatever state the panel was left in.
+   *
+   * Every step here is something somebody would otherwise have to do for
+   * themselves after being told to go and look: unfold the browser, switch
+   * back to the grouping that has this group in it, open it, close whatever
+   * was open before, and find it on screen. A suggestion somebody did not
+   * want is only useful if the alternative is one click away.
+   */
+  function openGroup(id: string): void {
+    const section = momentSections.find((one) => one.id === id);
+    if (!section) return;
+
+    setBrowse('moment');
+
+    const fold = foldHeads.get('kinds');
+    if (fold?.getAttribute('aria-expanded') === 'false') fold.click();
+
+    if (section.node.classList.contains('pick-group--shut')) {
+      section.node.querySelector<HTMLButtonElement>('.pick-group__title--opens')?.click();
+    }
+
+    // After the fold, since nothing can be scrolled to while it is closed.
+    section.node.scrollIntoView({ block: 'nearest' });
+  }
 
   paintBrowse();
 
@@ -1815,6 +1848,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     soundsPage,
     selectedPage,
     tail,
+    openGroup,
 
     update(state: AppState) {
       const { project } = state;

@@ -6,7 +6,7 @@ import {
   DESIGN_DEFAULT_LENGTH,
 } from './types.ts';
 import type { DesignName } from './types.ts';
-import { MOMENT_TITLES } from '../audio/suggest.ts';
+import { MOMENT_GROUP_FOR, MOMENT_TITLES } from '../audio/suggest.ts';
 
 const indexed = MOMENT_GROUPS.flatMap((group) => group.names);
 
@@ -78,5 +78,49 @@ describe('how the groups read', () => {
     // Something arriving on screen is the commonest thing there is, and a
     // list is read from the top.
     expect(MOMENT_GROUPS[0].title).toBe('Something appears');
+  });
+});
+
+describe('the way from a moment to the sounds that suit it', () => {
+  const KINDS = ['appears', 'builds', 'moves', 'lands', 'sequence', 'quiet'] as const;
+
+  it('sends every kind of moment to a group that exists', () => {
+    /*
+     * A group id that does not exist makes the button do nothing at all, with
+     * nothing on screen to say why. This is the check that catches that.
+     */
+    const ids = new Set(MOMENT_GROUPS.map((group) => group.id));
+    for (const kind of KINDS) {
+      expect(ids, `${kind} points at a group that is not there`).toContain(MOMENT_GROUP_FOR[kind]);
+    }
+  });
+
+  it('sends a moment to the group named after it, wherever there is one', () => {
+    // The four where the picture and the shelf say the same words.
+    for (const kind of ['appears', 'builds', 'moves', 'lands'] as const) {
+      const group = MOMENT_GROUPS.find((one) => one.id === MOMENT_GROUP_FOR[kind])!;
+      expect(group.title).toBe(MOMENT_TITLES[kind]);
+    }
+  });
+
+  it('sends the other two somewhere that makes sense for them', () => {
+    /*
+     * The two where what the picture did and what you reach for are different
+     * things. A flurry of cuts wants the small detail sounds, and a still
+     * passage wants something to sit underneath it.
+     */
+    const group = (kind: 'sequence' | 'quiet'): readonly string[] =>
+      MOMENT_GROUPS.find((one) => one.id === MOMENT_GROUP_FOR[kind])!.names;
+
+    expect(group('sequence')).toContain('tick');
+    expect(group('quiet')).toContain('drone');
+  });
+
+  it('lands somebody among sounds worth choosing between', () => {
+    // Arriving at a group of one is arriving at the same suggestion again.
+    for (const kind of KINDS) {
+      const group = MOMENT_GROUPS.find((one) => one.id === MOMENT_GROUP_FOR[kind])!;
+      expect(group.names.length).toBeGreaterThan(2);
+    }
   });
 });

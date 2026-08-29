@@ -2,6 +2,7 @@ import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
 import { timecode } from '../../timeline/project.ts';
 import { MOMENT_TITLES } from '../../audio/suggest.ts';
+import type { MomentKind } from '../../video/moments.ts';
 import { button, clear, el, setText, svg } from '../dom.ts';
 import type { View } from '../view.ts';
 
@@ -19,7 +20,20 @@ import type { View } from '../view.ts';
  * timeline is and saying so would waste the only attention they will give
  * this.
  */
-export function createMomentsPanel(session: SoundDesignSession): View {
+export interface MomentsPanelOptions {
+  /**
+   * Somebody wants something else for this moment.
+   *
+   * Handled outside this file because it lands in the library, which is a
+   * different panel: this one only knows which moment was asked about.
+   */
+  onShowOthers?(kind: MomentKind): void;
+}
+
+export function createMomentsPanel(
+  session: SoundDesignSession,
+  options: MomentsPanelOptions = {},
+): View {
   const count = el('div', { class: 'moments__count', text: 'No video scanned yet' });
   const note = el('div', { class: 'moments__note' });
 
@@ -114,6 +128,7 @@ export function createMomentsPanel(session: SoundDesignSession): View {
       for (const { moment, suggested, state: settled } of session.moments) {
         list.appendChild(row(moment.id, {
           at: timecode(moment.t, project.fps),
+          of: moment.kind,
           kind: MOMENT_TITLES[moment.kind],
           sound: suggested.name,
           why: suggested.why,
@@ -127,6 +142,7 @@ export function createMomentsPanel(session: SoundDesignSession): View {
     id: string,
     parts: {
       at: string;
+      of: MomentKind;
       kind: string;
       sound: string;
       why: string;
@@ -177,14 +193,36 @@ export function createMomentsPanel(session: SoundDesignSession): View {
       el('div', { class: 'moment__acts' }, acts),
     ]);
 
-    const sound = button(
+    /*
+     * Two controls in one pill.
+     *
+     * Hearing the sound on its own and going to look for a different one are
+     * both things somebody does at this point, and they are not the same
+     * thing. Putting the second on the name is what turns a suggestion from
+     * take it or leave it into a starting point: leaving it used to drop
+     * somebody into a thousand sounds with nowhere to begin, and now it lands
+     * them in the seven or eight that suit the moment they were looking at.
+     */
+    const hear = button(
       {
-        class: 'moment__sound',
+        class: 'moment__hear',
         title: 'Hear this sound on its own',
+        attrs: { 'aria-label': 'Hear this sound on its own' },
         on: { click: () => session.auditionMoment(id, false) },
       },
-      [waveGlyph(), el('span', { text: parts.sound })],
+      [waveGlyph()],
     );
+
+    const others = button(
+      {
+        class: 'moment__others',
+        title: `Show the other sounds that suit ${parts.kind.toLowerCase()}`,
+        on: { click: () => options.onShowOthers?.(parts.of) },
+      },
+      [el('span', { class: 'moment__sound-name', text: parts.sound }), chevronGlyph()],
+    );
+
+    const sound = el('div', { class: 'moment__sound' }, [hear, others]);
 
     return el(
       'div',
@@ -235,4 +273,8 @@ function undoGlyph(): SVGElement {
 
 function waveGlyph(): SVGElement {
   return stroked('M1 6h1.6l1-2.4L6 9.4l1.2-3.2L8.4 7.6H11', 11);
+}
+
+function chevronGlyph(): SVGElement {
+  return stroked('M4.5 2.5 8 6l-3.5 3.5', 10);
 }

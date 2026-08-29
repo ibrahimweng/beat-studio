@@ -433,6 +433,39 @@ them, and the ones it found were within one frame. Playing the video twice as
 fast would halve the wait but only find eighteen, which is why it is not done
 that way.
 
+### What it makes of each moment
+
+The scan finds where something happens. The Moments panel, which is the first
+of the three tabs down the right, says what kind of moment it is and what
+belongs on it.
+
+It works that out from the shape of the curve around each hit rather than from
+how tall the hit is. A cut arrives out of nothing. A build climbs into itself.
+A move holds its energy across half a second instead of spending it in one
+frame. Something landing keeps falling afterwards. A flurry of hits close
+together is one flourish rather than four separate decisions. A long still
+passage is allowed to stay still, and saying so is a suggestion too. Nothing is
+read twice: it is arithmetic over measurements the scan already took, so moving
+the sensitivity redoes the whole list instantly.
+
+Each row carries a time, what kind of moment it is, a suggested sound, and one
+line saying why that sound belongs there. That line is the point of the panel.
+It is about the frame in front of you, at the moment it applies.
+
+There are three things to do with a row. Play it to hear the suggestion against
+the picture from a second before. Place it. Or pass it over, which is a real
+answer and stays on screen so you can change your mind.
+
+Two more on the sound itself. The speaker hears it on its own. The name opens
+the library at the group of sounds that suit that kind of moment, so a
+suggestion you did not want is a starting point rather than a dead end.
+
+"Accept all" places everything still waiting, in one go and as one undo. That
+is the fastest way to a video that has sound: a complete first pass to fix,
+rather than an empty timeline to fill. "Undo the pass" takes back every sound a
+suggestion put down and offers them all again. Anything you placed by hand is
+left alone.
+
 ### Room to work
 
 The line between the video and the timeline can be dragged. The timeline takes

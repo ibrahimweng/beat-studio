@@ -49,6 +49,29 @@ export interface Suggested {
   parts: readonly SuggestedPart[];
 }
 
+/**
+ * Which group of the library serves each kind of moment.
+ *
+ * The link that lets somebody say "not that one, show me the others that
+ * would work here". Without it a suggestion is take it or leave it, and
+ * leaving it drops a newcomer into a thousand sounds with no idea where to
+ * start; with it they land in the seven or eight that suit the moment they
+ * were looking at.
+ *
+ * Four of the six map onto a group of the same name. The two that do not are
+ * the two where what the picture did and what you reach for are different
+ * things: a flurry of cuts wants the small detail sounds, and a still passage
+ * wants something to sit underneath it.
+ */
+export const MOMENT_GROUP_FOR: Record<MomentKind, string> = {
+  appears: 'appears',
+  builds: 'builds',
+  moves: 'moves',
+  lands: 'lands',
+  sequence: 'small',
+  quiet: 'there',
+};
+
 /** What the panel calls each kind of moment. */
 export const MOMENT_TITLES: Record<MomentKind, string> = {
   appears: 'Something appears',

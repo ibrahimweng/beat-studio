@@ -2,6 +2,7 @@ import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState, PanelTab } from '../../store.ts';
 import { button, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
+import { MOMENT_GROUP_FOR } from '../../audio/suggest.ts';
 import { createMomentsPanel } from './moments.ts';
 import { createSoundDesignPanel } from './panel.ts';
 
@@ -21,7 +22,21 @@ import { createSoundDesignPanel } from './panel.ts';
  */
 export function createWorkPanel(session: SoundDesignSession): View {
   const panel = createSoundDesignPanel(session);
-  const moments = createMomentsPanel(session);
+
+  /*
+   * The one place the two panels meet.
+   *
+   * Wired here rather than inside either, because neither of them should have
+   * to know the other exists: the moment list knows what kind of moment was
+   * asked about, the library knows how to show a group, and this is the file
+   * that already holds both.
+   */
+  const moments = createMomentsPanel(session, {
+    onShowOthers: (kind) => {
+      session.setPanelTab('sounds');
+      panel.openGroup(MOMENT_GROUP_FOR[kind]);
+    },
+  });
 
   const TABS: readonly { id: PanelTab; label: string; title: string }[] = [
     { id: 'moments', label: 'Moments', title: 'What the video suggests, and why' },
