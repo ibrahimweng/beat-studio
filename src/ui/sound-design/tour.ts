@@ -25,19 +25,24 @@ const STEPS: readonly Step[] = [
     body: 'Drag a video here, or choose a file. It is read straight from your disk and never uploaded.',
   },
   {
-    target: '.inspector .pick-row',
-    title: 'Pick a sound',
-    body: 'Impacts land a hit. Whooshes carry a move. Risers lead into one. The drum kit, piano and guitar are here too.',
+    target: '.tl__detect',
+    title: 'Let it read the clip',
+    body: 'This plays the video through once and measures every cut and fast move in it. It is the first thing to do, and everything else follows from it. The slider decides how much it shows you.',
+  },
+  {
+    target: '.moments',
+    title: 'What it found, and what belongs there',
+    body: 'Each moment says what kind of moment it is, what sound suits it and why. Play it against the picture, put it down, or pass it over. Accept all gives you a whole first pass to fix rather than a blank timeline to fill.',
+  },
+  {
+    target: '.panel-tabs',
+    title: 'Three panels, one at a time',
+    body: 'Moments is what to do next. Sounds is the whole library when you want to choose yourself. Selected is whatever is picked on the timeline, including which end of it lands on the marker.',
   },
   {
     target: '.tl__lanes',
-    title: 'Place it on the timeline',
-    body: 'Click a lane to put the sound at that moment. Drag it to move it, or drag its far edge to change how long it runs for. The timeline is measured in time and frames, not in bars.',
-  },
-  {
-    target: '.tl__detect',
-    title: 'Or let it find the hits',
-    body: 'This reads the video and suggests where sounds belong. Every cut and fast move shows up. The slider decides how many to show.',
+    title: 'Or place one yourself',
+    body: 'Click a lane to put the chosen sound at that moment. Drag it to move it, or drag its far edge to change how long it runs for. The timeline is measured in time and frames, not in bars.',
   },
   {
     target: '.split',
@@ -45,12 +50,7 @@ const STEPS: readonly Step[] = [
     body: 'Drag this line to make the timeline bigger. The video scales down to fit. Double click it to put it back.',
   },
   {
-    target: '.inspector .card',
-    title: 'Land it on the right frame',
-    body: 'A riser should finish on the hit rather than start on it, so set it to end on the marker. Arrow keys move a frame at a time.',
-  },
-  {
-    target: '.inspector .btn-accent',
+    target: '.card--export',
     title: 'Export something that lines up',
     body: 'The file always starts at zero, so it sits at the head of your composition in sync. One mixed file, or one per layer.',
   },

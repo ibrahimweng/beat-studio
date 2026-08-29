@@ -162,6 +162,16 @@ export interface Cue {
   length: number;
   anchor: Anchor;
   /**
+   * The suggested moment that put this here, if one did.
+   *
+   * Only so a pass of suggestions can be taken back in one go. Absent on
+   * anything placed by hand, and a cue that carries it is in every other way
+   * an ordinary cue: it moves, stretches, is edited and is exported exactly
+   * like one placed by clicking, because after it is down there is no useful
+   * sense in which it is still a suggestion.
+   */
+  fromMoment?: string;
+  /**
    * How much room is around it, 0 to 1.
    *
    * Its own room, not the one at the end of the chain that everything shares.

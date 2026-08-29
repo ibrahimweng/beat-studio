@@ -253,8 +253,17 @@
 /* ---------- inspector ---------- */
 
 .inspector {
-  flex: 0 1 292px;
-  min-width: 238px;
+  /*
+   * Wide enough for a sentence.
+   *
+   * 292 was right for a column of controls. A moment row carries a time, what
+   * kind of moment it is, the name of a sound, three buttons and a line
+   * saying why that sound belongs there, and at 292 that last line broke into
+   * five short pieces and stopped being read. The sentence is the whole point
+   * of the panel, so the panel gives way.
+   */
+  flex: 0 1 340px;
+  min-width: 268px;
   background: var(--side);
   border-left: 1px solid var(--line);
   overflow-y: auto;
@@ -283,8 +292,8 @@
   }
 
   .inspector--work {
-    flex: 0 1 250px;
-    min-width: 214px;
+    flex: 0 1 292px;
+    min-width: 244px;
     padding: 12px 12px 20px;
   }
 }
@@ -295,8 +304,8 @@
   }
 
   .inspector--work {
-    flex: 0 1 208px;
-    min-width: 186px;
+    flex: 0 1 242px;
+    min-width: 212px;
     padding: 10px 10px 18px;
     font-size: 12px;
   }

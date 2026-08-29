@@ -67,6 +67,10 @@ import type {
   Project,
 } from './timeline/types.ts';
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
+import { readMoments } from './video/moments.ts';
+import type { Moment } from './video/moments.ts';
+import { suggestFor } from './audio/suggest.ts';
+import type { Suggested } from './audio/suggest.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
 import { listen } from './audio/listen.ts';
@@ -109,7 +113,7 @@ const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
 const TABLE_FILE = /\.(csv|tsv)$/i;
 
 import { rebuild, type Made } from './audio/rebuild.ts';
-import { emptyDetection, type Store } from './store.ts';
+import { emptyDetection, type MomentState, type PanelTab, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
 
@@ -1859,9 +1863,20 @@ export class SoundDesignSession {
 
     const sensitivity = this.#store.state.detect.sensitivity;
     const peaks = filterPeaks(candidates, samples, sensitivity, MIN_GAP);
+    const moments = readMoments(samples, peaks, this.project.duration);
     this.#store.set({
-      detect: { status: 'ready', progress: 1, samples, candidates, peaks, sensitivity },
-      status: `${peaks.length} hits found`,
+      detect: {
+        status: 'ready',
+        progress: 1,
+        samples,
+        candidates,
+        peaks,
+        sensitivity,
+        moments,
+        settled: {},
+      },
+      panelTab: 'moments',
+      status: `${moments.length} moments found`,
     });
   }
 
@@ -1880,7 +1895,16 @@ export class SoundDesignSession {
       return;
     }
     const peaks = filterPeaks(detect.candidates, detect.samples, value, MIN_GAP);
-    this.#store.set({ detect: { ...detect, sensitivity: value, peaks } });
+    const moments = readMoments(detect.samples, peaks, this.project.duration);
+    // Decisions outlive the list they were made about. Anything already
+    // placed or passed over keeps that answer if it is still here, and a
+    // moment the new sensitivity dropped takes its answer with it.
+    const settled: Record<string, MomentState> = {};
+    for (const moment of moments) {
+      const was = detect.settled[moment.id];
+      if (was) settled[moment.id] = was;
+    }
+    this.#store.set({ detect: { ...detect, sensitivity: value, peaks, moments, settled } });
   }
 
   /** Put the current sound on every suggested moment. */
@@ -1981,6 +2005,159 @@ export class SoundDesignSession {
   /** Put the current sound on one suggested moment. */
   placeHit(time: number): void {
     this.addCue(time);
+  }
+
+  // ---------- moments ----------
+
+  /** Which of the three the right panel shows. */
+  setPanelTab(tab: PanelTab): void {
+    this.#store.set({ panelTab: tab });
+  }
+
+  /** The moments found, with what the app would put on each one. */
+  get moments(): { moment: Moment; suggested: Suggested; state: MomentState | null }[] {
+    const { moments, settled } = this.#store.state.detect;
+    return moments.map((moment) => ({
+      moment,
+      suggested: suggestFor(moment, this.project.fps),
+      state: settled[moment.id] ?? null,
+    }));
+  }
+
+  /** How many are still waiting on an answer. */
+  get momentsLeft(): number {
+    const { moments, settled } = this.#store.state.detect;
+    return moments.filter((m) => !settled[m.id]).length;
+  }
+
+  /**
+   * Put the suggested sound down, and remember that this one is done.
+   *
+   * The cues are made here rather than through addCue because a suggestion is
+   * not the armed sound: it carries its own source, its own settings and its
+   * own layer, and a build puts down two of them at once. Nothing about the
+   * palette on the left is touched, so accepting a suggestion never changes
+   * what the next click on the timeline would place.
+   */
+  acceptMoment(id: string): void {
+    const found = this.#store.state.detect.moments.find((m) => m.id === id);
+    if (!found || this.#store.state.detect.settled[id]) return;
+    const made = this.#cuesFor(found);
+    if (!made.length) return;
+
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...made] }, `moment:${id}`);
+    this.#settleMoment(id, 'placed');
+    this.#store.set({ selection: made.map((cue) => cue.id) });
+    for (const cue of made) this.#settle(cue);
+    this.audition(made[0]);
+  }
+
+  /** Leave this one alone, and stop offering it. */
+  dismissMoment(id: string): void {
+    if (!this.#store.state.detect.moments.some((m) => m.id === id)) return;
+    this.#settleMoment(id, 'skipped');
+  }
+
+  /** Put it back in the list, whichever way it was answered. */
+  reopenMoment(id: string): void {
+    const settled = { ...this.#store.state.detect.settled };
+    if (!(id in settled)) return;
+    delete settled[id];
+    this.#store.set({ detect: { ...this.#store.state.detect, settled } });
+  }
+
+  /**
+   * Accept everything still waiting, in one pass.
+   *
+   * The whole point of the panel for somebody in a hurry: a complete first
+   * pass over the clip, which they then fix. Written as one change to the
+   * project rather than one per moment so that undo takes the pass back as
+   * the single thing it was, rather than forty times.
+   */
+  acceptAllMoments(): void {
+    const { moments, settled } = this.#store.state.detect;
+    const waiting = moments.filter((m) => !settled[m.id]);
+    if (!waiting.length) return;
+
+    const made: Cue[] = [];
+    const done: Record<string, MomentState> = { ...settled };
+    for (const moment of waiting) {
+      const cues = this.#cuesFor(moment);
+      if (!cues.length) continue;
+      made.push(...cues);
+      done[moment.id] = 'placed';
+    }
+    if (!made.length) return;
+
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...made] }, 'moments:all');
+    this.#store.set({
+      detect: { ...this.#store.state.detect, settled: done },
+      selection: [],
+      status: `${made.length} sounds placed over ${waiting.length} moments`,
+    });
+    for (const cue of made) this.#settle(cue);
+  }
+
+  /** Hear what is suggested, against the picture, without placing it. */
+  auditionMoment(id: string, inContext = true): void {
+    const found = this.#store.state.detect.moments.find((m) => m.id === id);
+    if (!found) return;
+    const cues = this.#cuesFor(found);
+    if (!cues.length) return;
+    if (inContext) {
+      this.previewInContext(cues[0]);
+      return;
+    }
+    // Off the timeline, so the sound is heard from its own start whichever
+    // end of it is anchored to the moment.
+    for (const cue of cues) {
+      this.audition(cue.anchor === 'end' ? { ...cue, time: cue.length } : cue);
+    }
+  }
+
+  /** Take back every sound a suggestion put down, and offer them again. */
+  clearPlacedMoments(): void {
+    const { moments, settled } = this.#store.state.detect;
+    const placed = new Set(moments.filter((m) => settled[m.id] === 'placed').map((m) => m.id));
+    if (!placed.size) return;
+    const cues = this.project.cues.filter((cue) => !cue.fromMoment || !placed.has(cue.fromMoment));
+    const settledNow: Record<string, MomentState> = {};
+    for (const [id, state] of Object.entries(settled)) {
+      if (!placed.has(id)) settledNow[id] = state;
+    }
+    this.#setProject({ ...this.project, cues }, 'moments:clear');
+    this.#store.set({
+      detect: { ...this.#store.state.detect, settled: settledNow },
+      selection: [],
+      status: 'suggested sounds taken back',
+    });
+  }
+
+  #settleMoment(id: string, state: MomentState): void {
+    const detect = this.#store.state.detect;
+    this.#store.set({ detect: { ...detect, settled: { ...detect.settled, [id]: state } } });
+  }
+
+  /**
+   * The cues a moment's suggestion comes to.
+   *
+   * Every part is placed against the project's own snapping and held inside
+   * the clip, exactly as a click on the timeline would be, so a suggested
+   * sound and a hand-placed one land on the same frame and are afterwards
+   * indistinguishable.
+   */
+  #cuesFor(moment: Moment): Cue[] {
+    const { parts } = suggestFor(moment, this.project.fps);
+    return parts.map((part) => {
+      const at = snapTime(this.project, this.#insideVideo(moment.t + part.at));
+      const cue = dressCue(makeCue(at, part.layerId, part.source), part.preset);
+      return {
+        ...cue,
+        fromMoment: moment.id,
+        ...(part.length === undefined ? {} : { length: Math.max(0.02, part.length) }),
+        ...(part.gain === undefined ? {} : { gain: cue.gain * part.gain }),
+      };
+    });
   }
 
   clearHits(): void {

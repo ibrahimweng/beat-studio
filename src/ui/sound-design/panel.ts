@@ -80,7 +80,17 @@ function noteName(midi: number): string {
  * The top half chooses what a click on the timeline will place. The bottom
  * half edits whichever cue is selected, and writes the files.
  */
-export function createSoundDesignPanel(session: SoundDesignSession): View {
+/** The panel, plus the three parts a tab strip shows one at a time. */
+export interface SoundDesignPanelView extends View {
+  /** Everything for choosing a sound. */
+  soundsPage: HTMLElement;
+  /** The settings of whatever is picked on the timeline. */
+  selectedPage: HTMLElement;
+  /** Export, session and palette, which belong to no tab. */
+  tail: HTMLElement;
+}
+
+export function createSoundDesignPanel(session: SoundDesignSession): SoundDesignPanelView {
   /** A section heading with a small "?" that opens the help at its part. */
   const heading = (
     text: string,
@@ -1360,7 +1370,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   );
   exportButtons.push(markerButton);
 
-  const exportBody = el('div', { class: 'card', style: { padding: '12px 14px 14px' } }, [
+  const exportBody = el('div', { class: 'card card--export', style: { padding: '12px 14px 14px' } }, [
     /*
      * Off by default, so a reverb tail at the end of the piece is allowed to
      * finish. Either way the file starts at zero and lines up when dropped at
@@ -1490,7 +1500,16 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    * timeline you can drop sounds onto and nothing else — no way to say which
    * sound, no way to get a file out. See `layout.css`.
    */
-  const root = el('aside', { class: 'inspector inspector--work' }, [
+  /*
+   * The panel in three parts, so the tab strip can show one at a time.
+   *
+   * Split here rather than in the wrapper because only this file knows which
+   * piece is which. Choosing a sound and editing the one already down are two
+   * different jobs, and a newcomer doing the first should not be scrolling
+   * past the second. Export, session and palette are neither, so they stay on
+   * show under whichever tab is up.
+   */
+  const soundsPage = el('div', { class: 'panel-page' }, [
     el('div', {}, [
       heading('Place', 'place'),
       search,
@@ -1536,10 +1555,25 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       heading('On layer', 'timeline', { marginTop: '12px' }),
       layerRow,
     ]),
-    foldable('sound', 'Selected sound', 'sound', cueBody),
+  ]);
+
+  // Not folded: it has a tab of its own now, and a fold inside a tab is one
+  // click to reach the thing the tab was already for.
+  const selectedPage = el('div', { class: 'panel-page' }, [
+    heading('Selected sound', 'sound'),
+    cueBody,
+  ]);
+
+  const tail = el('div', { class: 'panel-tail' }, [
     foldable('export', 'Export', 'export', exportBody),
     foldable('session', 'Session', 'session', sessionBody),
     foldable('palette', 'Palette', 'export', paletteBody),
+  ]);
+
+  const root = el('aside', { class: 'inspector inspector--work' }, [
+    soundsPage,
+    selectedPage,
+    tail,
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;
@@ -1684,6 +1718,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   return {
     el: root,
+    soundsPage,
+    selectedPage,
+    tail,
 
     update(state: AppState) {
       const { project } = state;

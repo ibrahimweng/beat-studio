@@ -25,7 +25,7 @@ import {
 } from './keep.ts';
 import { createHelp } from './ui/help.ts';
 import { createKeepNotice } from './ui/keep-notice.ts';
-import { createSoundDesignPanel } from './ui/sound-design/panel.ts';
+import { createWorkPanel } from './ui/sound-design/work-panel.ts';
 import { createVideoStage } from './ui/sound-design/stage.ts';
 import { createVideoWindow } from './ui/video-window.ts';
 import { createTimeline } from './ui/sound-design/timeline.ts';
@@ -98,7 +98,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     },
   });
   const timeline = createTimeline(soundDesign);
-  const soundDesignPanel = createSoundDesignPanel(soundDesign);
+  const soundDesignPanel = createWorkPanel(soundDesign);
   const divider = createDivider({
     container: () => main,
     timeline: () => timeline.el,

@@ -655,6 +655,11 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
       // not have every hit in it quietly shift.
       vary: readNumber(cue.vary, 0, 0, 1),
       muted: cue.muted === true,
+      // Carried through so that reopening a piece and then clearing the
+      // suggestions still clears the ones suggested last time.
+      ...(typeof cue.fromMoment === 'string' && cue.fromMoment
+        ? { fromMoment: cue.fromMoment }
+        : {}),
     });
   }
 

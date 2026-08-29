@@ -6,6 +6,7 @@ import type { Rebuilt } from './audio/rebuild.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
+import type { Moment } from './video/moments.ts';
 import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
 
 /**
@@ -16,6 +17,8 @@ import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
  * they go on the timeline.
  */
 export type Mode = 'play' | 'sound-design';
+
+export type PanelTab = 'moments' | 'sounds' | 'selected';
 
 export interface AppState {
   mode: Mode;
@@ -78,6 +81,15 @@ export interface AppState {
   armed: boolean;
   /** Progress message while exporting, or null when idle. */
   exporting: string | null;
+  /**
+   * Which of the three the right panel is showing.
+   *
+   * Moments is what a scanned video opens on, because for somebody who has
+   * never done this the list of what to do next is the app. Sounds is the
+   * library for choosing something yourself, and Selected is the sound
+   * currently picked on the timeline.
+   */
+  panelTab: PanelTab;
   /** Suggested hits read from the video. */
   detect: Detection;
   /** Sound packs that have been loaded, in the order they were added. */
@@ -134,6 +146,9 @@ export interface Extraction {
  * how many of the candidates to show, so the control stays instant on a long
  * piece that took a while to read.
  */
+/** What has been done about a suggested moment. */
+export type MomentState = 'placed' | 'skipped';
+
 export interface Detection {
   status: 'idle' | 'scanning' | 'pinning' | 'ready';
   /** 0 to 1 while working. */
@@ -145,10 +160,36 @@ export interface Detection {
   /** The moments currently shown. */
   peaks: Peak[];
   sensitivity: number;
+  /**
+   * The moments as things to decide about, rather than as marks on a ruler.
+   *
+   * Worked out from the samples and the peaks above, so it costs nothing and
+   * is redone whenever the sensitivity moves. Held rather than derived at
+   * render time because the panel, the strip and the accept-all button all
+   * have to be looking at the same list.
+   */
+  moments: Moment[];
+  /**
+   * What has been done about each one, by moment id.
+   *
+   * Kept apart from the moments themselves because the list is rebuilt every
+   * time the sensitivity moves and a decision must not be. A moment that
+   * survives that keeps its answer; one that does not is gone either way.
+   */
+  settled: Record<string, MomentState>;
 }
 
 export function emptyDetection(): Detection {
-  return { status: 'idle', progress: 0, samples: [], candidates: [], peaks: [], sensitivity: 0.5 };
+  return {
+    status: 'idle',
+    progress: 0,
+    samples: [],
+    candidates: [],
+    peaks: [],
+    sensitivity: 0.5,
+    moments: [],
+    settled: {},
+  };
 }
 
 export function initialState(): AppState {
@@ -183,6 +224,7 @@ export function initialState(): AppState {
     activeLayerId: 'impacts',
     armed: false,
     exporting: null,
+    panelTab: 'moments',
     detect: emptyDetection(),
     packs: [],
     mine: [],
