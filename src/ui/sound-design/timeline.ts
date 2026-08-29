@@ -140,33 +140,31 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
     },
   }) as HTMLInputElement;
 
-  const placeAll = button(
-    {
-      class: 'chip chip--sm',
-      /*
-       * Named for what it ignores, because it is the other way of working.
-       *
-       * This puts the sound you have chosen on every hit, on one layer. The
-       * Moments list does the opposite: a different sound per moment, on the
-       * layer that kind of moment belongs to. Both are wanted -- one is a
-       * sound designer stamping a pass, the other is the app's suggestions --
-       * but they were sat next to each other looking interchangeable.
-       */
-      title:
-        'Stamp the sound you have chosen on every hit, all on one layer. ' +
-        'The Moments list instead places a different sound for each kind of moment.',
-      on: { click: () => session.placeAllHits() },
-    },
-    ['Place all'],
-  );
-
   const clearHits = button(
     { class: 'chip chip--sm', title: 'Forget the suggestions', on: { click: () => session.clearHits() } },
     ['Clear'],
   );
 
   const found = el('div', { class: 'hint', style: { whiteSpace: 'nowrap' } });
-  const detectGroup = el('div', { class: 'tl__detect' }, [findButton, sensitivity, found, placeAll, clearHits]);
+
+  /*
+   * This strip reads the video. It does not decide anything.
+   *
+   * "Place all" used to sit here, one chip away from the scan button, which
+   * made two flows out of one: stamp a sound on every hit from the timeline,
+   * or work the Moments list in the panel. They answer the same question --
+   * what goes on the timeline -- and nothing said which was which, or that
+   * they give different results from the same scan.
+   *
+   * The Moments list wins, because it is what the app opens on and what it is
+   * for: a sound chosen per kind of moment, on the layer that kind belongs
+   * to, with a sentence saying why. Stamping one sound over all of it is
+   * still worth having and is still here, moved to sit under that list as
+   * the alternative to it rather than beside the scan as a rival to it.
+   *
+   * What is left is scan, sensitivity, count, forget: one job, one place.
+   */
+  const detectGroup = el('div', { class: 'tl__detect' }, [findButton, sensitivity, found, clearHits]);
 
   const undo = button(
     { class: 'chip chip--sm', title: 'Undo (Ctrl or Cmd and Z)', on: { click: () => session.undo() } },

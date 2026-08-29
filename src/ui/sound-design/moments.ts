@@ -55,6 +55,36 @@ export function createMomentsPanel(
     ['Undo the pass'],
   );
 
+  /**
+   * The other way of answering the same list, kept and demoted.
+   *
+   * This used to be "Place all", a chip beside the scan button on the
+   * timeline, which made it look like a rival to this whole panel rather than
+   * one of the things you can do with what the panel is showing. It is not a
+   * rival and it is not the same: Accept all gives each moment the sound its
+   * kind asks for on the layer that kind belongs to, and this gives every hit
+   * the one sound you picked in Sounds, all on one layer. That is a real
+   * thing to want once you know what you are doing, and a worse result if you
+   * do not, so it sits under the list rather than over it.
+   *
+   * It counts hits rather than moments, which is why the label carries the
+   * number: a run of three ticks inside half a second is one moment and three
+   * hits, so pressing this on a list of three can put down five. Saying five
+   * on the button is the only honest way to offer that.
+   */
+  const placeAll = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'Put the sound you have chosen in Sounds on every hit, all on one layer, ' +
+        'instead of the sound each kind of moment asks for',
+      on: { click: () => session.placeAllHits() },
+    },
+    ['One sound on every hit'],
+  );
+
+  const foot = el('div', { class: 'moments__foot' }, [clearPlaced, placeAll]);
+
   const head = el('div', { class: 'moments__head' }, [
     el('div', { class: 'moments__headings' }, [count, note]),
     acceptAll,
@@ -63,7 +93,7 @@ export function createMomentsPanel(
   const list = el('div', { class: 'moments__list' });
   const empty = el('div', { class: 'moments__empty' });
 
-  const root = el('div', { class: 'panel-page moments' }, [head, empty, list, clearPlaced]);
+  const root = el('div', { class: 'panel-page moments' }, [head, empty, list, foot]);
 
   /**
    * What was drawn last time, so the list is only rebuilt when it changed.
@@ -103,6 +133,15 @@ export function createMomentsPanel(
 
       acceptAll.style.display = left && !scanning ? '' : 'none';
       clearPlaced.style.display = placed ? '' : 'none';
+
+      // Offered on the same terms as Accept all, because it is the answer to
+      // the same question. The count is the hits it will actually place, not
+      // the moments listed above it.
+      const hits = detect.peaks.length;
+      const offerStamp = Boolean(left && !scanning && hits);
+      placeAll.style.display = offerStamp ? '' : 'none';
+      if (offerStamp) setText(placeAll, `One sound on all ${hits} hits`);
+      foot.style.display = placed || offerStamp ? '' : 'none';
 
       empty.style.display = detect.moments.length || scanning ? 'none' : '';
       setText(
