@@ -39,7 +39,7 @@ export interface AppState {
   currentPreset: CuePreset | null;
   /** The layer new cues are placed on. */
   activeLayerId: string;
-  /** Playing an instrument drops a cue at the playhead. */
+  /** Tapping a pad key drops that sound at the playhead. */
   armed: boolean;
   /** Progress message while exporting, or null when idle. */
   exporting: string | null;
@@ -78,9 +78,8 @@ export interface AppState {
   /**
    * The video floats in its own window rather than sitting on the stage.
    *
-   * Only meaningful on the sound design screen, where there is a stage to
-   * choose against. On the instrument screens the window is the only way to
-   * see the clip, so it opens there whether this is on or not.
+   * With it on, the stage above the lanes is gone rather than empty, and the
+   * height it was using goes to the timeline. That is the reason to want it.
    */
   videoWindow: boolean;
 }

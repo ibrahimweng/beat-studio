@@ -20,7 +20,12 @@ import { createSoundDesignPanel } from './panel.ts';
  * panel that was already there, moved rather than rebuilt, so nothing that
  * worked before works differently now.
  */
-export function createWorkPanel(session: SoundDesignSession): View {
+export interface WorkPanelView extends View {
+  /** Open the library at one moment group, unfolding whatever is in the way. */
+  openGroup(id: string): void;
+}
+
+export function createWorkPanel(session: SoundDesignSession): WorkPanelView {
   const panel = createSoundDesignPanel(session);
 
   /*
@@ -88,6 +93,7 @@ export function createWorkPanel(session: SoundDesignSession): View {
 
   return {
     el: root,
+    openGroup: (id) => panel.openGroup(id),
 
     update(state: AppState, previous: AppState | null) {
       // Both children are updated whichever tab is showing. They are cheap,

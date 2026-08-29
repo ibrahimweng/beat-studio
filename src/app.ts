@@ -39,7 +39,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const session = new Session(options);
   const soundDesign = new SoundDesignSession(session.engine, session.store);
 
-  const tour = createTour();
+  const tour = createTour({
+    onShow: (tab, reveal) => {
+      soundDesign.setPanelTab(tab);
+      if (reveal) soundDesignPanel.openGroup(reveal);
+    },
+  });
   const help = createHelp({ onReplayTour: () => tour.start() });
 
   const rail = createRail(session, { onHelp: () => help.toggle() });
@@ -135,7 +140,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
    * not on the page yet would put it nowhere.
    */
   const placeVideo = (state: AppState): void => {
-    if (state.videoReady && state.videoWindow) videoWindow.open(false);
+    if (state.videoReady && state.videoWindow) videoWindow.open();
     else videoWindow.stow();
   };
 

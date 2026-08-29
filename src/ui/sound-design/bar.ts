@@ -98,10 +98,9 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
   /**
    * Put the video in a window that floats over everything.
    *
-   * On the instrument screens the window is the only way to see the clip at
-   * all. Here it is a choice: the big stage above the timeline is usually
-   * what you want, and the window is for when you would rather have the
-   * height and keep the picture in a corner.
+   * The big stage above the timeline is usually what you want. This is for
+   * when you would rather have the height: with the clip in a window the
+   * stage is gone rather than empty, and all of it goes to the lanes.
    */
   const videoWindow = button(
     {
@@ -169,8 +168,7 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
     el('div', { class: 'topbar__title section-title--asks' }, [
       el('span', { text: 'Sound design' }),
       // One "?" for the bar, at the name. A second one further along said
-      // nothing about where it sat, and the video window it pointed at is
-      // covered here and on the instruments bar as well.
+      // nothing about where it sat, and pointed at what this already covers.
       helpButton('transport', 'the transport'),
     ]),
     el('div', { class: 'topbar__divider' }),

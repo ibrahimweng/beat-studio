@@ -366,6 +366,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     return node;
   };
 
+  /** Mark a group so something outside can find it, such as the walkthrough. */
+  const named = (id: string, node: HTMLElement): HTMLElement => {
+    node.dataset.group = id;
+    return node;
+  };
+
   const voicePicks = (names: readonly DesignName[]): Pick[] =>
     names.map((name) =>
       pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
@@ -392,7 +398,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
    */
   const momentSections = MOMENT_GROUPS.map((group) => ({
     id: group.id,
-    node: pickGroup(
+    node: named(group.id, pickGroup(
       group.title,
       [
         ...voicePicks(group.names),
@@ -409,7 +415,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       undefined,
       true,
       group.when,
-    ),
+    )),
   }));
 
   const kitSection = pickGroup(

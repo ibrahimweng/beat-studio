@@ -184,13 +184,11 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       detectGroup,
       el('div', { class: 'dock__spacer' }),
       /*
-       * What the app has to say, on the screen it is being said about.
+       * What the app has to say, beside the work it is about.
        *
-       * The session writes a status line for everything it does — a file
-       * exported, a session opened, a clip that could not be kept — and until
-       * now the only place it was drawn was the dock at the bottom of the
-       * instrument screens. So the messages about the timeline were the ones
-       * you could not see.
+       * The session writes a line for everything it does: a file exported, a
+       * session opened, a clip that could not be kept, a piece that has more
+       * sounds on it than it can carry. This is where they are read.
        */
       status,
       zoomOut,

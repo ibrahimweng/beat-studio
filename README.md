@@ -828,8 +828,16 @@ section marked, so you get the answer to what you asked rather than the top of
 a long page.
 
 The first time you open the app, a short walkthrough points at each part of the
-screen in turn. You can leave it at any step and it does not come back on its
-own. The help panel can start it again.
+screen in turn, in the order the work happens: your video, reading the clip,
+what it found, the three panels, the library, the layers, placing one yourself,
+and the export. Where a step is about something behind a tab it opens that tab
+first, and where it is about a group of the library it opens that group, so
+every step is pointing at the real thing rather than at where the real thing
+would be.
+
+You can leave it at any step and it does not come back on its own. It puts you
+back on Moments when it finishes, wherever it ended. The help panel can start
+it again.
 
 ## Options
 
