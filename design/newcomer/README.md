@@ -1,6 +1,8 @@
 # The newcomer interface
 
-Design source for the redesign in `docs/plan-for-newcomers.md`.
+Design source for the redesign these files were drawn for, which is the app
+you are looking at: one screen, a panel that says what belongs on each moment
+the video scan finds, and a library grouped by what is happening on screen.
 
 - `Main.dc.html` is the redesigned sound design screen. The three panel tabs
   work, so Moments, Sounds and Selected can each be seen.
