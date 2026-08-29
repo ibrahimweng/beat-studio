@@ -1742,6 +1742,14 @@
   text-wrap: pretty;
 }
 
+/* The two alternatives to working the list, under the list. */
+.moments__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .moments__list {
   display: flex;
   flex-direction: column;
