@@ -9,10 +9,14 @@ import type { AppState } from '../../store.ts';
 import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
 import {
   DESIGN_GROUPS,
+  INSTRUMENT_PICKS,
+  MOMENT_GROUPS,
+  layerJob,
   type Anchor,
   type Cue,
   type CuePreset,
   type CueSource,
+  type DesignName,
 } from '../../timeline/types.ts';
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
@@ -80,7 +84,19 @@ function noteName(midi: number): string {
  * The top half chooses what a click on the timeline will place. The bottom
  * half edits whichever cue is selected, and writes the files.
  */
-export function createSoundDesignPanel(session: SoundDesignSession): View {
+/** The panel, plus the three parts a tab strip shows one at a time. */
+export interface SoundDesignPanelView extends View {
+  /** Everything for choosing a sound. */
+  soundsPage: HTMLElement;
+  /** The settings of whatever is picked on the timeline. */
+  selectedPage: HTMLElement;
+  /** Export, session and palette, which belong to no tab. */
+  tail: HTMLElement;
+  /** Open the library at one moment group, unfolding whatever is in the way. */
+  openGroup(id: string): void;
+}
+
+export function createSoundDesignPanel(session: SoundDesignSession): SoundDesignPanelView {
   /** A section heading with a small "?" that opens the help at its part. */
   const heading = (
     text: string,
@@ -117,6 +133,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   };
 
   const folded = foldedNow();
+
+  /** Each fold's own button, so something else can open one. */
+  const foldHeads = new Map<string, HTMLButtonElement>();
 
   const foldable = (
     id: string,
@@ -165,6 +184,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       }
     });
 
+    foldHeads.set(id, head);
     wrap.appendChild(el('div', { class: 'folds__head' }, [head, helpButton(help, text.toLowerCase())]));
     wrap.appendChild(el('div', { class: 'folds__body' }, [body]));
     return wrap;
@@ -287,6 +307,15 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
      * palette collapsed the user's own library with it.
      */
     collapses = false,
+    /**
+     * A line saying when this group is the one you want.
+     *
+     * Only the moment groups carry one. It folds away with the buttons rather
+     * than staying with the title, because seven of these on screen at once is
+     * a paragraph nobody reads, and one of them beside the sounds it describes
+     * is the sentence that makes the group mean something.
+     */
+    note?: string,
   ): HTMLElement => {
     const row = el('div', { class: 'pick-row' }, group.map((p) => p.node));
 
@@ -319,6 +348,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         },
         [caret, el('span', { text: title })],
       ),
+      ...(note ? [el('div', { class: 'pick-group__when', text: note })] : []),
       row,
       ...(extra ? [extra] : []),
     ]);
@@ -336,17 +366,57 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     return node;
   };
 
+  /** Mark a group so something outside can find it, such as the walkthrough. */
+  const named = (id: string, node: HTMLElement): HTMLElement => {
+    node.dataset.group = id;
+    return node;
+  };
+
+  const voicePicks = (names: readonly DesignName[]): Pick[] =>
+    names.map((name) =>
+      pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
+    );
+
   // Twenty four in one row is a wall. Grouped by what they are for, it reads.
   const designSections = DESIGN_GROUPS.map((group) =>
-    pickGroup(
+    pickGroup(group.title, voicePicks(group.names), undefined, true),
+  );
+
+  /*
+   * The same forty voices, under what is happening on screen, with the kit and
+   * the two instruments among them.
+   *
+   * The other list sorts them by how they are made, which is how somebody who
+   * already knows this looks at a library. Four of its ten groups are named
+   * after a mechanism, and somebody watching a logo land cannot use "Struck".
+   *
+   * The drums and the instruments are in here rather than in sections of their
+   * own because that is what folding them in means: a crash is a wash that
+   * covers a cut, and belongs beside the other things that cover a cut, not
+   * behind a heading saying Kit. Which instrument made a sound is the least
+   * interesting thing about it when the question is what goes on this frame.
+   */
+  const momentSections = MOMENT_GROUPS.map((group) => ({
+    id: group.id,
+    node: named(group.id, pickGroup(
       group.title,
-      group.names.map((name) =>
-        pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
-      ),
+      [
+        ...voicePicks(group.names),
+        ...INSTRUMENT_PICKS.filter((pick) => pick.group === group.id).map((pick) =>
+          pickButton(
+            pick.label,
+            pick.source,
+            (current) => sameSource(current, pick.source),
+            null,
+            pick.about,
+          ),
+        ),
+      ],
       undefined,
       true,
-    ),
-  );
+      group.when,
+    )),
+  }));
 
   const kitSection = pickGroup(
     'Kit',
@@ -371,6 +441,107 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
     undefined,
     true,
   );
+
+  /*
+   * Which way the forty voices are indexed.
+   *
+   * By moment for anybody who has not done this before, since it is the only
+   * one of the two that answers the question they actually have. By sound type
+   * is the same voices under the names somebody who knows the craft would
+   * expect, and it is kept because learning those names is a real thing that
+   * happens and an app that forgets them is an app you outgrow.
+   *
+   * Remembered, like the folds, because a panel that resets its arrangement
+   * every visit teaches you not to arrange it.
+   */
+  const BROWSE_STORE = 'toolcraft.st88.browse';
+  type Browse = 'moment' | 'kind';
+
+  const browseNow = (): Browse => {
+    try {
+      return localStorage.getItem(BROWSE_STORE) === 'kind' ? 'kind' : 'moment';
+    } catch {
+      // Site data blocked. By moment, which is the default either way.
+      return 'moment';
+    }
+  };
+
+  let browse = browseNow();
+
+  const momentBox = el('div', {}, momentSections.map((section) => section.node));
+  // Under the sound type grouping the kit and the instruments are what they
+  // are made of, which is a kit and two instruments.
+  const kindBox = el('div', {}, [...designSections, kitSection, pitchedSection]);
+
+  const browseWays: { way: Browse; node: HTMLButtonElement }[] = (
+    [
+      { way: 'moment', label: 'By moment', title: 'Grouped by what is happening on screen' },
+      { way: 'kind', label: 'By sound type', title: 'Grouped by what the sound is made of' },
+    ] as const
+  ).map(({ way, label, title }) => ({
+    way,
+    node: button(
+      { class: 'cell pick', title, on: { click: () => setBrowse(way) } },
+      [el('span', { text: label })],
+    ),
+  }));
+
+  function setBrowse(way: Browse): void {
+    browse = way;
+    try {
+      localStorage.setItem(BROWSE_STORE, way);
+    } catch {
+      // Not being able to remember it is not a reason to refuse to do it.
+    }
+    paintBrowse();
+  }
+
+  function paintBrowse(): void {
+    momentBox.style.display = browse === 'moment' ? '' : 'none';
+    kindBox.style.display = browse === 'kind' ? '' : 'none';
+    for (const option of browseWays) toggleClass(option.node, 'is-on', option.way === browse);
+  }
+
+  /*
+   * The kit and the instruments sit under both, rather than inside either.
+   *
+   * The switch is about how the forty voices are indexed, and those are not
+   * among them: a kick is a kick under any grouping. Describing them by what
+   * they do for picture is the next piece of work, not this one.
+   */
+  const browseBody = el('div', {}, [
+    el('div', { class: 'pick-row pick-row--ways' }, browseWays.map((option) => option.node)),
+    momentBox,
+    kindBox,
+  ]);
+
+  /**
+   * Show one moment group, whatever state the panel was left in.
+   *
+   * Every step here is something somebody would otherwise have to do for
+   * themselves after being told to go and look: unfold the browser, switch
+   * back to the grouping that has this group in it, open it, close whatever
+   * was open before, and find it on screen. A suggestion somebody did not
+   * want is only useful if the alternative is one click away.
+   */
+  function openGroup(id: string): void {
+    const section = momentSections.find((one) => one.id === id);
+    if (!section) return;
+
+    setBrowse('moment');
+
+    const fold = foldHeads.get('kinds');
+    if (fold?.getAttribute('aria-expanded') === 'false') fold.click();
+
+    if (section.node.classList.contains('pick-group--shut')) {
+      section.node.querySelector<HTMLButtonElement>('.pick-group__title--opens')?.click();
+    }
+
+    // After the fold, since nothing can be scrolled to while it is closed.
+    section.node.scrollIntoView({ block: 'nearest' });
+  }
+
+  paintBrowse();
 
   /* ---------- library ---------- */
 
@@ -1034,6 +1205,26 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   const layerRow = el('div', { class: 'pick-row' });
 
+  /*
+   * What the layer you are placing on is for.
+   *
+   * One line, for whichever is chosen, rather than four at once. The four
+   * names were always good and never meant anything, and a mix is mostly an
+   * order of importance: this is where that order is said.
+   */
+  const layerJobLine = el('div', { class: 'hint layer-job' });
+
+  const balanceButton = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'Set every layer to the level its job asks for, so the piece is not flat. ' +
+        'Anything you move afterwards wins, and undo takes it back',
+      on: { click: () => session.balanceLayers() },
+    },
+    ['Balance'],
+  );
+
   // ---------- cue inspector ----------
   const cueTitle = el('div', { class: 'status-head__meta', text: 'Nothing selected' });
   const cueTime = el('div', { class: 'hint', text: 'Click the timeline to place a sound.' });
@@ -1352,7 +1543,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   const markerButton = button(
     {
       class: 'chip chip--sm',
-      style: { width: '100%' },
       title: 'A spreadsheet of every sound and the frame it lands on, for whoever picks this up next',
       on: { click: () => session.exportMarkers() },
     },
@@ -1360,7 +1550,27 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
   );
   exportButtons.push(markerButton);
 
-  const exportBody = el('div', { class: 'card', style: { padding: '12px 14px 14px' } }, [
+  const midiButton = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'The same thing as a MIDI file, which a music program opens on its own ' +
+        'timeline in sync, with every sound on a row of its own',
+      on: { click: () => session.exportTimelineMidi() },
+    },
+    ['MIDI'],
+  );
+  exportButtons.push(midiButton);
+
+  // Two ways of handing the timing to somebody else, side by side.
+  markerButton.style.flex = '1 1 0';
+  midiButton.style.flex = '1 1 0';
+  const handoffRow = el('div', { style: { display: 'flex', gap: '4px' } }, [
+    markerButton,
+    midiButton,
+  ]);
+
+  const exportBody = el('div', { class: 'card card--export', style: { padding: '12px 14px 14px' } }, [
     /*
      * Off by default, so a reverb tail at the end of the piece is allowed to
      * finish. Either way the file starts at zero and lines up when dropped at
@@ -1407,7 +1617,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       'Every impact in one file, every whoosh in another, so they can be balanced against each other later',
       (f) => void session.exportPerSound(f, settings),
     ),
-    el('div', { style: { marginTop: '10px' } }, [markerButton]),
+    el('div', { style: { marginTop: '10px' } }, [handoffRow]),
     exportStatus,
   ]);
 
@@ -1490,7 +1700,16 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
    * timeline you can drop sounds onto and nothing else — no way to say which
    * sound, no way to get a file out. See `layout.css`.
    */
-  const root = el('aside', { class: 'inspector inspector--work' }, [
+  /*
+   * The panel in three parts, so the tab strip can show one at a time.
+   *
+   * Split here rather than in the wrapper because only this file knows which
+   * piece is which. Choosing a sound and editing the one already down are two
+   * different jobs, and a newcomer doing the first should not be scrolling
+   * past the second. Export, session and palette are neither, so they stay on
+   * show under whichever tab is up.
+   */
+  const soundsPage = el('div', { class: 'panel-page' }, [
     el('div', {}, [
       heading('Place', 'place'),
       search,
@@ -1513,12 +1732,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
        * Twelve groups were collapsed to one line each, which was still twelve
        * lines and three hundred pixels of headings for something most people
        * never open: the search and the library shelf above are how a sound is
-       * actually found. Browsing by kind is the fallback, so it costs one line
-       * until it is wanted, and inside it the groups still open one at a time.
+       * actually found. Browsing is the fallback, so it costs one line until
+       * it is wanted, and inside it the groups still open one at a time.
        */
-      foldable('kinds', 'Browse by kind', 'library',
-        el('div', {}, [...designSections, kitSection, pitchedSection]),
-        { marginTop: '8px' }, true),
+      foldable('kinds', 'Browse', 'library', browseBody, { marginTop: '8px' }, true),
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       sampleSections,
@@ -1533,13 +1750,32 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         helpButton('recordings', 'your own recordings'),
       ]),
       heardBody,
-      heading('On layer', 'timeline', { marginTop: '12px' }),
+      el('div', { class: 'layer-head' }, [
+        heading('On layer', 'timeline', { marginTop: '12px' }),
+        balanceButton,
+      ]),
       layerRow,
+      layerJobLine,
     ]),
-    foldable('sound', 'Selected sound', 'sound', cueBody),
+  ]);
+
+  // Not folded: it has a tab of its own now, and a fold inside a tab is one
+  // click to reach the thing the tab was already for.
+  const selectedPage = el('div', { class: 'panel-page' }, [
+    heading('Selected sound', 'sound'),
+    cueBody,
+  ]);
+
+  const tail = el('div', { class: 'panel-tail' }, [
     foldable('export', 'Export', 'export', exportBody),
     foldable('session', 'Session', 'session', sessionBody),
     foldable('palette', 'Palette', 'export', paletteBody),
+  ]);
+
+  const root = el('aside', { class: 'inspector inspector--work' }, [
+    soundsPage,
+    selectedPage,
+    tail,
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;
@@ -1684,6 +1920,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
 
   return {
     el: root,
+    soundsPage,
+    selectedPage,
+    tail,
+    openGroup,
 
     update(state: AppState) {
       const { project } = state;
@@ -1708,9 +1948,14 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
         paintedLayers = project.layers;
         clear(layerRow);
         for (const layer of project.layers) {
+          const job = layerJob(layer.id);
           layerRow.appendChild(
             button(
-              { class: 'cell pick', on: { click: () => session.setActiveLayer(layer.id) } },
+              {
+                class: 'cell pick',
+                ...(job ? { title: job.job } : {}),
+                on: { click: () => session.setActiveLayer(layer.id) },
+              },
               [el('span', { text: layer.name })],
             ),
           );
@@ -1719,6 +1964,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): View {
       Array.from(layerRow.children).forEach((node, i) =>
         toggleClass(node as HTMLElement, 'is-on', project.layers[i]?.id === state.activeLayerId),
       );
+
+      // A layer somebody added has no job, and inventing one for it would be
+      // a guess presented as advice.
+      const onJob = layerJob(state.activeLayerId);
+      setText(layerJobLine, onJob ? onJob.job : '');
+      layerJobLine.style.display = onJob ? '' : 'none';
 
       const picked = new Set(state.selection);
       const all = project.cues.filter((cue) => picked.has(cue.id));

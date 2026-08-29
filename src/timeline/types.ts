@@ -83,7 +83,172 @@ export const DESIGN_GROUPS: readonly { title: string; names: readonly DesignName
   { title: 'Mechanical', names: ['ratchet', 'clockwork', 'zip', 'motor'] },
 ];
 
+/**
+ * The same forty voices, indexed by what is happening on screen.
+ *
+ * {@link DESIGN_GROUPS} above sorts them by how they are made, which is a
+ * sound designer's way of looking at a library and is the wrong way round for
+ * everybody else. Somebody watching a logo land does not think "I need
+ * something from Struck". They think "something needs to happen here", and
+ * four of the ten groups above describe a mechanism rather than a use.
+ *
+ * So this is a second index over exactly the same voices. Nothing is added and
+ * nothing is left out, and the old grouping is still there for anybody who has
+ * learned the vocabulary and prefers it.
+ *
+ * The titles are the ones the Moments panel uses for what it finds in a video,
+ * on purpose: reading "Something builds" beside a moment and then finding
+ * "Something builds" in the library is the whole point of naming them this
+ * way. Two of them differ, because a moment describes what the picture did and
+ * a group describes what you are reaching for, and forcing those to be one
+ * word would make both worse.
+ */
+export const MOMENT_GROUPS: readonly {
+  id: string;
+  title: string;
+  /** What is on screen when you want this group. */
+  when: string;
+  names: readonly DesignName[];
+}[] = [
+  {
+    id: 'appears',
+    title: 'Something appears',
+    when: 'A logo lands, text pops in, an element enters',
+    names: ['impact', 'thud', 'clank', 'pop', 'bell', 'glass', 'wood', 'pipe', 'thunk'],
+  },
+  {
+    id: 'moves',
+    title: 'Something moves',
+    when: 'A pan, a swipe, a camera move, an element travelling',
+    names: ['whoosh', 'swipe', 'flutter', 'wobble', 'zip'],
+  },
+  {
+    id: 'builds',
+    title: 'Something builds',
+    when: 'Before a reveal, a countdown, a push in',
+    names: ['riser', 'swell', 'reverse', 'swarm', 'shimmer'],
+  },
+  {
+    id: 'lands',
+    title: 'Something lands hard',
+    when: 'The hero moment, the one that has to be felt',
+    names: ['slam', 'metal', 'sub', 'rumble'],
+  },
+  {
+    id: 'there',
+    title: 'Something is there',
+    when: 'A bed under a scene, a room, weather',
+    names: ['drone', 'rain', 'fire', 'gravel', 'pour', 'motor'],
+  },
+  {
+    id: 'small',
+    title: 'A small thing happens',
+    when: 'A tick, a counter, a cursor, interface sound',
+    names: ['click', 'tick', 'beep', 'chirp', 'string', 'wire', 'ratchet', 'clockwork'],
+  },
+  {
+    id: 'transition',
+    title: 'A transition',
+    when: 'A cut, a wipe, a glitch between two things',
+    names: ['zap', 'glitch', 'static'],
+  },
+];
+
 export type PitchedName = 'piano' | 'guitar';
+
+/**
+ * The drum kit and the two instruments, filed under what they do for picture.
+ *
+ * They used to be three screens of their own, which is the right shape for
+ * working out a piece of music and the wrong one for scoring a video: a
+ * fretboard asks what you want to play, and somebody putting sound to a logo
+ * does not have an answer. What they have is a moment.
+ *
+ * So each one sits in the moment group it serves. The pads keep their own
+ * names, because a kick is called a kick and a video editor knows that word.
+ * The two pitched instruments do not: one piano note held low is a stinger and
+ * nothing about "piano, note 33" says so, which is why these are the gestures
+ * rather than a keyboard.
+ *
+ * A stack is one sound played at one moment, so a chord is here and a rising
+ * figure is not. Three notes in a row is three sounds, and belongs on the
+ * timeline rather than on a button.
+ */
+export interface InstrumentPick {
+  /** The moment group it appears under. */
+  group: string;
+  label: string;
+  /** What it is for, said in full where there is room to hover. */
+  about: string;
+  source: CueSource;
+}
+
+const piano = (midi: number, ...over: number[]): CueSource => ({
+  kind: 'pitched',
+  name: 'piano',
+  midi,
+  ...(over.length ? { with: over.map((n) => ({ kind: 'pitched', name: 'piano', midi: n } as CueSource)) } : {}),
+});
+
+const guitar = (midi: number): CueSource => ({ kind: 'pitched', name: 'guitar', midi });
+const pad = (name: PadName): CueSource => ({ kind: 'kit', name });
+
+export const INSTRUMENT_PICKS: readonly InstrumentPick[] = [
+  // Something appears.
+  { group: 'appears', label: 'Snare', about: 'A sharp crack, for something arriving with an edge on it', source: pad('snare') },
+  { group: 'appears', label: 'Tom 1', about: 'A tuned hit, higher and shorter than the others', source: pad('tom1') },
+  { group: 'appears', label: 'Tom 2', about: 'A tuned hit, in the middle', source: pad('tom2') },
+  { group: 'appears', label: 'Tom 3', about: 'A tuned hit, low and round', source: pad('tom3') },
+  {
+    group: 'appears',
+    label: 'Piano stinger',
+    about: 'One low piano note left to ring. The sound under a logo landing',
+    source: piano(33),
+  },
+
+  // Something lands hard.
+  { group: 'lands', label: 'Kick', about: 'Low weight, felt more than heard', source: pad('kick') },
+  { group: 'lands', label: 'Kick 2', about: 'The same, with more of a click on the front of it', source: pad('kick2') },
+  { group: 'lands', label: 'Floor tom', about: 'The lowest drum there is, for a moment with size', source: pad('floor') },
+
+  // Something builds.
+  {
+    group: 'builds',
+    label: 'Guitar tension',
+    about: 'A high steel note held. Unease before something is revealed',
+    source: guitar(81),
+  },
+
+  // Something is there.
+  {
+    group: 'there',
+    label: 'Piano chord',
+    about: 'Three notes at once, held. A bed under a scene rather than an event',
+    source: piano(48, 52, 55),
+  },
+  {
+    group: 'there',
+    label: 'Guitar low',
+    about: 'A low steel note, for weight under a whole stretch',
+    source: guitar(45),
+  },
+
+  // A small thing happens.
+  { group: 'small', label: 'Hat closed', about: 'A tick with a body to it', source: pad('hhc') },
+  { group: 'small', label: 'Hat open', about: 'The same, allowed to ring', source: pad('hho') },
+  { group: 'small', label: 'Ride', about: 'A bright repeated detail that does not stop dead', source: pad('ride') },
+  {
+    group: 'small',
+    label: 'Piano high',
+    about: 'One bright note near the top. A small thing noticed',
+    source: piano(84),
+  },
+
+  // A transition.
+  { group: 'transition', label: 'Crash', about: 'A wash that covers a cut', source: pad('crash1') },
+  { group: 'transition', label: 'Crash 2', about: 'A darker wash, longer', source: pad('crash2') },
+  { group: 'transition', label: 'Splash', about: 'A short wash, for a quick change', source: pad('splash') },
+];
 
 export interface CueSource {
   kind: SourceKind;
@@ -161,6 +326,16 @@ export interface Cue {
   /** Seconds. Design voices stretch to this; kit voices ignore it. */
   length: number;
   anchor: Anchor;
+  /**
+   * The suggested moment that put this here, if one did.
+   *
+   * Only so a pass of suggestions can be taken back in one go. Absent on
+   * anything placed by hand, and a cue that carries it is in every other way
+   * an ordinary cue: it moves, stretches, is edited and is exported exactly
+   * like one placed by clicking, because after it is down there is no useful
+   * sense in which it is still a suggestion.
+   */
+  fromMoment?: string;
   /**
    * How much room is around it, 0 to 1.
    *
@@ -306,6 +481,62 @@ export const LANES: readonly LaneSpec[] = [
     base: 'floor',
   },
 ];
+
+/**
+ * What each starting layer is for, and where it sits.
+ *
+ * The four names were always good and never meant anything: every sound
+ * arrived at the same level whatever it was on, and the first thing a piece
+ * did was come out flat. A mix is mostly an order of importance, and these
+ * four are that order, written down where it can be read and applied.
+ *
+ * The levels are ratios against the loudest, not decibels, because that is
+ * what they are: an impact is the thing the picture is doing and everything
+ * else is under it. Nothing enforces them. They are what Balance sets, and
+ * anything drawn or dialled afterwards wins.
+ *
+ * A layer somebody added themselves has no job here, and Balance leaves it
+ * alone. Guessing what a layer called "Foley" is for, and quietly changing
+ * its level on that guess, is worse than doing nothing.
+ */
+export const LAYER_JOBS: readonly {
+  id: string;
+  name: string;
+  /** What belongs on it, and how it should sit against the rest. */
+  job: string;
+  /** Its level against the loudest layer, which Balance sets. */
+  level: number;
+}[] = [
+  {
+    id: 'impacts',
+    name: 'Impacts',
+    job: 'The loudest, the driest and the shortest. What the picture is doing.',
+    level: 1,
+  },
+  {
+    id: 'movement',
+    name: 'Movement',
+    job: 'Under the impacts, and wider. What carries between them.',
+    level: 0.72,
+  },
+  {
+    id: 'detail',
+    name: 'Detail',
+    job: 'Quiet, dry and exact. Noticed rather than felt.',
+    level: 0.58,
+  },
+  {
+    id: 'tone',
+    name: 'Tone',
+    job: 'The quietest, the widest and the longest. What sits underneath it all.',
+    level: 0.45,
+  },
+];
+
+/** What a layer is for, if it is one of the four the project starts with. */
+export function layerJob(id: string): (typeof LAYER_JOBS)[number] | null {
+  return LAYER_JOBS.find((one) => one.id === id) ?? null;
+}
 
 export interface Layer {
   id: string;

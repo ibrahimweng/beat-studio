@@ -34,6 +34,9 @@ import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { markerCsv } from './export/markers.ts';
+import { density } from './timeline/project.ts';
+import { layerJob } from './timeline/types.ts';
+import { cueNotes, encodeProjectMidi } from './export/timeline-midi.ts';
 import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
@@ -67,6 +70,10 @@ import type {
   Project,
 } from './timeline/types.ts';
 import { analyseMotion, filterPeaks, medianGap, pickPeaks, refinePeaks } from './video/analyse.ts';
+import { readMoments } from './video/moments.ts';
+import type { Moment } from './video/moments.ts';
+import { suggestFor } from './audio/suggest.ts';
+import type { Suggested } from './audio/suggest.ts';
 import { VideoClock } from './video/clock.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
 import { listen } from './audio/listen.ts';
@@ -109,7 +116,7 @@ const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
 const TABLE_FILE = /\.(csv|tsv)$/i;
 
 import { rebuild, type Made } from './audio/rebuild.ts';
-import { emptyDetection, type Store } from './store.ts';
+import { emptyDetection, type MomentState, type PanelTab, type Store } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
 
@@ -149,6 +156,19 @@ const MIN_GAP = 0.08;
 const WIDE_SENSITIVITY = 0.92;
 /** An upper bound, so a noisy clip cannot start thousands of seeks. */
 const MAX_CANDIDATES = 160;
+
+/**
+ * How many sounds a second is too many, and how few is too few to say so.
+ *
+ * Two a second is the point the plan this came from names: a sound every half
+ * second is worse than four good ones. The floor is there because the rate on
+ * a nearly empty piece is arithmetic on nothing — three sounds in the first
+ * second of a clip nobody has finished is not a problem worth a line about.
+ */
+const CROWDED_RATE = 2;
+const CROWDED_LEAST = 24;
+/** How much busier it has to get before the line is worth repeating. */
+const CROWDED_AGAIN = 1;
 /** Always look back at least this many frames when pinning a moment. */
 const MIN_REFINE_FRAMES = 3;
 /** And never more than this, so a slow machine cannot cause a long wait. */
@@ -895,6 +915,9 @@ export class SoundDesignSession {
       this.#future.length = 0;
     }
     this.#store.set({ project });
+    // After the state is set, so the line it may write is the last word rather
+    // than something the same change overwrites.
+    this.#noticeCrowding();
   }
 
   #now(): number {
@@ -1317,6 +1340,69 @@ export class SoundDesignSession {
   #armedCue(time: number, layerId: string): Cue {
     const { currentSource, currentPreset } = this.#store.state;
     return dressCue(makeCue(time, layerId, currentSource), currentPreset);
+  }
+
+  /**
+   * Put every layer at the level its job asks for.
+   *
+   * The four names were always good and never meant anything: every sound
+   * arrived at the same level whatever it was on, and a first pass came out
+   * flat because a mix is mostly an order of importance and there was none.
+   *
+   * One button rather than a mode, and nothing here is enforced afterwards:
+   * it sets four numbers that were all one, and anything moved after it wins.
+   * A layer somebody added themselves is left alone, since guessing what a
+   * layer called "Foley" is for and quietly changing its level on that guess
+   * is worse than doing nothing.
+   */
+  balanceLayers(): void {
+    const layers = this.project.layers.map((layer) => {
+      const job = layerJob(layer.id);
+      return job ? { ...layer, gain: job.level } : layer;
+    });
+
+    const moved = layers.filter((layer, i) => layer.gain !== this.project.layers[i].gain).length;
+    if (!moved) {
+      this.#store.set({ status: 'the layers are already balanced' });
+      return;
+    }
+
+    this.#setProject({ ...this.project, layers }, 'balance');
+    this.#store.set({
+      status:
+        moved === 1
+          ? 'one layer moved to the level its job asks for — undo takes it back'
+          : `${moved} layers moved to the levels their jobs ask for — undo takes it back`,
+    });
+  }
+
+/**
+   * The rate this last said something about, or nought if it has not.
+   *
+   * Said when it crosses, and then only again if it has grown by another
+   * whole sound a second. A line that reappears every time a sound is placed
+   * is a line somebody learns to look past, which is the opposite of what it
+   * is for; a line that says two while the piece is at four is worse still,
+   * because it is simply wrong by then. Growing far enough to be worth saying
+   * again is the one case where repeating it earns its place.
+   */
+  #saidAt = 0;
+
+  #noticeCrowding(): void {
+    const rate = density(this.project);
+    const heard = this.project.cues.filter((cue) => !cue.muted).length;
+
+    if (rate <= CROWDED_RATE || heard < CROWDED_LEAST) {
+      this.#saidAt = 0;
+      return;
+    }
+    if (this.#saidAt && rate < this.#saidAt + CROWDED_AGAIN) return;
+    this.#saidAt = rate;
+    this.#store.set({
+      status:
+        `${rate.toFixed(1)} sounds a second. Four good ones usually beat forty: ` +
+        'try taking some out before adding more.',
+    });
   }
 
   setActiveLayer(layerId: string): void {
@@ -1859,9 +1945,20 @@ export class SoundDesignSession {
 
     const sensitivity = this.#store.state.detect.sensitivity;
     const peaks = filterPeaks(candidates, samples, sensitivity, MIN_GAP);
+    const moments = readMoments(samples, peaks, this.project.duration);
     this.#store.set({
-      detect: { status: 'ready', progress: 1, samples, candidates, peaks, sensitivity },
-      status: `${peaks.length} hits found`,
+      detect: {
+        status: 'ready',
+        progress: 1,
+        samples,
+        candidates,
+        peaks,
+        sensitivity,
+        moments,
+        settled: {},
+      },
+      panelTab: 'moments',
+      status: `${moments.length} moments found`,
     });
   }
 
@@ -1880,7 +1977,16 @@ export class SoundDesignSession {
       return;
     }
     const peaks = filterPeaks(detect.candidates, detect.samples, value, MIN_GAP);
-    this.#store.set({ detect: { ...detect, sensitivity: value, peaks } });
+    const moments = readMoments(detect.samples, peaks, this.project.duration);
+    // Decisions outlive the list they were made about. Anything already
+    // placed or passed over keeps that answer if it is still here, and a
+    // moment the new sensitivity dropped takes its answer with it.
+    const settled: Record<string, MomentState> = {};
+    for (const moment of moments) {
+      const was = detect.settled[moment.id];
+      if (was) settled[moment.id] = was;
+    }
+    this.#store.set({ detect: { ...detect, sensitivity: value, peaks, moments, settled } });
   }
 
   /** Put the current sound on every suggested moment. */
@@ -1983,6 +2089,159 @@ export class SoundDesignSession {
     this.addCue(time);
   }
 
+  // ---------- moments ----------
+
+  /** Which of the three the right panel shows. */
+  setPanelTab(tab: PanelTab): void {
+    this.#store.set({ panelTab: tab });
+  }
+
+  /** The moments found, with what the app would put on each one. */
+  get moments(): { moment: Moment; suggested: Suggested; state: MomentState | null }[] {
+    const { moments, settled } = this.#store.state.detect;
+    return moments.map((moment) => ({
+      moment,
+      suggested: suggestFor(moment, this.project.fps),
+      state: settled[moment.id] ?? null,
+    }));
+  }
+
+  /** How many are still waiting on an answer. */
+  get momentsLeft(): number {
+    const { moments, settled } = this.#store.state.detect;
+    return moments.filter((m) => !settled[m.id]).length;
+  }
+
+  /**
+   * Put the suggested sound down, and remember that this one is done.
+   *
+   * The cues are made here rather than through addCue because a suggestion is
+   * not the armed sound: it carries its own source, its own settings and its
+   * own layer, and a build puts down two of them at once. Nothing about the
+   * palette on the left is touched, so accepting a suggestion never changes
+   * what the next click on the timeline would place.
+   */
+  acceptMoment(id: string): void {
+    const found = this.#store.state.detect.moments.find((m) => m.id === id);
+    if (!found || this.#store.state.detect.settled[id]) return;
+    const made = this.#cuesFor(found);
+    if (!made.length) return;
+
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...made] }, `moment:${id}`);
+    this.#settleMoment(id, 'placed');
+    this.#store.set({ selection: made.map((cue) => cue.id) });
+    for (const cue of made) this.#settle(cue);
+    this.audition(made[0]);
+  }
+
+  /** Leave this one alone, and stop offering it. */
+  dismissMoment(id: string): void {
+    if (!this.#store.state.detect.moments.some((m) => m.id === id)) return;
+    this.#settleMoment(id, 'skipped');
+  }
+
+  /** Put it back in the list, whichever way it was answered. */
+  reopenMoment(id: string): void {
+    const settled = { ...this.#store.state.detect.settled };
+    if (!(id in settled)) return;
+    delete settled[id];
+    this.#store.set({ detect: { ...this.#store.state.detect, settled } });
+  }
+
+  /**
+   * Accept everything still waiting, in one pass.
+   *
+   * The whole point of the panel for somebody in a hurry: a complete first
+   * pass over the clip, which they then fix. Written as one change to the
+   * project rather than one per moment so that undo takes the pass back as
+   * the single thing it was, rather than forty times.
+   */
+  acceptAllMoments(): void {
+    const { moments, settled } = this.#store.state.detect;
+    const waiting = moments.filter((m) => !settled[m.id]);
+    if (!waiting.length) return;
+
+    const made: Cue[] = [];
+    const done: Record<string, MomentState> = { ...settled };
+    for (const moment of waiting) {
+      const cues = this.#cuesFor(moment);
+      if (!cues.length) continue;
+      made.push(...cues);
+      done[moment.id] = 'placed';
+    }
+    if (!made.length) return;
+
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...made] }, 'moments:all');
+    this.#store.set({
+      detect: { ...this.#store.state.detect, settled: done },
+      selection: [],
+      status: `${made.length} sounds placed over ${waiting.length} moments`,
+    });
+    for (const cue of made) this.#settle(cue);
+  }
+
+  /** Hear what is suggested, against the picture, without placing it. */
+  auditionMoment(id: string, inContext = true): void {
+    const found = this.#store.state.detect.moments.find((m) => m.id === id);
+    if (!found) return;
+    const cues = this.#cuesFor(found);
+    if (!cues.length) return;
+    if (inContext) {
+      this.previewInContext(cues[0]);
+      return;
+    }
+    // Off the timeline, so the sound is heard from its own start whichever
+    // end of it is anchored to the moment.
+    for (const cue of cues) {
+      this.audition(cue.anchor === 'end' ? { ...cue, time: cue.length } : cue);
+    }
+  }
+
+  /** Take back every sound a suggestion put down, and offer them again. */
+  clearPlacedMoments(): void {
+    const { moments, settled } = this.#store.state.detect;
+    const placed = new Set(moments.filter((m) => settled[m.id] === 'placed').map((m) => m.id));
+    if (!placed.size) return;
+    const cues = this.project.cues.filter((cue) => !cue.fromMoment || !placed.has(cue.fromMoment));
+    const settledNow: Record<string, MomentState> = {};
+    for (const [id, state] of Object.entries(settled)) {
+      if (!placed.has(id)) settledNow[id] = state;
+    }
+    this.#setProject({ ...this.project, cues }, 'moments:clear');
+    this.#store.set({
+      detect: { ...this.#store.state.detect, settled: settledNow },
+      selection: [],
+      status: 'suggested sounds taken back',
+    });
+  }
+
+  #settleMoment(id: string, state: MomentState): void {
+    const detect = this.#store.state.detect;
+    this.#store.set({ detect: { ...detect, settled: { ...detect.settled, [id]: state } } });
+  }
+
+  /**
+   * The cues a moment's suggestion comes to.
+   *
+   * Every part is placed against the project's own snapping and held inside
+   * the clip, exactly as a click on the timeline would be, so a suggested
+   * sound and a hand-placed one land on the same frame and are afterwards
+   * indistinguishable.
+   */
+  #cuesFor(moment: Moment): Cue[] {
+    const { parts } = suggestFor(moment, this.project.fps);
+    return parts.map((part) => {
+      const at = snapTime(this.project, this.#insideVideo(moment.t + part.at));
+      const cue = dressCue(makeCue(at, part.layerId, part.source), part.preset);
+      return {
+        ...cue,
+        fromMoment: moment.id,
+        ...(part.length === undefined ? {} : { length: Math.max(0.02, part.length) }),
+        ...(part.gain === undefined ? {} : { gain: cue.gain * part.gain }),
+      };
+    });
+  }
+
   clearHits(): void {
     this.#store.set({ detect: emptyDetection(), status: 'suggestions cleared' });
   }
@@ -2022,6 +2281,31 @@ export class SoundDesignSession {
     const blob = new Blob([markerCsv(this.project)], { type: 'text/csv' });
     saveBlob(blob, `${this.#stem()}-markers.csv`);
     this.#store.set({ status: 'marker list exported' });
+  }
+
+  /**
+   * The same thing again, as a file a music program opens on its timeline.
+   *
+   * The marker list says where everything lands in a spreadsheet. This says it
+   * where somebody scoring the piece is already working, in sync, with every
+   * sound on a row of its own. The kit is written as real percussion, so it
+   * plays as a kit; nothing else is a note, so each voice is given a row and
+   * keeps it, and the piano roll reads as the shape of the piece.
+   */
+  exportTimelineMidi(): void {
+    if (!this.project.cues.length) {
+      this.#store.set({ status: 'place some sounds first' });
+      return;
+    }
+    const notes = cueNotes(this.project);
+    if (!notes.length) {
+      // Everything there is, is silenced. A file of nothing is not useful and
+      // saying why is better than handing one over.
+      this.#store.set({ status: 'every sound is muted, so there is nothing to write' });
+      return;
+    }
+    saveBlob(encodeProjectMidi(this.project), `${this.#stem()}.mid`);
+    this.#store.set({ status: `MIDI exported, ${notes.length} sounds` });
   }
 
   /** The file name everything an export writes is built from. */

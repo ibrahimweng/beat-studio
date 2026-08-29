@@ -1,16 +1,17 @@
 # Beat Studio
 
-Beat Studio is a music workstation that runs in a web browser. It does two
-things.
+Beat Studio puts sound to video, in a web browser. You load a clip, it reads
+the picture and says what belongs on each moment it finds, and you export a
+file that lines up when you drop it back into your editing software.
 
-- You can load a video and build sound design against it, placing each sound on
-  the exact frame it belongs on, then export a file that lines up when you drop
-  it back into your editing software.
-- You can play three instruments, program a drum pattern, record what you play,
-  and save it as an audio file or a MIDI file.
+It is aimed at somebody who already knows video and has never done sound. All
+the explaining is spent on the sound, because the timeline needs none.
 
-The app opens on the Sound design screen. The instruments are on the bar down
-the left.
+There is a drum kit, a piano and a steel guitar in here, and no screens for
+them. They are in the sound library, filed under the moment they serve: a
+crash is a wash that covers a cut, so it sits beside the other things that
+cover a cut. Which instrument made a sound is the least interesting thing
+about it when the question is what goes on this frame.
 
 All the sound is made in the browser using the Web Audio API. There are no audio
 files to download and no server to run.
@@ -22,17 +23,55 @@ what Vite requires.
 
 ```bash
 npm install
-npm run dev      # start the development server on http://localhost:5173
-npm run build    # type check, then build into dist/
-npm run preview  # serve the built files
+npm run dev        # start the development server on http://localhost:5173
+npm run build      # type check, then build into dist/
+npm run preview    # serve the built files
+npm test           # run the tests once
+npm run test:watch # run them again whenever a file changes
 ```
 
 After a build, the `dist/` folder contains plain static files. You can host that
 folder on any web server. Paths in the build are relative, so it also works from
 a subfolder.
 
-Every push and pull request runs the type check and the build on both versions
-of Node. The workflow is at `.github/workflows/ci.yml`.
+Every push and pull request runs the type check, the tests and the build on
+both versions of Node. The workflow is at `.github/workflows/ci.yml`.
+
+## Tests
+
+The tests run under Vitest and live beside what they test, as `*.test.ts`. Run
+them with `npm test`.
+
+What is tested is the part of the app that is a plain function of its inputs:
+what kind of moment a curve in the picture describes, what sound belongs on it,
+what the WAV, MP3 and MIDI writers put in a file, and what the Freesound proxy
+answers. The two rules that keep the parts separate, that nothing in `audio/`
+touches the page and nothing in `ui/` talks to the engine, are what make that
+possible, so the tests run under Node with no browser at all.
+
+The two encoders take an `AudioBuffer`, which Node has no notion of. Between
+them they read four things off it: how many channels there are, how long it is,
+what rate it was made at, and the samples. `test/audio-buffer.ts` is those four
+things and nothing else.
+
+`test/fixtures/motion-shapes.json` holds real measurements taken by the scan
+itself, off a clip built with one of each shape in it: a cut, a build, a move,
+a flurry and a still passage. It is kept because it is decoder output rather
+than arithmetic. The noise, the smear and the uneven spacing are all real, and
+two faults in the moment reading were found against it that tidy curves written
+by hand did not show.
+
+Every test here was checked by putting the fault it describes back into the
+code and watching it fail. That is worth the few minutes it takes: it caught
+three tests of ours that passed against the broken code they were written to
+catch. One compared two MP3 encodes to each other, when both grow with the
+input whether or not the tail is written. One asserted that MIDI ticks go up,
+when they always go up, since they are rebuilt by adding deltas and a delta is
+never written negative however wrong it is. One invented a curve to stand in
+for real measurements and tuned it until it passed.
+
+What is not tested yet: anything that draws, and the parts that reach the audio
+graph.
 
 ## Deploying
 
@@ -136,19 +175,14 @@ The playhead can also be dragged. Take hold of the small tab at the top of the
 line, or press anywhere on the ruler and drag. Doing it while the clip is
 playing scrubs, and playing picks up again from wherever you let go.
 
-### Recording what you play
+### Playing a pass in by hand
 
-The round red button arms the timeline. With it on, whatever you play on the
-drums, the keys or the guitar lands on the timeline at the playhead, on the
-layer you are working on — by mouse or by keyboard, from whichever instrument
-screen you are on.
+The round red button arms the timeline. With it on, tapping a pad key drops
+that drum sound at the playhead, on the layer you are working on.
 
-It does not need the transport running. Standing still it drops everything at
-the same moment, which is a way of building a stack by hand. Running, it is a
-pass played in against the picture.
-
-This is separate from the record button on the instrument screens, which
-captures a take against the loop and has nothing to do with the timeline.
+It does not need the clip running. Standing still it drops everything at the
+same moment, which is a way of building a stack by hand. Running, it is a pass
+played in against the picture, tidied up afterwards.
 
 ### Place sounds
 
@@ -240,6 +274,32 @@ with 1372 sounds on it and nothing broke, although writing the file took twenty
 seconds at that density. Around fifty sounds, which is a lot for half a minute
 of picture, everything is immediate and the file writes in about five
 seconds.
+
+### Browsing by what is happening on screen
+
+Under Browse there are two ways to look at the same forty voices, and it opens
+on the first of them.
+
+**By moment** groups them by what is on screen when you want one. Something
+appears. Something moves. Something builds. Something lands hard. Something is
+there. A small thing happens. A transition. Each group carries a line saying
+when to reach for it, and the names are the ones the Moments panel uses for
+what it finds in a video, so reading "Something builds" beside a moment and
+then finding "Something builds" here is the same thought twice.
+
+**By sound type** groups them by what the sound is made of, which is how
+somebody who already knows this work would expect to find them. Hits, movement,
+lead in, low end, detail, texture, struck, plucked, grains, mechanical.
+
+Neither is a selection from the other. They are two indexes over the same forty
+voices, nothing is added and nothing is left out, and which one you last used is
+remembered.
+
+Four of the ten sound type groups are named after a mechanism rather than a
+use, and that is the reason for the second index: somebody watching a logo land
+does not think "I need something from Struck". They think something needs to
+happen here. The old grouping is kept because learning those names is a real
+thing that happens, and an app that forgets them is an app you outgrow.
 
 ### Describe what you want
 
@@ -369,6 +429,39 @@ them, and the ones it found were within one frame. Playing the video twice as
 fast would halve the wait but only find eighteen, which is why it is not done
 that way.
 
+### What it makes of each moment
+
+The scan finds where something happens. The Moments panel, which is the first
+of the three tabs down the right, says what kind of moment it is and what
+belongs on it.
+
+It works that out from the shape of the curve around each hit rather than from
+how tall the hit is. A cut arrives out of nothing. A build climbs into itself.
+A move holds its energy across half a second instead of spending it in one
+frame. Something landing keeps falling afterwards. A flurry of hits close
+together is one flourish rather than four separate decisions. A long still
+passage is allowed to stay still, and saying so is a suggestion too. Nothing is
+read twice: it is arithmetic over measurements the scan already took, so moving
+the sensitivity redoes the whole list instantly.
+
+Each row carries a time, what kind of moment it is, a suggested sound, and one
+line saying why that sound belongs there. That line is the point of the panel.
+It is about the frame in front of you, at the moment it applies.
+
+There are three things to do with a row. Play it to hear the suggestion against
+the picture from a second before. Place it. Or pass it over, which is a real
+answer and stays on screen so you can change your mind.
+
+Two more on the sound itself. The speaker hears it on its own. The name opens
+the library at the group of sounds that suit that kind of moment, so a
+suggestion you did not want is a starting point rather than a dead end.
+
+"Accept all" places everything still waiting, in one go and as one undo. That
+is the fastest way to a video that has sound: a complete first pass to fix,
+rather than an empty timeline to fill. "Undo the pass" takes back every sound a
+suggestion put down and offers them all again. Anything you placed by hand is
+left alone.
+
 ### Room to work
 
 The line between the video and the timeline can be dragged. The timeline takes
@@ -382,13 +475,47 @@ all of that height goes to the timeline. It is the same window the instrument
 screens use, so it can be dragged anywhere and resized by its corner, and it
 stays where you put it between sessions. Its × puts the stage back.
 
-The window is clamped so it can never be parked over the bar on the left,
-which is the only way between screens.
-
 Layers can be added, renamed and removed. Use "+ Layer" at the bottom of the
 layer names, double click a name to change it, and the small cross removes a
 layer. Removing one that still has sounds on it asks first. There is always at
 least one layer.
+
+### What the four layers are for
+
+A piece starts with four, and each has a job. Pick one under "On layer" and it
+says what it is:
+
+- **Impacts** is the loudest, the driest and the shortest. What the picture is
+  doing.
+- **Movement** sits under the impacts, and wider. What carries between them.
+- **Detail** is quiet, dry and exact. Noticed rather than felt.
+- **Tone** is the quietest, the widest and the longest. What sits underneath it
+  all.
+
+The names were always there and never meant anything: every sound arrived at
+the same level whatever it was on, so a first pass came out flat. A mix is
+mostly an order of importance, and those four are that order.
+
+"Balance", beside the layer names, sets each of the four to the level its job
+asks for. It is one press rather than a mode: nothing is enforced afterwards,
+anything you move later wins, and undo takes it back. A layer you added
+yourself is left alone, because guessing what a layer called "Foley" is for and
+quietly changing its level on that guess would be worse than doing nothing.
+
+### When there is too much
+
+Past about two sounds for every second of picture, the status line says so
+once, with the figure. Four good sounds beat forty, and a timeline with two
+hundred on thirty seconds looks busy and productive and comes out as mush:
+everything is happening, so nothing is.
+
+It is said once rather than on every placement, since a line that reappears
+constantly is one you learn to look past. It speaks again only if the piece
+gets another whole sound a second busier, because by then the figure it gave
+you is simply wrong.
+
+Muted sounds are not counted. They are not in the audio, so they are not in
+this either.
 
 ### Give it a space, and some weight
 
@@ -647,105 +774,70 @@ measure it again.
 
 ## What you can do
 
-### Play an instrument
-
-Pick an instrument from the bar on the left. There are three of them.
-
-- The drum kit has 13 pads. You can click a pad or use the keyboard.
-- The piano has all 88 keys. Two rows of your keyboard play the lit octaves.
-- The guitar has 15 frets and 6 strings. You can also strum one of 6 chords.
-
-The first click starts the audio engine. A browser does not allow a page to make
-sound until the person using it interacts with the page. That is why the screen
-stays covered until you click "Power up".
-
-Once a video is loaded, "Video" in the bar at the top floats the clip over the
-instrument in a small window, so you can play to the picture. Drag its strip to
-move it and its corner to resize it; it stays where you put it. The same window
-is available on the timeline, from the "Window" button there.
-
-To put what you play onto the timeline, arm the round red button on the sound
-design bar first. See "Recording what you play" above.
-
-### Program a beat
-
-The sequencer at the bottom has 8 lanes and either 16 or 32 steps. Click a step
-to switch it on or off. The button in the top bar switches between 16 and 32
-steps.
-
-There are 4 pattern banks called A, B, C and D. Your patterns and your tempo are
-saved in the browser, so they are still there when you come back.
-
-### Record a take
-
-Press the record button or the R key. Beat Studio records everything you play,
-together with the pattern that is running. When you stop, the recording appears
-in the Takes panel with a picture of the waveform.
-
-You can do several things with a take.
-
-- Play it back.
-- Turn on Layer, and you hear the take underneath while you record the next one.
-- Save it as a WAV file, an MP3 file or a MIDI file.
-- Delete it.
-
-You hear the metronome while you play, but it is not included in the recording.
-
-Two settings change how recording works.
-
-- When Count-in is on, you hear one bar of clicks before the recording starts.
-- Take length sets how long a recording runs. You can choose 1, 2 or 4 bars, or
-  let it run until you stop it yourself.
-
 ### Save your work
 
-Your patterns, your tempo, the sounds you saved, the packs you loaded, whatever
-is on the timeline and your takes are all kept in the browser. A take is kept
-as the recording it was rather than as decoded audio, which is why it is a few
-tens of kilobytes rather than a few tens of megabytes; the audio is worked out
-again the first time you play it back. "New project" leaves takes alone: they
-belong to the instruments, not to the piece.
+Whatever is on the timeline, the sounds you saved, the packs you loaded and
+your own recordings are all kept in the browser, and come back when you do. The
+clip comes back too where it will fit. A recording is kept as the file it
+arrived as rather than as decoded audio, which is why it is a few tens of
+kilobytes rather than a few tens of megabytes; the audio is worked out again
+the first time anything asks to hear it.
 
-There are three export formats.
+Only one tab does the keeping. Two tabs on the same piece is the one way this
+app could lose work, so the second says another tab has it and offers to take
+over.
 
-- WAV is the recorded audio, uncompressed.
-- MP3 is the same audio at 192 kbps.
-- MIDI is the notes you played rather than the sound. If you have not recorded
-  anything, you get the current drum pattern instead.
+### Export
+
+There are five ways out, and they are covered under "Export" above. Two of them
+are for handing the timing to somebody else rather than for the audio: a marker
+list as a spreadsheet, and a MIDI file that a music program opens on its own
+timeline in sync, with every sound on a row of its own.
 
 ## Keyboard
 
 | Key | What it does |
 |---|---|
-| Space | Start or stop the transport |
-| R | Start or stop a take, except while the piano is showing |
-| W E R T | Crash, splash, second crash, ride |
+| Space | Play or pause |
+| Left, Right | Move the playhead one frame |
+| Shift and Left, Right | Move the selected sound one frame instead |
+| Delete, Backspace | Remove what is selected |
+| Escape | Select nothing |
+| W E R T | Crash, splash, second crash, ride, at the playhead |
 | A S | Closed hi-hat, open hi-hat |
 | D F | Kick, second kick |
 | G H | Tom 1, tom 2 |
 | J K L | Snare, floor tom, tom 3 |
-| Z to M | Lower octave on the piano and guitar |
-| Q to U | Upper octave on the piano and guitar |
+| Cmd or Ctrl and Z | Undo, and with shift, redo |
+| Cmd or Ctrl and A | Select everything |
+| Cmd or Ctrl and C, X, V | Copy, cut, paste |
+| Cmd or Ctrl and D | Duplicate what is selected |
 
-R plays a note on the piano, so it only starts a take when the piano is not
-showing. This is the take recorder on the instrument screens, not the round red
-button on the sound design bar that puts what you play onto the timeline.
+The pad keys drop that drum sound at the playhead as the clip runs, so a pass
+can be tapped in by hand and tidied up afterwards.
 
 ## Help
 
 The question mark at the bottom of the bar on the left opens a panel listing
-what everything does and every keyboard shortcut, in fifteen sections covering
-both halves of the app.
+what everything does and every keyboard shortcut.
 
-Beside that, every part of every screen has a small question mark of its own —
-next to Library, next to Describe, next to the transport, next to the
-sequencer, and so on. Pressing one opens the same panel scrolled to the
-section that answers it, with that section marked, so you get the answer to
-what you asked rather than the top of a long page.
+Beside that, every part of the screen has a small question mark of its own,
+next to Library, next to Describe, next to the transport, and so on. Pressing
+one opens the same panel scrolled to the section that answers it, with that
+section marked, so you get the answer to what you asked rather than the top of
+a long page.
 
-The first time you open the app, a short walkthrough points at each part of
-the Sound design screen in turn. You can leave it at any step and it does not come
-back on its own. The help panel can start it again.
+The first time you open the app, a short walkthrough points at each part of the
+screen in turn, in the order the work happens: your video, reading the clip,
+what it found, the three panels, the library, the layers, placing one yourself,
+and the export. Where a step is about something behind a tab it opens that tab
+first, and where it is about a group of the library it opens that group, so
+every step is pointing at the real thing rather than at where the real thing
+would be.
+
+You can leave it at any step and it does not come back on its own. It puts you
+back on Moments when it finishes, wherever it ended. The help panel can start
+it again.
 
 ## Options
 
@@ -795,16 +887,15 @@ to the address.
 ```
 src/
   main.ts          entry point, applies the theme and mounts the app
-  app.ts           builds the views, handles the keyboard, drives the meters
-  session.ts       every action the interface can perform
+  app.ts           builds the views and handles the keyboard
+  session.ts       the audio engine, the state, and the gesture that starts them
   store.ts         application state and change notifications
-  constants.ts     lanes, pad mapping, chords, tuning, the starter pattern
-  pattern.ts       creating and editing patterns
-  persist.ts       reading and writing saved state
-  keep.ts          keeping the piece, its clip and the takes between visits,
-                   and settling which tab does the keeping
+  constants.ts     the pad names, their mapping and their General MIDI notes
+  persist.ts       reading and writing what is saved in the browser
+  keep.ts          keeping the piece, its clip and your recordings between
+                   visits, and settling which tab does the keeping
   types.ts         shared types
-  sound-design-session.ts every action the sound design screen can perform
+  sound-design-session.ts every action the interface can perform
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
@@ -822,12 +913,15 @@ src/
     sources.ts     turning a placed sound into a played sound
     vary.ts        a placement's own take of a voice, so two are not one twice
     render.ts      writing the file, faster than real time
-    transport.ts   the step clock
-    recorder.ts    capturing takes
-  timeline/        the cue list, layers and timing
+    suggest.ts     what sound belongs on a moment, and the line saying why
+  timeline/        the cue list, layers and timing, and the two ways the
+                   voices are grouped: by how a sound is made, and by what is
+                   happening on screen when you want it
   video/           loading a video, following its clock, and reading its hits
+    moments.ts     what kind of moment each hit is, from the shape around it
   export/
     markers.ts     a list of where every sound lands
+    timeline-midi.ts the same list as notes, for whoever scores this next
     patch.ts       the palette, written out for other apps to play
     wav.ts         WAV encoder
     mp3.ts         MP3 encoder, loaded only when you export
@@ -838,7 +932,10 @@ src/
     keep-notice.ts the line saying another tab is keeping the piece
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
+      moments.ts   what the video suggests, and why
+      work-panel.ts the three tabs the right panel shows one at a time
   styles/          design tokens and stylesheets
+test/fixtures/     measurements taken off real clips, for the tests to read
 public/            files copied to the site root, which is where the icons live
 ```
 
@@ -846,6 +943,12 @@ There are two rules that keep the parts separate. Nothing in `audio/` touches
 the page, and nothing in `ui/` talks to the audio engine directly. The views
 read state from the store and call methods on the session. The session is the
 only place where state, sound and timing meet.
+
+There used to be a second half: three instrument screens, a step sequencer and
+a take recorder, running on bars and tempo while this half runs on seconds and
+frames. It was about two thousand lines and half the interface, for a job
+nobody opened this app to do. What those instruments make is still here, in the
+library, under the moment it serves.
 
 The MP3 encoder and the sample library are loaded only when they are needed, so
 neither is part of the first download.

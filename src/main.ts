@@ -2,8 +2,6 @@ import '@fontsource-variable/inter';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/controls.css';
-import './styles/instruments.css';
-import './styles/dock.css';
 import './styles/sound-design.css';
 import './styles/video-window.css';
 

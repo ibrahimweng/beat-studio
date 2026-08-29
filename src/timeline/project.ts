@@ -10,6 +10,7 @@ import {
   DESIGN_DEFAULT_LENGTH,
   DESIGN_NAMES,
   LANES,
+  LAYER_JOBS,
   type Cue,
   type CuePreset,
   type CueSource,
@@ -27,12 +28,13 @@ export function emptyLanes(): Lanes {
 }
 
 /** Layers a new project starts with, in the order they are drawn. */
-const STARTER_LAYERS: readonly { id: string; name: string }[] = [
-  { id: 'impacts', name: 'Impacts' },
-  { id: 'movement', name: 'Movement' },
-  { id: 'detail', name: 'Detail' },
-  { id: 'tone', name: 'Tone' },
-];
+/*
+ * Built from the jobs rather than listed again here, so the four names and
+ * what they are for cannot drift apart.
+ */
+const STARTER_LAYERS: readonly { id: string; name: string }[] = LAYER_JOBS.map(
+  ({ id, name }) => ({ id, name }),
+);
 
 export const DEFAULT_FPS = 30;
 
@@ -354,6 +356,33 @@ export function cueStart(cue: Cue): number {
   return cue.time;
 }
 
+/**
+ * How crowded the piece is, in sounds for every second of picture.
+ *
+ * The one number that says something is wrong which nothing else on screen
+ * does. A timeline with two hundred sounds on thirty seconds looks busy and
+ * productive, and comes out as mush: everything is happening, so nothing is.
+ * Four good sounds beat forty, and this is the arithmetic that notices when
+ * somebody has stopped believing that.
+ *
+ * Measured over the whole clip rather than over the busiest moment, because a
+ * burst is often right. Six ticks inside a second is one flourish; six sounds
+ * a second for thirty seconds is a wall.
+ */
+export function density(project: Project): number {
+  const heard = project.cues.filter((cue) => !cue.muted);
+  const over = project.duration || span(heard);
+  if (!heard.length || over <= 0) return 0;
+  return heard.length / over;
+}
+
+/** How long the placed sounds themselves reach, for a piece with no clip. */
+function span(cues: readonly Cue[]): number {
+  let last = 0;
+  for (const cue of cues) last = Math.max(last, cueStart(cue) + cueLength(cue));
+  return last;
+}
+
 export function sortCues(cues: readonly Cue[]): Cue[] {
   return [...cues].sort((a, b) => cueStart(a) - cueStart(b));
 }
@@ -655,6 +684,11 @@ function readCues(raw: unknown, known: ReadonlySet<string>): Cue[] {
       // not have every hit in it quietly shift.
       vary: readNumber(cue.vary, 0, 0, 1),
       muted: cue.muted === true,
+      // Carried through so that reopening a piece and then clearing the
+      // suggestions still clears the ones suggested last time.
+      ...(typeof cue.fromMoment === 'string' && cue.fromMoment
+        ? { fromMoment: cue.fromMoment }
+        : {}),
     });
   }
 

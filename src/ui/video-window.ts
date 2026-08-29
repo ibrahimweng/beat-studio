@@ -17,44 +17,33 @@ const KEEP_ON = 48;
  */
 const RAIL_W = 64;
 
+/*
+ * Where the window was left, which is all that is kept.
+ *
+ * Whether it was open used to be kept too, because the instrument screens had
+ * no other way to see the clip and so had their own answer to that. There are
+ * no instrument screens, and the one toggle that opens this now lives on the
+ * timeline bar. A flag that only one caller ever set, and that nothing sets
+ * any more, is a flag that quietly reads false forever on the machines of the
+ * people who once turned it off.
+ */
 interface Placed {
   x: number;
   y: number;
   w: number;
   h: number;
-  open: boolean;
 }
 
-const DEFAULT: Placed = { x: 24, y: 96, w: 360, h: 220, open: true };
+const DEFAULT: Placed = { x: 24, y: 96, w: 360, h: 220 };
 
 export interface VideoWindow {
   el: HTMLElement;
-  /**
-   * Take the video out of its usual home and show it here.
-   *
-   * `remember` says whether this counts as the instrument screens asking for
-   * the window. The sound design screen opens it too, from its own setting,
-   * and that must not become an answer on the instruments' behalf.
-   */
-  open(remember?: boolean): void;
+  /** Take the video out of its usual home and show it here. */
+  open(): void;
   /** Put the video back and hide the window. */
   close(): void;
-  /** The instrument screens no longer want the window. */
-  forget(): void;
-  /**
-   * Hide it without giving up on it.
-   *
-   * Leaving the instruments screen is not the same as saying you are done
-   * with the window, so the two are separate: this one puts the video back
-   * and leaves the preference alone, so the window returns when you do.
-   */
+  /** Put the video back without treating it as the window being dismissed. */
   stow(): void;
-  toggle(): void;
-  /**
-   * Whether the instrument screens want the window, rather than whether it is
-   * on show. Kept across reloads, so it comes back where and as you left it.
-   */
-  readonly wanted: boolean;
   /** Whether it is on show right now. */
   readonly showing: boolean;
   /** Keep the window inside the viewport after it changed size. */
@@ -62,11 +51,12 @@ export interface VideoWindow {
 }
 
 /**
- * The video, floating over the instruments.
+ * The video, floating over the timeline.
  *
- * Playing along to picture means watching the picture, and the instruments
- * screen had no way to see it: the clip only existed on the sound design
- * screen, so you were playing to a video you could not see.
+ * Choosing the window means the stage above the lanes is gone rather than
+ * empty, and the height it was using goes to the timeline. That is the reason
+ * to want it: on a long clip with several layers, the lanes are what you are
+ * working in and the picture only has to be visible.
  *
  * It borrows the one video element the app has rather than making a second
  * one. Two video elements would mean two decoders, two positions, and two
@@ -202,14 +192,13 @@ export function createVideoWindow(options: {
 
   // ---------- opening and closing ----------
 
-  function open(remember = true): void {
+  function open(): void {
     hold.appendChild(video);
     // The stage hides the video until a clip is loaded; in here it is the
     // whole point of the window, so it is always shown and the window itself
     // is what appears and disappears.
     video.style.display = '';
     root.style.display = '';
-    if (remember) placed.open = true;
     apply();
     save(placed);
   }
@@ -222,21 +211,15 @@ export function createVideoWindow(options: {
   /**
    * The × was pressed.
    *
-   * What that means is not decided here. On the instruments it means the
-   * window is not wanted; on the sound design screen it means the setting
-   * that floats the video is off, and the instruments' own answer is none of
-   * its business. Both live where that difference is known, so this only
-   * hides and says so.
+   * The same statement as turning the Window toggle off, and it has to be, or
+   * the next render would open it straight back up. Decided by the caller
+   * rather than here, so this only hides and says so.
    */
   function close(): void {
     put();
     options.onClose?.();
   }
 
-  function forget(): void {
-    placed.open = false;
-    save(placed);
-  }
 
   // ---------- what it reads ----------
 
@@ -251,20 +234,15 @@ export function createVideoWindow(options: {
   video.addEventListener('pause', tick);
   video.addEventListener('loadedmetadata', tick);
 
-  window.addEventListener('resize', () => {
-    if (placed.open) apply();
-  });
+  // Held inside the viewport whether or not it is on screen, so it is never
+  // shown somewhere the window has since been resized past.
+  window.addEventListener('resize', () => apply());
 
   return {
     el: root,
     open,
     close,
-    forget,
     stow: put,
-    toggle: () => (root.style.display === 'none' ? open() : close()),
-    get wanted() {
-      return placed.open;
-    },
     get showing() {
       return root.style.display !== 'none';
     },
@@ -282,7 +260,6 @@ function load(): Placed {
       y: num(held.y, DEFAULT.y),
       w: num(held.w, DEFAULT.w),
       h: num(held.h, DEFAULT.h),
-      open: held.open !== false,
     };
   } catch {
     return { ...DEFAULT };

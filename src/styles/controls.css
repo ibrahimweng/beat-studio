@@ -649,3 +649,50 @@ button {
   min-width: 0;
   flex: 1 1 auto;
 }
+
+/* ---------- kept from the dock ---------- */
+
+/*
+ * These five outlived the screens they were written for.
+ *
+ * The dock held the sequencer, the takes and the instrument settings, and its
+ * stylesheet went with those screens. The sound design panel had grown to use
+ * a handful of its rules, so they are here rather than in a file that is
+ * otherwise about parts of the app that no longer exist.
+ */
+.knob-card {
+  border-radius: var(--r-12);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.rule {
+  height: 1px;
+  background: var(--line-soft);
+  margin: 14px 0 12px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.setting-row + .setting-row {
+  margin-top: 12px;
+}
+
+.setting-row__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt-2);
+}
+
+.status-head__meta {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}

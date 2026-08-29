@@ -1,0 +1,11 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "The screen", "is_interactive": true },
+    { "file": "Classifier.dc.html", "x": 0, "y": 1020, "w": 900, "h": 640, "title": "How a moment is read" },
+    { "file": "Rail.dc.html", "x": 980, "y": 1020, "w": 620, "h": 440, "title": "The rail, before and after" }
+  ],
+  "annotations": [
+    { "id": "hero-note", "x": 0, "y": -108, "w": 560, "text": "The three tabs work. Click Moments, Sounds and Selected to see each state." }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1475,6 +1475,37 @@
   display: none;
 }
 
+/*
+ * The line saying when a group is the one you want.
+ *
+ * Folds away with the buttons rather than staying with the title. Seven of
+ * these on screen at once is a paragraph nobody reads; one of them beside the
+ * sounds it describes is the sentence that makes the group mean something.
+ */
+.pick-group__when {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--txt-3);
+  margin: -1px 0 5px;
+  text-wrap: pretty;
+}
+
+.pick-group--shut > .pick-group__when {
+  display: none;
+}
+
+/* The two ways of indexing the voices, one line above the groups. */
+.pick-row--ways {
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.pick-row--ways .pick {
+  flex: 1 1 0;
+  justify-content: center;
+  text-transform: none;
+}
+
 /* ---------- sections that fold, and stay as you left them ---------- */
 
 .folds__head {
@@ -1521,4 +1552,355 @@
 
 .found__audio {
   display: none;
+}
+
+/* ---------- the work panel's tabs ---------- */
+
+/*
+ * Three jobs, one at a time.
+ *
+ * The strip is sticky because the panel scrolls and losing the way back to
+ * the moment list halfway down the library is losing the app's whole opening
+ * move.
+ */
+.panel-tabs {
+  position: sticky;
+  /*
+   * Minus the panel's own top padding, so the strip parks flush with the top
+   * of the panel rather than leaving a band of background above itself. The
+   * negative margin below widens it to the panel's full width for the same
+   * reason: a strip with a gutter either side reads as a row of buttons.
+   */
+  top: -14px;
+  z-index: 6;
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  margin: -14px -16px 0;
+  padding: 12px 14px 0;
+  background: var(--side);
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.panel-tab:hover {
+  color: var(--txt-2);
+}
+
+.panel-tab.is-on {
+  color: var(--txt);
+  font-weight: 600;
+  border-bottom-color: var(--ac);
+}
+
+.panel-tab__count {
+  min-width: 16px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: var(--r-8);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0b0d10;
+  background: var(--ac);
+}
+
+/*
+ * Takes its content's height, rather than a share of the panel's.
+ *
+ * The inspector is the thing that scrolls, and it scrolls as one column. A
+ * body set to grow and shrink inside it gets squeezed to whatever is left
+ * over, and then a list of forty moments paints straight over the export
+ * buttons underneath, which are still where the layout thinks they are and
+ * still take the clicks.
+ */
+.panel-body {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Under whichever tab is up, and far enough from it to read as separate. */
+.panel-tail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- the moments ---------- */
+
+.moments {
+  gap: 10px;
+}
+
+.moments__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.moments__headings {
+  min-width: 0;
+}
+
+.moments__count {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--txt);
+}
+
+.moments__note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--txt-3);
+  text-wrap: pretty;
+}
+
+.moments__empty {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--txt-3);
+  text-wrap: pretty;
+}
+
+.moments__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.moment {
+  border: 1px solid var(--line);
+  border-radius: var(--r-12);
+  background: var(--panel);
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.moment.is-placed {
+  border-color: var(--ac-line);
+  background: var(--ac-soft);
+}
+
+/*
+ * Passed over, and still readable.
+ *
+ * Not hidden, because a decision you cannot see is a decision you cannot
+ * change, and somebody learning this will pass over a moment and then want to
+ * know what it was going to say.
+ */
+.moment.is-skipped {
+  opacity: 0.5;
+}
+
+.moment__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.moment__at {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt-3);
+  flex: 0 0 auto;
+}
+
+.moment__kind {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--txt);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moment__state {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt-3);
+  flex: 0 0 auto;
+}
+
+.moment__state--placed {
+  color: var(--ac);
+}
+
+.moment__spacer {
+  flex: 1 1 auto;
+}
+
+.moment__acts {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.moment__act {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--panel);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--txt-2);
+}
+
+.moment__act:hover {
+  color: var(--txt);
+}
+
+.moment__act--on {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: #fff;
+}
+
+.moment__act--on:hover {
+  color: #fff;
+  filter: brightness(1.1);
+}
+
+/*
+ * The suggested sound, as two controls in one pill.
+ *
+ * Hearing it and going to look for a different one are both things somebody
+ * does at this point, and they are not the same thing. The divider between
+ * them is the only thing saying so, so it stays visible at rest.
+ */
+.moment__sound {
+  align-self: flex-start;
+  max-width: 100%;
+  display: flex;
+  align-items: stretch;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.moment__hear,
+.moment__others {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-2);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.moment__hear {
+  padding: 0 7px;
+  border-right: 1px solid var(--line);
+}
+
+.moment__hear:hover,
+.moment__others:hover {
+  color: var(--txt);
+  background: color-mix(in oklab, var(--tc-fg) 6%, transparent);
+}
+
+.moment__sound-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* The chevron sits at the end, and only leans in when the name is hovered. */
+.moment__others svg {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  transition: opacity 0.12s ease;
+}
+
+.moment__others:hover svg {
+  opacity: 1;
+}
+
+/*
+ * The one sentence saying why.
+ *
+ * The reason the panel exists rather than a note attached to it, so it is set
+ * to be read rather than to be got past. A step up the text ramp from the
+ * supporting greys around it for that reason: at the dimmest step it reads as
+ * a caption somebody can safely skip, which is the one thing it must not be.
+ */
+.moment__why {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--txt-2);
+  text-wrap: pretty;
+}
+
+/* ---------- what a layer is for ---------- */
+
+/* The heading and the one button that acts on all of them, on one line. */
+.layer-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.layer-head .section-title {
+  margin-bottom: 8px;
+}
+
+/*
+ * The line under the layers saying what the chosen one is for.
+ *
+ * One at a time rather than four at once: four descriptions stacked up is a
+ * paragraph above the buttons they describe, and nobody reads a paragraph to
+ * find out where to put a whoosh.
+ */
+.layer-job {
+  margin-top: 6px;
+  line-height: 1.45;
+  text-wrap: pretty;
 }

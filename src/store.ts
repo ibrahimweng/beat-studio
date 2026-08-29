@@ -1,54 +1,19 @@
-import { BPM_MAX, BPM_MIN } from './constants.ts';
-import { freshBanks } from './pattern.ts';
 import type { Pack, PackSound } from './audio/pack.ts';
 import type { Sample } from './audio/samples.ts';
 import type { Rebuilt } from './audio/rebuild.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
-import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
+import type { Moment } from './video/moments.ts';
 
-/**
- * Which half of the app is showing.
- *
- * "sound-design" is the timeline, for placing sounds against a video. It is
- * where the app opens. "play" is the instrument, for working out ideas before
- * they go on the timeline.
- */
-export type Mode = 'play' | 'sound-design';
+export type PanelTab = 'moments' | 'sounds' | 'selected';
 
 export interface AppState {
-  mode: Mode;
-  /** Instrument shown on the main stage. */
-  view: View;
-  /** Panel shown in the bottom dock. */
-  dock: Dock;
-  /** Transport is running. */
-  playing: boolean;
-  /** A take is being captured. */
-  recording: boolean;
   /** The audio engine has been started by a user gesture. */
   ready: boolean;
-  bpm: number;
-  steps: 16 | 32;
-  metro: Metro;
-  /** Play a bar of clicks before a recording starts capturing. */
-  countIn: boolean;
-  /** Hold notes until re-triggered instead of releasing on key-up. */
-  sustain: boolean;
-  /** Bars to record before auto-stopping; 0 means keep going. */
-  loops: number;
-  /** Octave number of the lowest computer-keyboard row. */
-  octave: number;
-  bank: BankKey;
-  banks: Banks;
-  takes: Take[];
-  /** Transient message for the dock status line; null shows the default. */
+  /** Transient message for the status line; null shows the default. */
   status: string | null;
-  /** Label for the engine row in the inspector. */
-  engineName: string;
 
-  // ---------- sound design ----------
   /** The cue list, layers and timing settings for the loaded video. */
   project: Project;
   /** A video file has been loaded and can be played. */
@@ -74,10 +39,19 @@ export interface AppState {
   currentPreset: CuePreset | null;
   /** The layer new cues are placed on. */
   activeLayerId: string;
-  /** Playing an instrument drops a cue at the playhead. */
+  /** Tapping a pad key drops that sound at the playhead. */
   armed: boolean;
   /** Progress message while exporting, or null when idle. */
   exporting: string | null;
+  /**
+   * Which of the three the right panel is showing.
+   *
+   * Moments is what a scanned video opens on, because for somebody who has
+   * never done this the list of what to do next is the app. Sounds is the
+   * library for choosing something yourself, and Selected is the sound
+   * currently picked on the timeline.
+   */
+  panelTab: PanelTab;
   /** Suggested hits read from the video. */
   detect: Detection;
   /** Sound packs that have been loaded, in the order they were added. */
@@ -104,9 +78,8 @@ export interface AppState {
   /**
    * The video floats in its own window rather than sitting on the stage.
    *
-   * Only meaningful on the sound design screen, where there is a stage to
-   * choose against. On the instrument screens the window is the only way to
-   * see the clip, so it opens there whether this is on or not.
+   * With it on, the stage above the lanes is gone rather than empty, and the
+   * height it was using goes to the timeline. That is the reason to want it.
    */
   videoWindow: boolean;
 }
@@ -134,6 +107,9 @@ export interface Extraction {
  * how many of the candidates to show, so the control stays instant on a long
  * piece that took a while to read.
  */
+/** What has been done about a suggested moment. */
+export type MomentState = 'placed' | 'skipped';
+
 export interface Detection {
   status: 'idle' | 'scanning' | 'pinning' | 'ready';
   /** 0 to 1 while working. */
@@ -145,36 +121,42 @@ export interface Detection {
   /** The moments currently shown. */
   peaks: Peak[];
   sensitivity: number;
+  /**
+   * The moments as things to decide about, rather than as marks on a ruler.
+   *
+   * Worked out from the samples and the peaks above, so it costs nothing and
+   * is redone whenever the sensitivity moves. Held rather than derived at
+   * render time because the panel, the strip and the accept-all button all
+   * have to be looking at the same list.
+   */
+  moments: Moment[];
+  /**
+   * What has been done about each one, by moment id.
+   *
+   * Kept apart from the moments themselves because the list is rebuilt every
+   * time the sensitivity moves and a decision must not be. A moment that
+   * survives that keeps its answer; one that does not is gone either way.
+   */
+  settled: Record<string, MomentState>;
 }
 
 export function emptyDetection(): Detection {
-  return { status: 'idle', progress: 0, samples: [], candidates: [], peaks: [], sensitivity: 0.5 };
+  return {
+    status: 'idle',
+    progress: 0,
+    samples: [],
+    candidates: [],
+    peaks: [],
+    sensitivity: 0.5,
+    moments: [],
+    settled: {},
+  };
 }
 
 export function initialState(): AppState {
   return {
-    view: 'drums',
-    dock: 'seq',
-    playing: false,
-    recording: false,
     ready: false,
-    bpm: 92,
-    steps: 16,
-    metro: 'beat',
-    countIn: false,
-    sustain: false,
-    loops: 2,
-    octave: 4,
-    bank: 'A',
-    banks: freshBanks(),
-    takes: [],
     status: null,
-    engineName: 'standby',
-
-    // The app opens on Sound design, because putting sound to a video is what
-    // most people come here to do. The instruments are one click away on the
-    // rail.
-    mode: 'sound-design',
     project: emptyProject(),
     videoReady: false,
     selection: [],
@@ -183,6 +165,7 @@ export function initialState(): AppState {
     activeLayerId: 'impacts',
     armed: false,
     exporting: null,
+    panelTab: 'moments',
     detect: emptyDetection(),
     packs: [],
     mine: [],
@@ -233,9 +216,4 @@ export class Store {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
-}
-
-/** Clamp a tempo into the range the transport supports. */
-export function clampBpm(value: number): number {
-  return Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(value)));
 }
