@@ -1877,3 +1877,30 @@
   color: var(--txt-2);
   text-wrap: pretty;
 }
+
+/* ---------- what a layer is for ---------- */
+
+/* The heading and the one button that acts on all of them, on one line. */
+.layer-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.layer-head .section-title {
+  margin-bottom: 8px;
+}
+
+/*
+ * The line under the layers saying what the chosen one is for.
+ *
+ * One at a time rather than four at once: four descriptions stacked up is a
+ * paragraph above the buttons they describe, and nobody reads a paragraph to
+ * find out where to put a whoosh.
+ */
+.layer-job {
+  margin-top: 6px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}

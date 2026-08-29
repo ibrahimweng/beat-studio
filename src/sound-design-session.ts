@@ -34,6 +34,8 @@ import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { markerCsv } from './export/markers.ts';
+import { density } from './timeline/project.ts';
+import { layerJob } from './timeline/types.ts';
 import { cueNotes, encodeProjectMidi } from './export/timeline-midi.ts';
 import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
@@ -154,6 +156,19 @@ const MIN_GAP = 0.08;
 const WIDE_SENSITIVITY = 0.92;
 /** An upper bound, so a noisy clip cannot start thousands of seeks. */
 const MAX_CANDIDATES = 160;
+
+/**
+ * How many sounds a second is too many, and how few is too few to say so.
+ *
+ * Two a second is the point the plan this came from names: a sound every half
+ * second is worse than four good ones. The floor is there because the rate on
+ * a nearly empty piece is arithmetic on nothing — three sounds in the first
+ * second of a clip nobody has finished is not a problem worth a line about.
+ */
+const CROWDED_RATE = 2;
+const CROWDED_LEAST = 24;
+/** How much busier it has to get before the line is worth repeating. */
+const CROWDED_AGAIN = 1;
 /** Always look back at least this many frames when pinning a moment. */
 const MIN_REFINE_FRAMES = 3;
 /** And never more than this, so a slow machine cannot cause a long wait. */
@@ -900,6 +915,9 @@ export class SoundDesignSession {
       this.#future.length = 0;
     }
     this.#store.set({ project });
+    // After the state is set, so the line it may write is the last word rather
+    // than something the same change overwrites.
+    this.#noticeCrowding();
   }
 
   #now(): number {
@@ -1322,6 +1340,69 @@ export class SoundDesignSession {
   #armedCue(time: number, layerId: string): Cue {
     const { currentSource, currentPreset } = this.#store.state;
     return dressCue(makeCue(time, layerId, currentSource), currentPreset);
+  }
+
+  /**
+   * Put every layer at the level its job asks for.
+   *
+   * The four names were always good and never meant anything: every sound
+   * arrived at the same level whatever it was on, and a first pass came out
+   * flat because a mix is mostly an order of importance and there was none.
+   *
+   * One button rather than a mode, and nothing here is enforced afterwards:
+   * it sets four numbers that were all one, and anything moved after it wins.
+   * A layer somebody added themselves is left alone, since guessing what a
+   * layer called "Foley" is for and quietly changing its level on that guess
+   * is worse than doing nothing.
+   */
+  balanceLayers(): void {
+    const layers = this.project.layers.map((layer) => {
+      const job = layerJob(layer.id);
+      return job ? { ...layer, gain: job.level } : layer;
+    });
+
+    const moved = layers.filter((layer, i) => layer.gain !== this.project.layers[i].gain).length;
+    if (!moved) {
+      this.#store.set({ status: 'the layers are already balanced' });
+      return;
+    }
+
+    this.#setProject({ ...this.project, layers }, 'balance');
+    this.#store.set({
+      status:
+        moved === 1
+          ? 'one layer moved to the level its job asks for — undo takes it back'
+          : `${moved} layers moved to the levels their jobs ask for — undo takes it back`,
+    });
+  }
+
+/**
+   * The rate this last said something about, or nought if it has not.
+   *
+   * Said when it crosses, and then only again if it has grown by another
+   * whole sound a second. A line that reappears every time a sound is placed
+   * is a line somebody learns to look past, which is the opposite of what it
+   * is for; a line that says two while the piece is at four is worse still,
+   * because it is simply wrong by then. Growing far enough to be worth saying
+   * again is the one case where repeating it earns its place.
+   */
+  #saidAt = 0;
+
+  #noticeCrowding(): void {
+    const rate = density(this.project);
+    const heard = this.project.cues.filter((cue) => !cue.muted).length;
+
+    if (rate <= CROWDED_RATE || heard < CROWDED_LEAST) {
+      this.#saidAt = 0;
+      return;
+    }
+    if (this.#saidAt && rate < this.#saidAt + CROWDED_AGAIN) return;
+    this.#saidAt = rate;
+    this.#store.set({
+      status:
+        `${rate.toFixed(1)} sounds a second. Four good ones usually beat forty: ` +
+        'try taking some out before adding more.',
+    });
   }
 
   setActiveLayer(layerId: string): void {

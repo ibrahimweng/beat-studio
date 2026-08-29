@@ -482,6 +482,62 @@ export const LANES: readonly LaneSpec[] = [
   },
 ];
 
+/**
+ * What each starting layer is for, and where it sits.
+ *
+ * The four names were always good and never meant anything: every sound
+ * arrived at the same level whatever it was on, and the first thing a piece
+ * did was come out flat. A mix is mostly an order of importance, and these
+ * four are that order, written down where it can be read and applied.
+ *
+ * The levels are ratios against the loudest, not decibels, because that is
+ * what they are: an impact is the thing the picture is doing and everything
+ * else is under it. Nothing enforces them. They are what Balance sets, and
+ * anything drawn or dialled afterwards wins.
+ *
+ * A layer somebody added themselves has no job here, and Balance leaves it
+ * alone. Guessing what a layer called "Foley" is for, and quietly changing
+ * its level on that guess, is worse than doing nothing.
+ */
+export const LAYER_JOBS: readonly {
+  id: string;
+  name: string;
+  /** What belongs on it, and how it should sit against the rest. */
+  job: string;
+  /** Its level against the loudest layer, which Balance sets. */
+  level: number;
+}[] = [
+  {
+    id: 'impacts',
+    name: 'Impacts',
+    job: 'The loudest, the driest and the shortest. What the picture is doing.',
+    level: 1,
+  },
+  {
+    id: 'movement',
+    name: 'Movement',
+    job: 'Under the impacts, and wider. What carries between them.',
+    level: 0.72,
+  },
+  {
+    id: 'detail',
+    name: 'Detail',
+    job: 'Quiet, dry and exact. Noticed rather than felt.',
+    level: 0.58,
+  },
+  {
+    id: 'tone',
+    name: 'Tone',
+    job: 'The quietest, the widest and the longest. What sits underneath it all.',
+    level: 0.45,
+  },
+];
+
+/** What a layer is for, if it is one of the four the project starts with. */
+export function layerJob(id: string): (typeof LAYER_JOBS)[number] | null {
+  return LAYER_JOBS.find((one) => one.id === id) ?? null;
+}
+
 export interface Layer {
   id: string;
   name: string;

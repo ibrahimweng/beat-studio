@@ -11,6 +11,7 @@ import {
   DESIGN_GROUPS,
   INSTRUMENT_PICKS,
   MOMENT_GROUPS,
+  layerJob,
   type Anchor,
   type Cue,
   type CuePreset,
@@ -1198,6 +1199,26 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
 
   const layerRow = el('div', { class: 'pick-row' });
 
+  /*
+   * What the layer you are placing on is for.
+   *
+   * One line, for whichever is chosen, rather than four at once. The four
+   * names were always good and never meant anything, and a mix is mostly an
+   * order of importance: this is where that order is said.
+   */
+  const layerJobLine = el('div', { class: 'hint layer-job' });
+
+  const balanceButton = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'Set every layer to the level its job asks for, so the piece is not flat. ' +
+        'Anything you move afterwards wins, and undo takes it back',
+      on: { click: () => session.balanceLayers() },
+    },
+    ['Balance'],
+  );
+
   // ---------- cue inspector ----------
   const cueTitle = el('div', { class: 'status-head__meta', text: 'Nothing selected' });
   const cueTime = el('div', { class: 'hint', text: 'Click the timeline to place a sound.' });
@@ -1723,8 +1744,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         helpButton('recordings', 'your own recordings'),
       ]),
       heardBody,
-      heading('On layer', 'timeline', { marginTop: '12px' }),
+      el('div', { class: 'layer-head' }, [
+        heading('On layer', 'timeline', { marginTop: '12px' }),
+        balanceButton,
+      ]),
       layerRow,
+      layerJobLine,
     ]),
   ]);
 
@@ -1917,9 +1942,14 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         paintedLayers = project.layers;
         clear(layerRow);
         for (const layer of project.layers) {
+          const job = layerJob(layer.id);
           layerRow.appendChild(
             button(
-              { class: 'cell pick', on: { click: () => session.setActiveLayer(layer.id) } },
+              {
+                class: 'cell pick',
+                ...(job ? { title: job.job } : {}),
+                on: { click: () => session.setActiveLayer(layer.id) },
+              },
               [el('span', { text: layer.name })],
             ),
           );
@@ -1928,6 +1958,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       Array.from(layerRow.children).forEach((node, i) =>
         toggleClass(node as HTMLElement, 'is-on', project.layers[i]?.id === state.activeLayerId),
       );
+
+      // A layer somebody added has no job, and inventing one for it would be
+      // a guess presented as advice.
+      const onJob = layerJob(state.activeLayerId);
+      setText(layerJobLine, onJob ? onJob.job : '');
+      layerJobLine.style.display = onJob ? '' : 'none';
 
       const picked = new Set(state.selection);
       const all = project.cues.filter((cue) => picked.has(cue.id));

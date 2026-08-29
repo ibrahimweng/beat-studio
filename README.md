@@ -475,13 +475,47 @@ all of that height goes to the timeline. It is the same window the instrument
 screens use, so it can be dragged anywhere and resized by its corner, and it
 stays where you put it between sessions. Its × puts the stage back.
 
-The window is clamped so it can never be parked over the bar on the left,
-which is the only way between screens.
-
 Layers can be added, renamed and removed. Use "+ Layer" at the bottom of the
 layer names, double click a name to change it, and the small cross removes a
 layer. Removing one that still has sounds on it asks first. There is always at
 least one layer.
+
+### What the four layers are for
+
+A piece starts with four, and each has a job. Pick one under "On layer" and it
+says what it is:
+
+- **Impacts** is the loudest, the driest and the shortest. What the picture is
+  doing.
+- **Movement** sits under the impacts, and wider. What carries between them.
+- **Detail** is quiet, dry and exact. Noticed rather than felt.
+- **Tone** is the quietest, the widest and the longest. What sits underneath it
+  all.
+
+The names were always there and never meant anything: every sound arrived at
+the same level whatever it was on, so a first pass came out flat. A mix is
+mostly an order of importance, and those four are that order.
+
+"Balance", beside the layer names, sets each of the four to the level its job
+asks for. It is one press rather than a mode: nothing is enforced afterwards,
+anything you move later wins, and undo takes it back. A layer you added
+yourself is left alone, because guessing what a layer called "Foley" is for and
+quietly changing its level on that guess would be worse than doing nothing.
+
+### When there is too much
+
+Past about two sounds for every second of picture, the status line says so
+once, with the figure. Four good sounds beat forty, and a timeline with two
+hundred on thirty seconds looks busy and productive and comes out as mush:
+everything is happening, so nothing is.
+
+It is said once rather than on every placement, since a line that reappears
+constantly is one you learn to look past. It speaks again only if the piece
+gets another whole sound a second busier, because by then the figure it gave
+you is simply wrong.
+
+Muted sounds are not counted. They are not in the audio, so they are not in
+this either.
 
 ### Give it a space, and some weight
 
