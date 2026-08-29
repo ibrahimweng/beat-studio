@@ -22,17 +22,42 @@ what Vite requires.
 
 ```bash
 npm install
-npm run dev      # start the development server on http://localhost:5173
-npm run build    # type check, then build into dist/
-npm run preview  # serve the built files
+npm run dev        # start the development server on http://localhost:5173
+npm run build      # type check, then build into dist/
+npm run preview    # serve the built files
+npm test           # run the tests once
+npm run test:watch # run them again whenever a file changes
 ```
 
 After a build, the `dist/` folder contains plain static files. You can host that
 folder on any web server. Paths in the build are relative, so it also works from
 a subfolder.
 
-Every push and pull request runs the type check and the build on both versions
-of Node. The workflow is at `.github/workflows/ci.yml`.
+Every push and pull request runs the type check, the tests and the build on
+both versions of Node. The workflow is at `.github/workflows/ci.yml`.
+
+## Tests
+
+The tests run under Vitest and live beside what they test, as `*.test.ts`. Run
+them with `npm test`.
+
+What is tested is the part of the app that is a plain function of its inputs:
+what kind of moment a curve in the picture describes, what sound belongs on it,
+and what the Freesound proxy answers. The two rules that keep the parts
+separate, that nothing in `audio/` touches the page and nothing in `ui/` talks
+to the engine, are what make that possible, so the tests run under Node with no
+browser at all.
+
+`test/fixtures/motion-shapes.json` holds real measurements taken by the scan
+itself, off a clip built with one of each shape in it: a cut, a build, a move,
+a flurry and a still passage. It is kept because it is decoder output rather
+than arithmetic. The noise, the smear and the uneven spacing are all real, and
+two faults in the moment reading were found against it that tidy curves written
+by hand did not show.
+
+What is not tested yet: the WAV, MP3 and MIDI writers, which are the next
+obvious candidates because they are pure functions with exactly checkable
+output, and anything that draws.
 
 ## Deploying
 
@@ -824,8 +849,10 @@ src/
     render.ts      writing the file, faster than real time
     transport.ts   the step clock
     recorder.ts    capturing takes
+    suggest.ts     what sound belongs on a moment, and the line saying why
   timeline/        the cue list, layers and timing
   video/           loading a video, following its clock, and reading its hits
+    moments.ts     what kind of moment each hit is, from the shape around it
   export/
     markers.ts     a list of where every sound lands
     patch.ts       the palette, written out for other apps to play
@@ -838,7 +865,10 @@ src/
     keep-notice.ts the line saying another tab is keeping the piece
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
+      moments.ts   what the video suggests, and why
+      work-panel.ts the three tabs the right panel shows one at a time
   styles/          design tokens and stylesheets
+test/fixtures/     measurements taken off real clips, for the tests to read
 public/            files copied to the site root, which is where the icons live
 ```
 
