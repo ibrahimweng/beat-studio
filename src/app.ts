@@ -1,11 +1,13 @@
 import type { AudioEngineOptions } from './audio/engine.ts';
 import { PAD_KEYS } from './constants.ts';
+import { TOOLS } from './store.ts';
 import { Session } from './session.ts';
 import { SoundDesignSession } from './sound-design-session.ts';
 import type { AppState } from './store.ts';
 import { el } from './ui/dom.ts';
 import { createRail } from './ui/rail.ts';
 import { createSoundDesignBar } from './ui/sound-design/bar.ts';
+import { createTransport } from './ui/sound-design/transport.ts';
 import { createDivider } from './ui/sound-design/divider.ts';
 import {
   flushProject,
@@ -47,10 +49,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   });
   const help = createHelp({ onReplayTour: () => tour.start() });
 
-  const rail = createRail(session, {
-    onHelp: () => help.toggle(),
-    onHome: () => soundDesignPanel.home(),
-  });
+  const rail = createRail(session, { onHelp: () => help.toggle() });
   const soundDesignBar = createSoundDesignBar(soundDesign, {
     onExport: () => soundDesignPanel.showExport(),
   });
@@ -64,7 +63,8 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     // or the next render would open it again.
     onClose: () => session.store.set({ videoWindow: false }),
   });
-  const timeline = createTimeline(soundDesign);
+  const transport = createTransport(soundDesign);
+  const timeline = createTimeline(soundDesign, { transport: transport.el });
   const soundDesignPanel = createWorkPanel(soundDesign);
   const divider = createDivider({
     container: () => main,
@@ -80,7 +80,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   });
 
   const views: View[] = [
-    rail, soundDesignBar, videoStage, timeline, soundDesignPanel, keepNotice,
+    rail, soundDesignBar, transport, videoStage, timeline, soundDesignPanel, keepNotice,
   ];
 
   const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
@@ -131,7 +131,7 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   soundDesign.effects = {
     onTime: (time) => {
       timeline.setTime(time);
-      soundDesignBar.setTime(time);
+      transport.setTime(time);
     },
     flashCue: (id) => timeline.flashCue(id),
   };
@@ -266,8 +266,32 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   };
 }
 
+/**
+ * The speeds J and L step through, as every edit suite has them.
+ *
+ * Two, four, eight. Tapping again goes up a rung; tapping the opposite key
+ * starts again at the bottom going the other way.
+ */
+const SHUTTLE_STEPS = [2, 4, 8] as const;
+
+/** The next rung up, staying at the top once it is reached. */
+function nextShuttle(rate: number): number {
+  const way = Math.sign(rate) || 1;
+  const at = SHUTTLE_STEPS.indexOf(Math.abs(rate) as (typeof SHUTTLE_STEPS)[number]);
+  const next = SHUTTLE_STEPS[Math.min(at + 1, SHUTTLE_STEPS.length - 1)];
+  return way * next;
+}
+
 /** Keyboard control. */
 function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () => void {
+  /*
+   * Which way and how fast a held shuttle is running, or 0 for stopped.
+   *
+   * Per attachment rather than per module, so two apps mounted on one page do
+   * not share one speed between them.
+   */
+  const shuttle = { rate: 0 };
+
   const onKeyDown = (event: KeyboardEvent): void => {
     // Somewhere text is being typed. Nothing here applies.
     if (inField(event)) return;
@@ -280,7 +304,7 @@ function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () =
     if (controlKeeps(event)) return;
     if (ignore(event)) return;
 
-    soundDesignKey(session, soundDesign, event);
+    soundDesignKey(session, soundDesign, event, shuttle);
   };
 
   window.addEventListener('keydown', onKeyDown);
@@ -373,10 +397,29 @@ function editKey(soundDesign: SoundDesignSession, event: KeyboardEvent): boolean
  * Arrows move the playhead a frame at a time, which is most of the work.
  * Holding shift moves the selected sound instead, so a hit that feels late
  * can be pulled back without losing your place.
+ *
+ * The letters are shared, and the record button decides who has them.
+ *
+ * There are thirteen drum pads on the letter keys and an editor wants those
+ * same letters for its tools: T, H, J, K, L and S were claimed by both. That
+ * is not a clash to arbitrate key by key, it is two modes -- you are either
+ * playing something in or you are editing, and never both in the same
+ * keystroke. Record already said as much on its own tooltip and then did
+ * nothing at all, so it is what says which. Armed, the letters are drums;
+ * otherwise they are tools, which is what somebody arriving from an edit
+ * suite will try first.
  */
-function soundDesignKey(session: Session, soundDesign: SoundDesignSession, event: KeyboardEvent): void {
+function soundDesignKey(
+  session: Session,
+  soundDesign: SoundDesignSession,
+  event: KeyboardEvent,
+  shuttle: { rate: number },
+): void {
   const key = event.key;
+  const lower = key.toLowerCase();
   const chosen = session.state.selection.length;
+
+  /* ---- the same under either mode, because none of them is a letter ---- */
 
   if (key === ' ') {
     event.preventDefault();
@@ -392,23 +435,94 @@ function soundDesignKey(session: Session, soundDesign: SoundDesignSession, event
     return;
   }
 
-  if ((key === 'Delete' || key === 'Backspace') && chosen) {
+  if (key === 'Home') {
     event.preventDefault();
-    soundDesign.removeSelected();
+    soundDesign.seek(0);
+    return;
+  }
+
+  if (key === 'End') {
+    event.preventDefault();
+    soundDesign.seek(soundDesign.project.duration);
+    return;
+  }
+
+  if (key === 'Delete' || key === 'Backspace') {
+    // A drawn stretch of time is a selection too, and the more deliberate
+    // one: it was just drawn, where sounds can stay chosen from something
+    // done a while ago.
+    if (session.state.range) {
+      event.preventDefault();
+      soundDesign.clearRange();
+      return;
+    }
+    if (chosen) {
+      event.preventDefault();
+      soundDesign.removeSelected();
+      return;
+    }
     return;
   }
 
   if (key === 'Escape') {
+    if (session.state.range) session.setRange(null);
     soundDesign.select([]);
     return;
   }
 
-  // Tapping a pad key drops that sound at the playhead, so a pass can be
-  // played in by hand and tidied up afterwards.
-  const pad = PAD_KEYS[key.toLowerCase()];
-  if (pad && !event.repeat) {
+  /* ---- armed: the letters are drums ---- */
+
+  if (session.state.armed) {
+    const pad = PAD_KEYS[lower];
+    if (pad && !event.repeat) {
+      event.preventDefault();
+      soundDesign.addCueAtPlayhead({ kind: 'kit', name: pad });
+    }
+    return;
+  }
+
+  /* ---- otherwise: the letters are an editor's ---- */
+
+  const tool = TOOLS.find((one) => one.key.toLowerCase() === lower);
+  if (tool && !event.shiftKey) {
     event.preventDefault();
-    soundDesign.addCueAtPlayhead({ kind: 'kit', name: pad });
+    session.setTool(tool.id);
+    return;
+  }
+
+  /*
+   * J, K and L: the one habit every editor brings with them.
+   *
+   * Tapping J or L again goes up through the speeds rather than starting
+   * over, which is the whole point of them -- you find a moment by
+   * overshooting fast and walking back slowly. K stops, and so does the
+   * opposite key, because pressing L while running backwards means "no, the
+   * other way".
+   */
+  if (lower === 'j' || lower === 'l') {
+    event.preventDefault();
+    const back = lower === 'j';
+    const going = shuttle.rate;
+    const sameWay = back ? going < 0 : going > 0;
+    shuttle.rate = sameWay ? nextShuttle(going) : (back ? -SHUTTLE_STEPS[0] : SHUTTLE_STEPS[0]);
+    soundDesign.shuttle(shuttle.rate);
+    return;
+  }
+
+  if (lower === 'k') {
+    event.preventDefault();
+    shuttle.rate = 0;
+    soundDesign.stopShuttle();
+    return;
+  }
+
+  // Snapping cycles rather than toggles, because there are three of them and
+  // one key: frame, then beat, then off, then round again.
+  if (lower === 's') {
+    event.preventDefault();
+    const order = ['frame', 'beat', 'off'] as const;
+    const at = order.indexOf(soundDesign.project.snap);
+    soundDesign.setSnap(order[(at + 1) % order.length]);
   }
 }
 

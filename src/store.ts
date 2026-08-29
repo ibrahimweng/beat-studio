@@ -82,6 +82,39 @@ export interface AppState {
    * height it was using goes to the timeline. That is the reason to want it.
    */
   videoWindow: boolean;
+  /** Which tool the pointer is holding on the timeline. */
+  tool: Tool;
+  /**
+   * A stretch of time chosen with the range tool, or null for none.
+   *
+   * Held here rather than in the timeline because it is a selection like any
+   * other: the keyboard acts on it, and what acts on a selection should not
+   * have to reach into a view to find out what is selected.
+   */
+  range: TimeRange | null;
+}
+
+/**
+ * The tools, as an editor for sound would name them.
+ *
+ * Taken from Audition's set, minus the ones that only mean something against
+ * a spectrogram. Move is what the timeline always did and is the default;
+ * the other four were things you could not do at all.
+ */
+export const TOOLS = [
+  { id: 'move', key: 'V', name: 'Move', job: 'Choose sounds, drag them, drag their edges to change how long they are' },
+  { id: 'range', key: 'T', name: 'Range', job: 'Drag out a stretch of time. Delete clears every sound inside it' },
+  { id: 'cut', key: 'C', name: 'Cut', job: 'Click a sound to cut it short at that point' },
+  { id: 'hand', key: 'H', name: 'Hand', job: 'Drag the timeline along without moving anything on it' },
+  { id: 'zoom', key: 'Z', name: 'Zoom', job: 'Click to go in, alt-click to go out, drag to fill the width with a stretch' },
+] as const;
+
+export type Tool = (typeof TOOLS)[number]['id'];
+
+/** A stretch of time, in seconds, kept the way round it was drawn. */
+export interface TimeRange {
+  from: number;
+  to: number;
 }
 
 /**
@@ -172,6 +205,8 @@ export function initialState(): AppState {
     samples: [],
     extract: { busy: null, sounds: [], from: null },
     videoWindow: false,
+    tool: 'move',
+    range: null,
     keeping: true,
   };
 }

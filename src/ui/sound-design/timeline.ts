@@ -58,7 +58,22 @@ export interface TimelineView extends View {
  * to the moment it stops, so a riser anchored to its end visibly reaches back
  * from the hit it leads into.
  */
-export function createTimeline(session: SoundDesignSession): TimelineView {
+export interface TimelineOptions {
+  /**
+   * The transport row, docked at the top of this panel.
+   *
+   * Passed in rather than built here because the transport talks to the
+   * session about playing and this file talks to it about drawing, and those
+   * have no business being the same module. What this file owns is the fact
+   * that the row belongs to this panel.
+   */
+  transport?: HTMLElement;
+}
+
+export function createTimeline(
+  session: SoundDesignSession,
+  options: TimelineOptions = {},
+): TimelineView {
   let pxPerSec = 60;
   let painted: Project | null = null;
   let paintedZoom = -1;
@@ -105,10 +120,13 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   /** The rectangle dragged across the lanes to choose several sounds. */
   const band = el('div', { class: 'tl__band' });
   band.style.display = 'none';
+  /** The stretch of time the range tool has drawn, laid over the lanes. */
+  const rangeBand = el('div', { class: 'tl__range' });
+  rangeBand.style.display = 'none';
   const gutterRows = el('div', { class: 'tl__gutter-rows' });
   const gutter = el('div', { class: 'tl__gutter' });
 
-  const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, band, playhead]);
+  const content = el('div', { class: 'tl__content' }, [ruler, strip.el, lanes, beyond, rangeBand, band, playhead]);
   const viewport = el('div', {
     class: 'tl__viewport',
     on: {
@@ -164,6 +182,15 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
    *
    * What is left is scan, sensitivity, count, forget: one job, one place.
    */
+  /*
+   * Marked rather than counted.
+   *
+   * These four used to be hidden until a scan was ready by their position in
+   * the row -- `.chip:nth-child(4)` and `(5)` -- so taking one button out of
+   * the group silently renumbered which ones went quiet. A class says what is
+   * meant and survives the next rearrangement.
+   */
+  for (const node of [sensitivity, found, clearHits]) node.classList.add('tl__after-scan');
   const detectGroup = el('div', { class: 'tl__detect' }, [findButton, sensitivity, found, clearHits]);
 
   const undo = button(
@@ -182,6 +209,7 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const zoomFit = button({ class: 'chip chip--sm', title: 'Fit the whole video', on: { click: fit } }, ['Fit']);
 
   const root = el('section', { class: 'tl' }, [
+    ...(options.transport ? [options.transport] : []),
     el('div', { class: 'tl__bar' }, [
       el('div', { class: 'micro-label section-title--asks' }, [
         el('span', { text: 'Timeline' }),
@@ -267,6 +295,177 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   }
 
   ruler.addEventListener('pointerdown', scrubFrom);
+
+  /* ---------- tools ---------- */
+
+  /**
+   * Every tool but Move, caught before anything else sees the press.
+   *
+   * On the way down and in the capture phase, so a tool takes the press
+   * before the lane, the sound or the ruler can act on it. The alternative is
+   * a check for the current tool at the top of five separate handlers, which
+   * is the same condition written five times and forgotten on the sixth.
+   *
+   * Move is not here at all: it falls through to the handlers that were
+   * always there, so the timeline somebody already knows is unchanged when
+   * they have not asked for anything else.
+   */
+  function toolPress(event: PointerEvent): void {
+    const tool = session.store.state.tool;
+    if (tool === 'move' || event.button !== 0) return;
+
+    // Opening and closing a curve lane stays available under every tool: it
+    // is about what you can see rather than about what you are editing.
+    if ((event.target as Element | null)?.closest?.('.tl__auto')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (tool === 'hand') return handFrom(event);
+    if (tool === 'zoom') return zoomFrom(event);
+    if (tool === 'range') return rangeFrom(event);
+    if (tool === 'cut') return cutAt(event);
+  }
+
+  /** Drag the view along under a still timeline. */
+  function handFrom(event: PointerEvent): void {
+    const fromX = event.clientX;
+    const fromY = event.clientY;
+    const wasLeft = viewport.scrollLeft;
+    const wasTop = viewport.scrollTop;
+    root.classList.add('is-grabbing');
+
+    const move = (e: PointerEvent): void => {
+      viewport.scrollLeft = wasLeft - (e.clientX - fromX);
+      viewport.scrollTop = wasTop - (e.clientY - fromY);
+    };
+    const up = (): void => {
+      root.classList.remove('is-grabbing');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  /**
+   * Click to go in, alt-click to go out, drag to fill the width with a stretch.
+   *
+   * The drag is the one worth having: it is how you get from the whole clip
+   * to one hit without guessing how many presses of the plus button that is.
+   */
+  function zoomFrom(event: PointerEvent): void {
+    const fromX = pointIn(event).x;
+    let dragged = false;
+
+    const move = (e: PointerEvent): void => {
+      const to = pointIn(e);
+      if (!dragged && Math.abs(to.x - fromX) < 6) return;
+      dragged = true;
+      const left = Math.min(fromX, to.x);
+      band.style.display = '';
+      band.style.left = `${left}px`;
+      band.style.top = `${lanes.offsetTop}px`;
+      band.style.width = `${Math.abs(to.x - fromX)}px`;
+      band.style.height = `${lanes.offsetHeight}px`;
+    };
+
+    const up = (e: PointerEvent): void => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      band.style.display = 'none';
+
+      if (!dragged) {
+        // Around the point pressed, so what you aimed at stays where it is
+        // rather than sliding off the side as the scale changes.
+        const at = fromX / pxPerSec;
+        const out = e.altKey || e.metaKey || e.ctrlKey;
+        setZoom(out ? pxPerSec / 1.6 : pxPerSec * 1.6);
+        centreOn(at);
+        return;
+      }
+
+      const to = pointIn(e).x;
+      const from = Math.min(fromX, to) / pxPerSec;
+      const until = Math.max(fromX, to) / pxPerSec;
+      const span = Math.max(0.05, until - from);
+      setZoom(viewport.clientWidth / span);
+      viewport.scrollLeft = from * pxPerSec;
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  /** Put a moment in the middle of the view, as far as the ends allow. */
+  function centreOn(at: number): void {
+    viewport.scrollLeft = Math.max(0, at * pxPerSec - viewport.clientWidth / 2);
+  }
+
+  /**
+   * Drag out a stretch of time.
+   *
+   * It is a selection, so it lives in the store beside the chosen sounds and
+   * the keyboard acts on it there. Drawn across the full height of the lanes
+   * because it is about time rather than about any one layer: deleting it
+   * clears every sound inside it, whichever layer they sit on.
+   */
+  function rangeFrom(event: PointerEvent): void {
+    const fromX = Math.max(0, pointIn(event).x);
+    const at = fromX / pxPerSec;
+    session.setRange({ from: at, to: at });
+
+    const move = (e: PointerEvent): void => {
+      const to = Math.max(0, pointIn(e).x) / pxPerSec;
+      session.setRange({ from: at, to });
+    };
+    const up = (): void => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const range = session.store.state.range;
+      // A press that went nowhere is a press that meant "no range".
+      if (range && Math.abs(range.to - range.from) < 0.01) session.setRange(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  /**
+   * Cut a sound short where it was clicked.
+   *
+   * Audition's razor splits a clip in two. A sound here is one shot with a
+   * length rather than a piece of tape, so there is no second half to make:
+   * cutting it means it stops at the blade. Anything anchored to its end
+   * keeps landing on its marker and loses the front instead, which is the
+   * same cut seen from the other side.
+   */
+  function cutAt(event: PointerEvent): void {
+    const node = (event.target as Element | null)?.closest?.('.cue');
+    if (!node) return;
+    const id = (node as HTMLElement).dataset.cue;
+    const drawn = id ? cueNodes.get(id) : undefined;
+    if (!id || !drawn) return;
+
+    const at = pointIn(event).x / pxPerSec;
+    const start = cueStart(drawn.cue);
+    const wanted = drawn.cue.anchor === 'end' ? drawn.cue.time - at : at - start;
+    // Below a frame there is nothing left to hear, so the cut is a refusal
+    // rather than a sound of no length.
+    if (wanted < 0.02) {
+      session.store.set({ status: 'too close to the start of that sound to cut it' });
+      return;
+    }
+    session.updateCue(id, { length: wanted });
+  }
+
+  viewport.addEventListener('pointerdown', toolPress, true);
+
 
   /** Where a pointer is, in the timeline's own coordinates. */
   function pointIn(event: PointerEvent): { x: number; y: number } {
@@ -1300,6 +1499,29 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       paint(state.project);
       undo.disabled = !session.canUndo;
       redo.disabled = !session.canRedo;
+
+      /*
+       * The tool decides what the pointer looks like over the whole panel.
+       *
+       * A class on the root rather than a cursor set on each of the dozen
+       * things underneath, so a tool cannot be half applied: whatever is
+       * under the pointer, the shape it takes says which tool is holding it.
+       */
+      root.dataset.tool = state.tool;
+
+      const { range } = state;
+      if (range && state.tool === 'range') {
+        const from = Math.min(range.from, range.to);
+        const span = Math.abs(range.to - range.from);
+        rangeBand.style.display = '';
+        rangeBand.style.left = `${from * pxPerSec}px`;
+        rangeBand.style.width = `${span * pxPerSec}px`;
+        rangeBand.style.top = `${lanes.offsetTop}px`;
+        rangeBand.style.height = `${lanes.offsetHeight}px`;
+      } else {
+        rangeBand.style.display = 'none';
+      }
+
       // What was said last, or what there is, which is worth knowing anyway.
       const count = state.project.cues.length;
       setText(status, state.status ?? `${count} sound${count === 1 ? '' : 's'}`);

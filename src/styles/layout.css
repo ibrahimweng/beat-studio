@@ -57,6 +57,70 @@
   gap: 4px;
 }
 
+/* ---------- tool strip ---------- */
+
+.rail__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/*
+ * A tool, with its letter in the corner.
+ *
+ * The letter is on the button rather than only in the tooltip because that
+ * is how somebody stops using the strip: they read V once while clicking it
+ * and never come back. Every editor prints them for the same reason.
+ */
+.rail__tool {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  padding: 0;
+  border-radius: var(--r-8);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--txt-3);
+  background: transparent;
+}
+
+.rail__tool:hover {
+  color: var(--txt);
+  background: var(--panel-2);
+}
+
+.rail__tool.is-on {
+  color: var(--ac);
+  background: var(--panel-2);
+  border-color: var(--ac-line);
+}
+
+.rail__key {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--txt-3);
+  opacity: 0.75;
+}
+
+.rail__tool.is-on .rail__key {
+  color: var(--ac);
+  opacity: 1;
+}
+
+/* The way into what the tools are, under the tools. */
+.rail__toolhelp {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
 .rail__logo {
   width: 34px;
   height: 34px;
