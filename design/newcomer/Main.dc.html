@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --tc-fg:oklch(0.977 0 0);
+    --tc-border:oklch(0.311 0.013 279.19);
+    --tc-card:oklch(0.205 0 0);
+    --tc-link:#70b0fa;
+    --ac-soft:color-mix(in oklab, var(--ac) 14%, transparent);
+    --ac-line:color-mix(in oklab, var(--ac) 34%, transparent);
+    --bg:oklch(0 0 0); --side:oklch(0 0 0); --stage:oklch(0 0 0);
+    --panel:color-mix(in oklab, var(--tc-card) 55%, transparent);
+    --panel-2:color-mix(in oklab, var(--tc-fg) 10%, transparent);
+    --line:color-mix(in oklab, var(--tc-border) 12%, transparent);
+    --line-soft:color-mix(in oklab, var(--tc-border) 8%, transparent);
+    --txt:var(--tc-fg);
+    --txt-2:color-mix(in oklab, var(--tc-fg) 72%, transparent);
+    --txt-3:color-mix(in oklab, var(--tc-fg) 60%, transparent);
+    --rec:hsl(0 84% 60%); --attention:#ea733a;
+    --led-off:color-mix(in oklab, var(--tc-fg) 18%, transparent);
+    --r-2:2px; --r-4:4px; --r-6:6px; --r-8:8px; --r-12:12px;
+    --tl-ruler:26px; --tl-strip:34px; --tl-row:30px; --tl-gutter:140px;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:oklch(0 0 0);}
+  body{font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-optical-sizing:auto;text-rendering:optimizeLegibility;font-variant-numeric:tabular-nums;overflow:hidden;color:var(--txt);}
+  a{color:var(--tc-link);text-decoration:none;}
+  a:hover{color:var(--ac);}
+  .app{width:1440px;height:900px;display:flex;background:var(--bg);overflow:hidden;}
+  .rail{width:64px;flex:0 0 auto;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:14px 0 16px;gap:4px;}
+  .rail__logo{width:34px;height:34px;border-radius:var(--r-8);background:var(--panel-2);border:1px solid var(--line);display:grid;place-items:center;margin-bottom:12px;}
+  .rail__btn{position:relative;width:40px;height:40px;border:0;padding:0;border-radius:var(--r-8);display:grid;place-items:center;cursor:pointer;color:var(--txt-2);background:transparent;}
+  .rail__btn.is-active{color:var(--txt);background:var(--panel-2);border:1px solid var(--line);}
+  .rail__btn.is-active::before{content:'';position:absolute;left:-15px;top:10px;width:2px;height:18px;border-radius:0 2px 2px 0;background:var(--ac);}
+  .rail__spacer{flex:1 1 auto;}
+  .rail__power{width:34px;height:34px;padding:0;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;background:var(--panel);}
+  .led{width:5px;height:5px;border-radius:50%;background:var(--ac);}
+  .main{flex:1 1 0;min-width:0;display:flex;flex-direction:column;}
+  .topbar{flex:0 0 auto;height:54px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--bg);overflow:hidden;}
+  .topbar__title{font-size:14px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap;}
+  .topbar__spacer{flex:1 1 auto;}
+  .topbar__divider{width:1px;height:22px;background:var(--line);margin:0 4px;}
+  .clock{font-size:13px;font-weight:600;color:var(--txt);letter-spacing:0.01em;}
+  .clock--dim{font-size:12px;color:var(--txt-3);font-weight:500;}
+  .chip{display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:var(--r-8);border:1px solid var(--line);background:var(--panel);cursor:pointer;font:inherit;font-size:12px;font-weight:500;color:var(--txt-2);white-space:nowrap;}
+  .chip--sm{height:28px;padding:0 11px;border-radius:var(--r-6);justify-content:center;}
+  .btn-accent{height:32px;padding:0 14px;border:0;border-radius:var(--r-8);background:var(--ac);display:flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:#fff;}
+  .cell{position:relative;height:26px;min-width:28px;padding:0 8px;border:1px solid var(--line);border-radius:var(--r-6);background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--txt-2);cursor:pointer;}
+  .cell.is-on{color:var(--txt);border-color:var(--ac-line);background:var(--ac-soft);}
+  .play-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;cursor:pointer;color:var(--txt);}
+  .round-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;cursor:pointer;color:var(--txt-2);font-size:11px;}
+  .micro-label{font-size:11px;font-weight:600;letter-spacing:-0.01em;color:var(--txt-3);}
+  .vstage{flex:1 1 auto;min-height:0;position:relative;display:grid;place-items:center;background:var(--stage);padding:14px;background-image:linear-gradient(rgba(255,255,255,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.022) 1px,transparent 1px);background-size:36px 36px;}
+  .split{flex:0 0 auto;height:7px;background:var(--bg);border-top:1px solid var(--line);display:grid;place-items:center;}
+  .split__grip{width:36px;height:1px;background:var(--line);}
+  .tl{flex:0 0 auto;height:268px;display:flex;flex-direction:column;background:var(--bg);}
+  .tl__bar{height:44px;flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 16px;border-bottom:1px solid var(--line-soft);}
+  .tl__body{flex:1 1 auto;display:flex;min-height:0;}
+  .tl__gutter{width:var(--tl-gutter);flex:0 0 auto;border-right:1px solid var(--line);}
+  .tl__track{flex:1 1 auto;position:relative;min-width:0;}
+  .tl__ruler{height:var(--tl-ruler);border-bottom:1px solid var(--line-soft);position:relative;}
+  .tl__tick{position:absolute;top:0;height:var(--tl-ruler);border-left:1px solid var(--line);padding-left:4px;font-size:10px;color:var(--txt-3);display:flex;align-items:center;}
+  .strip{height:var(--tl-strip);border-bottom:1px solid var(--line-soft);background:color-mix(in oklab, var(--bg) 92%, var(--tc-fg));position:relative;}
+  .strip__label{height:var(--tl-strip);display:flex;align-items:center;padding:0 10px;border-bottom:1px solid var(--line-soft);font-size:11px;color:var(--txt-3);}
+  .tl__lane{position:relative;height:var(--tl-row);border-bottom:1px solid var(--line-soft);}
+  .tl__name{height:var(--tl-row);display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--line-soft);font-size:11px;color:var(--txt-2);}
+  .tl__name-head{height:var(--tl-ruler);display:flex;align-items:center;padding:0 10px;border-bottom:1px solid var(--line-soft);}
+  .cue{position:absolute;top:4px;height:calc(var(--tl-row) - 9px);border-radius:var(--r-4);background:color-mix(in oklab, var(--ac) 34%, transparent);border:1px solid var(--ac-line);display:flex;align-items:center;padding:0 5px;font-size:10px;color:var(--txt);overflow:hidden;white-space:nowrap;}
+  .cue.is-selected{background:color-mix(in oklab, var(--ac) 55%, transparent);border-color:var(--ac);}
+  .cue.is-ghost{background:transparent;border:1px dashed color-mix(in oklab, var(--tc-fg) 26%, transparent);color:var(--txt-3);}
+  .playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--ac);}
+  .panel{flex:0 0 340px;background:var(--side);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;}
+  .panel__tabs{flex:0 0 auto;display:flex;gap:2px;padding:12px 14px 0;border-bottom:1px solid var(--line);}
+  .tab{flex:1 1 0;height:34px;border:0;background:transparent;cursor:pointer;font:inherit;font-size:12px;font-weight:500;color:var(--txt-3);border-bottom:2px solid transparent;padding:0;}
+  .tab.is-on{color:var(--txt);border-bottom-color:var(--ac);font-weight:600;}
+  .panel__body{flex:1 1 auto;overflow-y:auto;padding:14px 14px 20px;display:flex;flex-direction:column;gap:12px;}
+  .panel__head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .moment{border:1px solid var(--line);border-radius:var(--r-12);background:var(--panel);padding:10px 11px;display:flex;flex-direction:column;gap:7px;}
+  .moment.is-done{border-color:var(--ac-line);background:var(--ac-soft);}
+  .moment__top{display:flex;align-items:center;gap:8px;}
+  .moment__t{font-size:11px;font-weight:600;color:var(--txt-3);letter-spacing:0.01em;}
+  .moment__kind{font-size:12px;font-weight:600;color:var(--txt);letter-spacing:-0.01em;}
+  .moment__spacer{flex:1 1 auto;}
+  .moment__sound{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:var(--r-6);border:1px solid var(--line);background:var(--panel-2);font-size:11px;font-weight:500;color:var(--txt-2);cursor:pointer;align-self:flex-start;max-width:100%;}
+  .moment__why{font-size:11px;line-height:1.45;color:var(--txt-3);text-wrap:pretty;}
+  .moment__acts{display:flex;gap:4px;}
+  .act{width:26px;height:26px;border-radius:var(--r-6);border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;cursor:pointer;color:var(--txt-2);}
+  .act.is-accent{background:var(--ac);border-color:var(--ac);color:#fff;}
+  .group__title{font-size:11px;font-weight:500;color:var(--txt-3);margin-bottom:5px;display:flex;align-items:center;justify-content:space-between;min-height:18px;}
+  .pick-row{display:flex;flex-wrap:wrap;gap:4px;}
+  .pick{height:26px;padding:0 9px;border:1px solid var(--line);border-radius:var(--r-6);background:var(--panel);font-size:11px;font-weight:500;color:var(--txt-2);display:flex;align-items:center;cursor:pointer;text-transform:capitalize;}
+  .pick.is-on{color:var(--txt);border-color:var(--ac-line);background:var(--ac-soft);}
+  .card{border-radius:var(--r-12);background:var(--panel);border:1px solid var(--line);padding:11px;}
+  .section-title{font-size:12px;font-weight:500;letter-spacing:-0.01em;color:var(--txt-3);margin-bottom:8px;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--txt-2);height:26px;}
+  .hint{font-size:11px;line-height:1.45;color:var(--txt-3);text-wrap:pretty;}
+</style>
+</helmet>
+
+<div class="app">
+
+  <!-- left rail: sound design, help, engine. Nothing else. -->
+  <nav class="rail">
+    <div class="rail__logo">
+      <svg width="16" height="14" viewBox="0 0 16 14" fill="none" aria-hidden="true">
+        <rect x="0" y="4" width="2" height="6" rx="1" fill="#0c8ce9"></rect>
+        <rect x="4" y="0" width="2" height="14" rx="1" fill="#0c8ce9"></rect>
+        <rect x="8" y="2.5" width="2" height="9" rx="1" fill="#0c8ce9"></rect>
+        <rect x="12" y="5" width="2" height="4" rx="1" fill="#0c8ce9"></rect>
+      </svg>
+    </div>
+    <button class="rail__btn is-active" aria-label="Sound design">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+        <rect x="2.5" y="4" width="15" height="12" rx="1.5"></rect>
+        <path d="M2.5 12.5h3l1.5-3 2 5 1.5-3.5 1.5 1.5h5.5"></path>
+      </svg>
+    </button>
+    <div class="rail__spacer"></div>
+    <button class="rail__btn" aria-label="Help">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+        <circle cx="10" cy="10" r="7.25"></circle>
+        <path d="M8 8a2 2 0 1 1 2.6 1.9c-.4.15-.6.5-.6.95v.4"></path>
+        <path d="M10 14.2v.1"></path>
+      </svg>
+    </button>
+    <button class="rail__power" aria-label="Audio engine"><i class="led"></i></button>
+  </nav>
+
+  <div class="main">
+
+    <div class="topbar">
+      <div class="topbar__title">Sound design</div>
+      <div class="topbar__divider"></div>
+      <div class="clock">0:02:04</div>
+      <div class="clock--dim">/ 0:14:22</div>
+      <div class="topbar__divider"></div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <button class="round-btn" aria-label="Back">&#8249;&#8249;</button>
+        <button class="play-btn" aria-label="Play">
+          <svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor" aria-hidden="true"><path d="M1 1.2 10 6l-9 4.8z"></path></svg>
+        </button>
+        <button class="round-btn" aria-label="Forward">&#8250;&#8250;</button>
+      </div>
+      <div class="topbar__spacer"></div>
+      <div class="micro-label">Snap</div>
+      <div style="display:flex;gap:4px">
+        <div class="cell is-on">Frame</div>
+        <div class="cell">Beat</div>
+        <div class="cell">Free</div>
+      </div>
+      <div class="topbar__divider"></div>
+      <div class="cell">25 fps</div>
+      <button class="chip">Ref audio</button>
+      <button class="btn-accent">Export</button>
+    </div>
+
+    <div class="vstage">
+      <div style="width:920px;height:517px;border-radius:var(--r-6);border:1px solid var(--line);background:linear-gradient(148deg,oklch(0.20 0.02 265) 0%,oklch(0.11 0.015 280) 46%,oklch(0.07 0.01 300) 100%);position:relative;overflow:hidden;display:grid;place-items:center">
+        <div style="width:190px;height:190px;border-radius:50%;background:radial-gradient(circle at 38% 32%, color-mix(in oklab, #0c8ce9 62%, transparent), transparent 68%);filter:blur(1px)"></div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:10px">
+          <svg width="86" height="76" viewBox="0 0 16 14" fill="none" aria-hidden="true">
+            <rect x="0" y="4" width="2" height="6" rx="1" fill="#f7f7f7"></rect>
+            <rect x="4" y="0" width="2" height="14" rx="1" fill="#f7f7f7"></rect>
+            <rect x="8" y="2.5" width="2" height="9" rx="1" fill="#f7f7f7"></rect>
+            <rect x="12" y="5" width="2" height="4" rx="1" fill="#f7f7f7"></rect>
+          </svg>
+          <div style="font-size:13px;letter-spacing:0.34em;color:color-mix(in oklab, #f7f7f7 76%, transparent);text-transform:uppercase;padding-left:0.34em">Toolcraft</div>
+        </div>
+        <div style="position:absolute;left:14px;bottom:12px;font-size:11px;color:color-mix(in oklab, #f7f7f7 46%, transparent)">brand-ident-v4.mp4 &#183; 1920&#215;1080 &#183; 25 fps</div>
+      </div>
+    </div>
+
+    <div class="split"><div class="split__grip"></div></div>
+
+    <div class="tl">
+      <div class="tl__bar">
+        <button class="chip chip--sm">Scan the video</button>
+        <div class="micro-label" style="margin-left:4px">Sensitivity</div>
+        <div style="width:96px;height:4px;border-radius:999px;background:var(--panel-2);position:relative">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:58%;border-radius:999px;background:var(--ac)"></div>
+          <div style="position:absolute;left:58%;top:-4px;width:12px;height:12px;border-radius:50%;background:var(--txt);transform:translateX(-6px)"></div>
+        </div>
+        <div class="micro-label">12 moments</div>
+        <div style="flex:1 1 auto"></div>
+        <button class="chip chip--sm">Balance</button>
+        <button class="chip chip--sm">Add layer</button>
+      </div>
+
+      <div class="tl__body">
+        <div class="tl__gutter">
+          <div class="tl__name-head"></div>
+          <div class="strip__label">Movement in the picture</div>
+          <div class="tl__name"><i style="width:6px;height:6px;border-radius:2px;background:var(--ac);flex:0 0 auto"></i>Impacts</div>
+          <div class="tl__name"><i style="width:6px;height:6px;border-radius:2px;background:color-mix(in oklab, var(--ac) 62%, transparent);flex:0 0 auto"></i>Movement</div>
+          <div class="tl__name"><i style="width:6px;height:6px;border-radius:2px;background:color-mix(in oklab, var(--ac) 42%, transparent);flex:0 0 auto"></i>Detail</div>
+          <div class="tl__name"><i style="width:6px;height:6px;border-radius:2px;background:color-mix(in oklab, var(--ac) 26%, transparent);flex:0 0 auto"></i>Tone</div>
+        </div>
+
+        <div class="tl__track">
+          <div class="tl__ruler">
+            <div class="tl__tick" style="left:0px">0:00</div>
+            <div class="tl__tick" style="left:112px">0:02</div>
+            <div class="tl__tick" style="left:224px">0:04</div>
+            <div class="tl__tick" style="left:336px">0:06</div>
+            <div class="tl__tick" style="left:448px">0:08</div>
+            <div class="tl__tick" style="left:560px">0:10</div>
+            <div class="tl__tick" style="left:672px">0:12</div>
+            <div class="tl__tick" style="left:784px">0:14</div>
+          </div>
+
+          <div class="strip">
+            <svg width="896" height="34" viewBox="0 0 896 34" preserveAspectRatio="none" fill="none" aria-hidden="true" style="position:absolute;left:0;top:0">
+              <polyline points="0,31 18,30 26,9 34,29 58,30 76,28 94,24 108,19 120,14 128,4 136,26 158,29 176,27 190,16 204,13 218,15 232,27 248,29 266,30 280,7 292,27 300,20 312,29 330,30 352,29 366,22 378,25 392,12 404,26 420,30 442,31 460,28 472,17 486,29 508,30 526,30 540,11 552,28 566,30 588,31 606,30 620,25 634,29 652,30 674,31 692,30 706,18 718,28 736,30 758,31 776,30 790,26 804,29 826,30 848,31 870,31 896,31" stroke="color-mix(in oklab, #f7f7f7 30%, transparent)" stroke-width="1.25"></polyline>
+            </svg>
+            <div style="position:absolute;left:26px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+            <div style="position:absolute;left:128px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+            <div style="position:absolute;left:280px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+            <div style="position:absolute;left:392px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+            <div style="position:absolute;left:540px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+            <div style="position:absolute;left:706px;top:0;bottom:0;width:1px;background:var(--attention)"></div>
+          </div>
+
+          <div class="tl__lane">
+            <div class="cue" style="left:26px;width:44px">Impact</div>
+            <div class="cue is-selected" style="left:128px;width:62px">Large impact</div>
+            <div class="cue is-ghost" style="left:280px;width:46px">Thud</div>
+            <div class="cue is-ghost" style="left:540px;width:44px">Slam</div>
+          </div>
+          <div class="tl__lane">
+            <div class="cue" style="left:64px;width:66px">Whoosh</div>
+            <div class="cue is-ghost" style="left:352px;width:74px">Whoosh</div>
+            <div class="cue is-ghost" style="left:660px;width:58px">Swipe</div>
+          </div>
+          <div class="tl__lane">
+            <div class="cue" style="left:190px;width:22px"></div>
+            <div class="cue" style="left:216px;width:22px"></div>
+            <div class="cue" style="left:242px;width:22px"></div>
+            <div class="cue is-ghost" style="left:706px;width:24px"></div>
+          </div>
+          <div class="tl__lane" style="border-bottom:0">
+            <div class="cue" style="left:0px;width:300px">Drone bed</div>
+            <div class="cue is-ghost" style="left:470px;width:210px">Riser</div>
+          </div>
+
+          <div class="playhead" style="left:128px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- right panel: Moments | Sounds | Selected -->
+  <aside class="panel">
+    <div class="panel__tabs">
+      <button class="tab" style="{{momentsTab}}" onClick="{{pickMoments}}">Moments</button>
+      <button class="tab" style="{{soundsTab}}" onClick="{{pickSounds}}">Sounds</button>
+      <button class="tab" style="{{selectedTab}}" onClick="{{pickSelected}}">Selected</button>
+    </div>
+
+    <sc-if value="{{isMoments}}" hint-placeholder-val="{{ true }}">
+      <div class="panel__body">
+        <div class="panel__head">
+          <div>
+            <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">12 moments found</div>
+            <div class="hint" style="margin-top:2px">3 placed, 9 waiting on you</div>
+          </div>
+          <button class="btn-accent">Accept all</button>
+        </div>
+
+        <sc-for list="{{moments}}" as="m" hint-placeholder-count="4">
+          <div class="moment" style="{{m.boxStyle}}">
+            <div class="moment__top">
+              <div class="moment__t">{{m.at}}</div>
+              <div class="moment__kind">{{m.kind}}</div>
+              <div class="moment__spacer"></div>
+              <div class="moment__acts">
+                <div class="act" title="Hear it against the picture">
+                  <svg width="9" height="10" viewBox="0 0 9 10" fill="currentColor" aria-hidden="true"><path d="M1 1 8 5l-7 4z"></path></svg>
+                </div>
+                <div class="act" style="{{m.tickStyle}}" title="Place it">
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6.4 4.8 9 10 3.2"></path></svg>
+                </div>
+                <div class="act" title="Not a moment">
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"></path></svg>
+                </div>
+              </div>
+            </div>
+            <div class="moment__sound">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M1 6h1.6l1-2.4L6 9.4l1.2-3.2L8.4 7.6H11"></path></svg>
+              {{m.sound}}
+            </div>
+            <sc-if value="{{showReasons}}" hint-placeholder-val="{{ true }}">
+              <div class="moment__why">{{m.why}}</div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isSounds}}" hint-placeholder-val="{{ false }}">
+      <div class="panel__body">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1 1 auto;height:30px;border:1px solid var(--line);border-radius:var(--r-8);background:var(--panel);display:flex;align-items:center;padding:0 10px;font-size:11px;color:var(--txt-3)">Search, or describe a sound</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <div class="cell is-on">By moment</div>
+          <div class="cell">By sound type</div>
+        </div>
+
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+          <div>
+            <div class="group__title">{{g.title}}<span style="color:color-mix(in oklab, #f7f7f7 34%, transparent)">{{g.count}}</span></div>
+            <div class="pick-row">
+              <sc-for list="{{g.items}}" as="s" hint-placeholder-count="4">
+                <div class="pick" style="{{s.style}}">{{s.name}}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isSelected}}" hint-placeholder-val="{{ false }}">
+      <div class="panel__body">
+        <div>
+          <div style="font-size:13px;font-weight:600;letter-spacing:-0.01em">Large impact, room</div>
+          <div class="hint" style="margin-top:3px">On Impacts at 0:01:02, frame 26</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Where it lands</div>
+          <div style="display:flex;gap:4px;margin-bottom:9px">
+            <div class="cell">Starts on it</div>
+            <div class="cell is-on">Ends on it</div>
+          </div>
+          <div class="hint">A sound that builds should finish on the hit rather than start on it. That is what makes the picture land instead of the sound.</div>
+          <div style="display:flex;gap:4px;margin-top:9px">
+            <button class="chip chip--sm">&#8722;1f</button>
+            <button class="chip chip--sm">+1f</button>
+            <button class="chip chip--sm">In context</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">How it sounds</div>
+          <div class="row"><span>Size</span><span style="color:var(--txt)">Large</span></div>
+          <div class="row"><span>Room</span><span style="color:var(--txt)">Room</span></div>
+          <div class="row"><span>Length</span><span style="color:var(--txt)">1.24s</span></div>
+          <div class="row"><span>Level</span><span style="color:var(--txt)">0.0 dB</span></div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Made of</div>
+          <div class="row"><span style="color:var(--txt)">Large impact</span><span>full</span></div>
+          <div class="row"><span style="color:var(--txt)">Sub</span><span>half</span></div>
+          <div class="hint" style="margin-top:6px">Low end is felt rather than heard. Without the sub this lands fine on a laptop and weakly on a phone.</div>
+        </div>
+      </div>
+    </sc-if>
+  </aside>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "accent": {"editor":"color","default":"#0c8ce9","options":["#0c8ce9","#ea733a","#3ecf8e","#b98cf5"],"section":"Theme"},
+  "showReasons": {"editor":"boolean","default":true,"section":"Moments"},
+  "$preview": {"width":1440,"height":900}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#0c8ce9';
+    const tab = (this.state && this.state.tab) || 'moments';
+    const on = 'color:#f7f7f7;border-bottom-color:' + accent + ';font-weight:600';
+    const off = '';
+
+    const moments = [
+      {
+        at: '0:00:14', kind: 'Something appears', sound: 'Impact, dry',
+        why: 'A sharp change with nothing leading into it. That reads as a cut, so it wants a short dry hit and no tail.',
+        boxStyle: '', tickStyle: '',
+      },
+      {
+        at: '0:01:02', kind: 'Something builds', sound: 'Riser into large impact',
+        why: 'The picture climbs for twenty frames before this. The riser finishes here rather than starting here, which is the mistake almost everyone makes first.',
+        boxStyle: 'border-color:' + accent + '55;background:color-mix(in oklab,' + accent + ' 14%, transparent)',
+        tickStyle: 'background:' + accent + ';border-color:' + accent + ';color:#fff',
+      },
+      {
+        at: '0:01:18', kind: 'Something moves', sound: 'Whoosh, wide',
+        why: 'Movement held for half a second rather than one spike. One whoosh across the whole move, not three hits inside it.',
+        boxStyle: '', tickStyle: '',
+      },
+      {
+        at: '0:02:04', kind: 'Something lands hard', sound: 'Large impact and sub',
+        why: 'The strongest moment in the clip. The sub under the hit is what makes it felt on a phone.',
+        boxStyle: '', tickStyle: '',
+      },
+      {
+        at: '0:02:20', kind: 'A small thing happens', sound: 'Tick, dry',
+        why: 'Only a small part of the frame changed. Keep it quiet and exact, and leave the room for the moment after it.',
+        boxStyle: '', tickStyle: '',
+      },
+    ];
+
+    const pick = (name, isOn) => ({
+      name,
+      style: isOn ? 'color:#f7f7f7;border-color:' + accent + '55;background:color-mix(in oklab,' + accent + ' 14%, transparent)' : '',
+    });
+
+    const groups = [
+      { title: 'Something appears', count: '218', items: [pick('impact', true), pick('thud', false), pick('pop', false), pick('click', false), pick('glass', false)] },
+      { title: 'Something moves', count: '164', items: [pick('whoosh', false), pick('swipe', false), pick('flutter', false), pick('wobble', false)] },
+      { title: 'Something builds', count: '132', items: [pick('riser', false), pick('swell', false), pick('reverse', false)] },
+      { title: 'Something lands hard', count: '96', items: [pick('slam', false), pick('sub', false), pick('boom', false)] },
+      { title: 'Something is there', count: '186', items: [pick('drone', false), pick('rumble', false), pick('rain', false), pick('fire', false), pick('piano bed', false)] },
+      { title: 'A small thing happens', count: '148', items: [pick('tick', false), pick('beep', false), pick('chirp', false), pick('hat', false)] },
+      { title: 'A transition', count: '124', items: [pick('glitch', false), pick('static', false), pick('zap', false), pick('reverse', false)] },
+    ];
+
+    return {
+      accent,
+      showReasons: this.props.showReasons !== false,
+      isMoments: tab === 'moments',
+      isSounds: tab === 'sounds',
+      isSelected: tab === 'selected',
+      momentsTab: tab === 'moments' ? on : off,
+      soundsTab: tab === 'sounds' ? on : off,
+      selectedTab: tab === 'selected' ? on : off,
+      pickMoments: () => this.setState({ tab: 'moments' }),
+      pickSounds: () => this.setState({ tab: 'sounds' }),
+      pickSelected: () => this.setState({ tab: 'selected' }),
+      moments,
+      groups,
+    };
+  }
+}
+</script>
+</body>
+</html>
