@@ -2117,8 +2117,22 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
        * three save prompts to dismiss.
        */
       const busy = state.exporting !== null;
-      for (const node of exportButtons) node.disabled = busy;
-      setText(exportStatus, state.exporting ?? '');
+
+      /*
+       * Nothing on the timeline is nothing to write.
+       *
+       * These stayed lit on an empty project and answered a click with no
+       * file, no error and no message: the most important button in the app,
+       * silently doing nothing. The palette export below is not in this list
+       * and stays available, because it writes the sound catalogue rather
+       * than the timeline, and that exists before any of this does.
+       */
+      const empty = project.cues.length === 0;
+      for (const node of exportButtons) node.disabled = busy || empty;
+      setText(
+        exportStatus,
+        state.exporting ?? (empty ? 'Nothing to export yet. Place a sound first.' : ''),
+      );
     },
   };
 }
