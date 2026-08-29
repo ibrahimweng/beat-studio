@@ -47,8 +47,13 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   });
   const help = createHelp({ onReplayTour: () => tour.start() });
 
-  const rail = createRail(session, { onHelp: () => help.toggle() });
-  const soundDesignBar = createSoundDesignBar(soundDesign);
+  const rail = createRail(session, {
+    onHelp: () => help.toggle(),
+    onHome: () => soundDesignPanel.home(),
+  });
+  const soundDesignBar = createSoundDesignBar(soundDesign, {
+    onExport: () => soundDesignPanel.showExport(),
+  });
   const videoStage = createVideoStage(soundDesign);
   // The instruments screen borrows the same video element rather than making
   // a second one, so there is only ever one clip at one moment.

@@ -19,8 +19,16 @@ export interface SoundDesignBarView extends View {
   setTime(time: number): void;
 }
 
+export interface SoundDesignBarOptions {
+  /** Put the export options in front. */
+  onExport?(): void;
+}
+
 /** Transport, timecode and the settings that decide where a sound can land. */
-export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBarView {
+export function createSoundDesignBar(
+  session: SoundDesignSession,
+  options: SoundDesignBarOptions = {},
+): SoundDesignBarView {
   const clock = el('div', { class: 'sound-design-bar__clock', text: '0:00:00' });
   const total = el('div', { class: 'sound-design-bar__total', text: '0:00:00' });
 
@@ -162,15 +170,33 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
   const cluster = (...within: HTMLElement[]): HTMLElement =>
     el('div', { class: 'transport__grp' }, within);
 
+  /**
+   * Getting a file out, from where it cannot be scrolled away from.
+   *
+   * It lived at the bottom of a panel nearly twice the height of the window,
+   * under the library, the recordings and the layers. The last thing you do
+   * was the hardest thing to reach.
+   */
+  const exportButton = button(
+    {
+      class: 'btn-accent sound-design-bar__export',
+      title: 'Write the piece out as a file',
+      on: { click: () => options.onExport?.() },
+    },
+    ['Export'],
+  );
+
   const root = el('header', { class: 'topbar sound-design-bar' }, [
-    // The screen is named here as well as on the rail, because this is the
-    // first thing the app opens on and it should say what it is.
-    el('div', { class: 'topbar__title section-title--asks' }, [
-      el('span', { text: 'Sound design' }),
-      // One "?" for the bar, at the name. A second one further along said
-      // nothing about where it sat, and pointed at what this already covers.
-      helpButton('transport', 'the transport'),
-    ]),
+    /*
+     * The "?" without the name beside it.
+     *
+     * The bar used to say "Sound design" as well as the rail. That was fair
+     * while the rail button was only a label, and became a hundred and twelve
+     * pixels of duplicate signage the moment that button was given a job. The
+     * bar needs those pixels: it is one row that cannot wrap, and what runs
+     * off the right of it is silently gone.
+     */
+    helpButton('transport', 'the transport'),
     el('div', { class: 'topbar__divider' }),
     el('div', { class: 'transport' }, [
       cluster(toStart, stop),
@@ -189,6 +215,7 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
     el('div', { class: 'topbar__spacer' }),
     videoWindow,
     reference,
+    exportButton,
   ]);
 
   return {

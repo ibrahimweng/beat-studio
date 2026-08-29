@@ -23,6 +23,10 @@ import { createSoundDesignPanel } from './panel.ts';
 export interface WorkPanelView extends View {
   /** Open the library at one moment group, unfolding whatever is in the way. */
   openGroup(id: string): void;
+  /** Back to the moment list, at the top. */
+  home(): void;
+  /** Put the export options in front, wherever the panel was left. */
+  showExport(): void;
 }
 
 export function createWorkPanel(session: SoundDesignSession): WorkPanelView {
@@ -94,6 +98,19 @@ export function createWorkPanel(session: SoundDesignSession): WorkPanelView {
   return {
     el: root,
     openGroup: (id) => panel.openGroup(id),
+
+    home() {
+      session.setPanelTab('moments');
+      // Scrolled as well as switched: a panel left half way down the library
+      // is not "back", it is the same place with different contents.
+      root.scrollTop = 0;
+    },
+
+    showExport() {
+      // Only what the panel does itself: it scrolls to the export card, which
+      // is not the bottom of the panel — the palette is under it.
+      panel.showExport();
+    },
 
     update(state: AppState, previous: AppState | null) {
       // Both children are updated whichever tab is showing. They are cheap,
