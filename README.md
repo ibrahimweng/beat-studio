@@ -43,10 +43,15 @@ them with `npm test`.
 
 What is tested is the part of the app that is a plain function of its inputs:
 what kind of moment a curve in the picture describes, what sound belongs on it,
-and what the Freesound proxy answers. The two rules that keep the parts
-separate, that nothing in `audio/` touches the page and nothing in `ui/` talks
-to the engine, are what make that possible, so the tests run under Node with no
-browser at all.
+what the WAV, MP3 and MIDI writers put in a file, and what the Freesound proxy
+answers. The two rules that keep the parts separate, that nothing in `audio/`
+touches the page and nothing in `ui/` talks to the engine, are what make that
+possible, so the tests run under Node with no browser at all.
+
+The two encoders take an `AudioBuffer`, which Node has no notion of. Between
+them they read four things off it: how many channels there are, how long it is,
+what rate it was made at, and the samples. `test/audio-buffer.ts` is those four
+things and nothing else.
 
 `test/fixtures/motion-shapes.json` holds real measurements taken by the scan
 itself, off a clip built with one of each shape in it: a cut, a build, a move,
@@ -55,9 +60,17 @@ than arithmetic. The noise, the smear and the uneven spacing are all real, and
 two faults in the moment reading were found against it that tidy curves written
 by hand did not show.
 
-What is not tested yet: the WAV, MP3 and MIDI writers, which are the next
-obvious candidates because they are pure functions with exactly checkable
-output, and anything that draws.
+Every test here was checked by putting the fault it describes back into the
+code and watching it fail. That is worth the few minutes it takes: it caught
+three tests of ours that passed against the broken code they were written to
+catch. One compared two MP3 encodes to each other, when both grow with the
+input whether or not the tail is written. One asserted that MIDI ticks go up,
+when they always go up, since they are rebuilt by adding deltas and a delta is
+never written negative however wrong it is. One invented a curve to stand in
+for real measurements and tuned it until it passed.
+
+What is not tested yet: anything that draws, and the parts that reach the audio
+graph.
 
 ## Deploying
 
