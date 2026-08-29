@@ -14,7 +14,15 @@
   --lane-edge: color-mix(in oklab, var(--tc-fg) 15%, transparent);
   --tl-ruler: 26px;
   --tl-strip: 34px;
-  --tl-gutter: 140px;
+  /*
+   * Wide enough for the layer names.
+   *
+   * At 140 the four buttons and their gaps took all but 31px of the row, and
+   * "Impacts" wants 42 -- so every name was ellipsed to "Imp..." and "Mo...",
+   * which is no name at all. The lanes give up about three per cent of their
+   * width for it.
+   */
+  --tl-gutter: 172px;
 }
 
 /* ---------- the video ---------- */
@@ -180,22 +188,32 @@
 .sound-design-bar__time {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-left: 4px;
+  gap: 4px;
+  margin-left: 2px;
 }
 
+/*
+ * Figures that all take the same width.
+ *
+ * A running clock whose digits are different widths shifts sideways as it
+ * counts, and this one sits between two things that must not move. It also
+ * makes the width predictable, which matters more now the format carries
+ * hours: the old min-width here was cut for a seven character reading and
+ * meant nothing against eleven.
+ */
 .sound-design-bar__clock {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--ac);
-  min-width: 74px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sound-design-bar__sep,
 .sound-design-bar__total {
   font-size: 12px;
   color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -266,6 +284,17 @@
   /* The rules between groups earn less than the pixels they cost here. */
   .sound-design-bar .topbar__divider {
     margin: 0 1px;
+  }
+
+  /*
+   * A point off the clock, on the screens that cannot afford it.
+   *
+   * Timecode grew from seven characters to eleven when it gained hours, which
+   * is real width in a row that has none to give. Above 1500 the reading keeps
+   * its full size; below it, a point buys back most of what the hours cost.
+   */
+  .sound-design-bar__clock {
+    font-size: 14px;
   }
 }
 
@@ -1748,14 +1777,23 @@
 .moment__top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
+/*
+ * Tabular figures, and tight.
+ *
+ * Timecode grew a field when it gained hours, which left the title beside it
+ * four pixels short and ellipsed mid-word. Digits that all share a width also
+ * stop the row from twitching as the playhead runs.
+ */
 .moment__at {
   font-size: 11px;
   font-weight: 600;
   color: var(--txt-3);
   flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .moment__kind {
@@ -1807,15 +1845,25 @@
   color: var(--txt);
 }
 
-.moment__act--on {
-  background: var(--ac);
+/*
+ * The suggested action, not a switch that is already on.
+ *
+ * This was filled in the accent colour, the same as the Export button. Sat in
+ * a row of three next to a play and a cross it read as a state rather than an
+ * action — the tick already ticked — while the header directly above it said
+ * three moments were still waiting on you. Outlined says "this is the one to
+ * press" and keeps the filled treatment for the hover, where it means the
+ * press is about to happen. What placement actually looks like is the word
+ * "placed" the row gains afterwards.
+ */
+.moment__act--go {
   border-color: var(--ac);
-  color: #fff;
+  color: var(--ac);
 }
 
-.moment__act--on:hover {
+.moment__act--go:hover {
+  background: var(--ac);
   color: #fff;
-  filter: brightness(1.1);
 }
 
 /*

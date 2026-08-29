@@ -158,7 +158,7 @@ export function createMomentsPanel(
     ): HTMLButtonElement =>
       button(
         {
-          class: accent ? 'moment__act moment__act--on' : 'moment__act',
+          class: accent ? 'moment__act moment__act--go' : 'moment__act',
           title,
           attrs: { 'aria-label': label },
           on: { click: onClick },

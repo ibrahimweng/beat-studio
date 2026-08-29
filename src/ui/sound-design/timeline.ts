@@ -143,7 +143,18 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
   const placeAll = button(
     {
       class: 'chip chip--sm',
-      title: 'Place the chosen sound on every suggestion',
+      /*
+       * Named for what it ignores, because it is the other way of working.
+       *
+       * This puts the sound you have chosen on every hit, on one layer. The
+       * Moments list does the opposite: a different sound per moment, on the
+       * layer that kind of moment belongs to. Both are wanted -- one is a
+       * sound designer stamping a pass, the other is the app's suggestions --
+       * but they were sat next to each other looking interchangeable.
+       */
+      title:
+        'Stamp the sound you have chosen on every hit, all on one layer. ' +
+        'The Moments list instead places a different sound for each kind of moment.',
       on: { click: () => session.placeAllHits() },
     },
     ['Place all'],
@@ -1318,7 +1329,21 @@ export function createTimeline(session: SoundDesignSession): TimelineView {
       const ready = detect.status === 'ready';
       detectGroup.classList.toggle('is-ready', ready);
       sensitivity.value = String(detect.sensitivity);
-      setText(found, ready ? `${detect.peaks.length} hits` : '');
+      /*
+       * Both numbers, in one place, in a sentence that relates them.
+       *
+       * The strip counted hits and the Moments list counted moments, and the
+       * two never appeared together: five in one place, three in the other,
+       * with nothing anywhere saying that a run of hits close together is one
+       * moment. Two numbers for the same scan look like a contradiction until
+       * something says otherwise.
+       */
+      const hits = detect.peaks.length;
+      const moments = detect.moments.length;
+      setText(
+        found,
+        ready ? (moments ? `${hits} hits in ${moments} moments` : `${hits} hits`) : '',
+      );
 
       strip.draw(state, pxPerSec);
     },

@@ -151,13 +151,23 @@ function applySnap(time: number, snap: SnapMode, project: Project): number {
   return Math.round(time / frame) * frame;
 }
 
-/** Format a time as minutes, seconds and frames, e.g. "0:04:11". */
+/**
+ * Format a time as hours, minutes, seconds and frames, e.g. "00:00:04:11".
+ *
+ * Four fields, always padded, because three were ambiguous with the clock:
+ * a six second clip read "0:05:29", which anyone used to picture takes for
+ * five minutes twenty nine. There were also no hours at all, so an hour and
+ * a half came out as "90:00:00". This is the shape every edit suite writes,
+ * and it costs three characters.
+ */
 export function timecode(time: number, fps: number): string {
   const safe = Math.max(0, time);
-  const minutes = Math.floor(safe / 60);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
   const seconds = Math.floor(safe % 60);
   const frames = Math.floor((safe % 1) * (fps || DEFAULT_FPS));
-  return `${minutes}:${String(seconds).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
 }
 
 /** Cues that should be heard, taking mute and solo into account. */

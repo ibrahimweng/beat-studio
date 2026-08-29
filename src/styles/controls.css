@@ -60,8 +60,21 @@
   color: #fff;
 }
 
-.btn-accent:hover {
+.btn-accent:hover:not(:disabled) {
   filter: brightness(1.1);
+}
+
+/*
+ * The one button style that had no disabled state.
+ *
+ * Chips and transport buttons both dim when they are dead; this did not, so a
+ * disabled accent button sat there at full strength looking like the most
+ * pressable thing on screen. It matters most on Export, which is an accent
+ * button and is dead whenever there is nothing on the timeline.
+ */
+.btn-accent:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Download glyph: a stem with a chevron under it */
