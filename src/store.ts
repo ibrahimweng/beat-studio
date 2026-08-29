@@ -41,6 +41,16 @@ export interface AppState {
   activeLayerId: string;
   /** Tapping a pad key drops that sound at the playhead. */
   armed: boolean;
+  /**
+   * The transport is running.
+   *
+   * Published rather than asked for, because the clock stops itself at the
+   * end of the piece and nothing watching would otherwise hear about it. It
+   * was read straight off the clock by a getter, which meant the play button
+   * only ever changed on some other change happening to come along at the
+   * same time — so after the first press it never changed at all.
+   */
+  playing: boolean;
   /** Progress message while exporting, or null when idle. */
   exporting: string | null;
   /**
@@ -205,6 +215,7 @@ export function initialState(): AppState {
     mine: [],
     samples: [],
     extract: { busy: null, sounds: [], from: null },
+    playing: false,
     videoWindow: false,
     tool: 'move',
     range: null,

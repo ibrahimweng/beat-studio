@@ -890,8 +890,15 @@ export class SoundDesignSession {
     return this.#store.state.project;
   }
 
+  /**
+   * Whether the transport is running.
+   *
+   * From the store rather than from the clock, so that everything reading it
+   * is reading the same thing the last render saw. The clock is still what
+   * decides; it says so on the way in and out, and this is where that lands.
+   */
   get playing(): boolean {
-    return this.#clock?.playing ?? false;
+    return this.#store.state.playing;
   }
 
   get time(): number {
@@ -988,6 +995,7 @@ export class SoundDesignSession {
     this.#clock = new VideoClock(video, this.#engine, {
       project: () => this.project,
       onTime: (t) => this.effects.onTime(t),
+      onPlaying: (playing) => this.#store.set({ playing }),
       onCue: (cue, at) => {
         // Light the cue when it actually sounds, not when it was queued.
         const delay = Math.max(0, (at - this.#engine.now()) * 1000);
