@@ -59,6 +59,7 @@ import {
   updateCue,
   updateLayer,
   frameDuration,
+  timecode,
 } from './timeline/project.ts';
 import type {
   AutoPoint,
@@ -151,6 +152,16 @@ export const DEFAULT_EXPORT: ExportSettings = {
 };
 
 /** Two suggestions closer than this are treated as one moment. */
+/**
+ * The shortest a piece may be set to.
+ *
+ * A second, because below that the ruler has no room for a single label and
+ * the whole timeline collapses to a sliver you cannot then click on to make
+ * it longer again. There is nothing wrong with a half second piece; there is
+ * something wrong with a window you cannot get back out of.
+ */
+const MIN_DURATION = 1;
+
 const MIN_GAP = 0.08;
 /** Candidates are gathered generously, then narrowed by the sensitivity. */
 const WIDE_SENSITIVITY = 0.92;
@@ -1155,6 +1166,30 @@ export class SoundDesignSession {
   setFps(fps: number): void {
     if (!Number.isFinite(fps) || fps <= 0) return;
     this.#setProject({ ...this.project, fps });
+  }
+
+  /**
+   * How long the piece is, whatever the clip is.
+   *
+   * Loading a video sets this, and until now that was the only way it was
+   * ever set: the length of the piece was the length of the file and there
+   * was no saying otherwise. Two things want otherwise. A reverb tail that
+   * runs past the last frame has nowhere to be, and a pass over the first
+   * thirty seconds of a five minute clip is thirty seconds of work on four
+   * and a half minutes of ruler.
+   *
+   * Nothing is thrown away by shortening it. Sounds already past the new end
+   * stay where they are and are drawn past the mark that says where the piece
+   * stops, the same way sounds past the end of a video always have been; what
+   * changes is the ruler, where End goes, and how long an export runs for.
+   * Somebody who shortens the piece by mistake loses nothing by putting it
+   * back.
+   */
+  setDuration(seconds: number): void {
+    const wanted = Math.max(MIN_DURATION, seconds);
+    if (Math.abs(wanted - this.project.duration) < 1e-6) return;
+    this.#setProject({ ...this.project, duration: wanted }, 'duration');
+    this.#store.set({ status: `length ${timecode(wanted, this.project.fps)}` });
   }
 
   setSnap(snap: Project['snap']): void {

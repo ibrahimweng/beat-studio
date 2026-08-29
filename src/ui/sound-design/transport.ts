@@ -1,6 +1,6 @@
 import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
-import { COMMON_FPS, timecode } from '../../timeline/project.ts';
+import { COMMON_FPS, parseTimecode, timecode } from '../../timeline/project.ts';
 import type { SnapMode } from '../../timeline/types.ts';
 import { button, el, setText, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
@@ -41,7 +41,77 @@ export interface TransportView extends View {
  */
 export function createTransport(session: SoundDesignSession): TransportView {
   const clock = el('div', { class: 'transport__clock', text: '00:00:00:00' });
-  const total = el('div', { class: 'transport__total', text: '00:00:00:00' });
+
+  /**
+   * How long the piece is, and the one place to say otherwise.
+   *
+   * It was a readout of the loaded file and nothing else, which meant the
+   * length of the piece was whatever the clip happened to be. A tail that
+   * runs past the last frame had nowhere to go, and a pass over the first
+   * thirty seconds of a five minute clip was thirty seconds of work on four
+   * and a half minutes of ruler.
+   *
+   * Editable in place rather than parked in a settings card, because it is
+   * already on screen saying the current value, and the way to change a
+   * number you are looking at is to click it. Typing accepts a bare number of
+   * seconds as readily as full timecode -- nobody types four fields to say
+   * thirty seconds.
+   */
+  const total = button(
+    {
+      class: 'transport__total transport__total--set',
+      title: 'How long the piece is. Click to set it.',
+      on: { click: () => beginSetLength() },
+    },
+    ['00:00:00:00'],
+  );
+
+  const lengthInput = el('input', {
+    class: 'transport__length',
+    type: 'text',
+    attrs: { 'aria-label': 'Length of the piece', spellcheck: 'false' },
+  }) as HTMLInputElement;
+  lengthInput.style.display = 'none';
+
+  /** Put the length into an edit box, and take whatever comes back. */
+  function beginSetLength(): void {
+    lengthInput.value = timecode(session.project.duration, session.project.fps);
+    total.style.display = 'none';
+    lengthInput.style.display = '';
+    lengthInput.focus();
+    lengthInput.select();
+  }
+
+  const endSetLength = (commit: boolean): void => {
+    if (lengthInput.style.display === 'none') return;
+    const typed = lengthInput.value;
+    lengthInput.style.display = 'none';
+    total.style.display = '';
+    if (!commit) return;
+
+    const seconds = parseTimecode(typed, session.project.fps);
+    if (seconds === null) {
+      // Said rather than swallowed: a field that quietly keeps the old value
+      // looks the same as one that took a value and lost it.
+      session.store.set({ status: `“${typed.trim()}” is not a length` });
+      return;
+    }
+    session.setDuration(seconds);
+  };
+
+  lengthInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      endSetLength(true);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      endSetLength(false);
+    }
+    // Nothing else reaches the app: the tool letters and the pad keys would
+    // otherwise fire while a length is being typed.
+    event.stopPropagation();
+  });
+  lengthInput.addEventListener('blur', () => endSetLength(true));
 
   const play = button(
     { class: 'play-btn', title: 'Play or pause (Space)', on: { click: () => session.togglePlay() } },
@@ -190,6 +260,7 @@ export function createTransport(session: SoundDesignSession): TransportView {
       clock,
       el('div', { class: 'transport__sep', text: '/' }),
       total,
+      lengthInput,
     ]),
     el('div', { class: 'topbar__divider' }),
     fps,
@@ -205,7 +276,11 @@ export function createTransport(session: SoundDesignSession): TransportView {
     el: root,
     update(state: AppState) {
       const { project } = state;
-      setText(total, timecode(project.duration, project.fps));
+      // Not while it is being typed into, or every keystroke would be
+      // overwritten by the value being replaced.
+      if (lengthInput.style.display === 'none') {
+        setText(total, timecode(project.duration, project.fps));
+      }
       toggleClass(play, 'is-playing', session.playing);
       toggleClass(record, 'is-on', state.armed);
       toggleClass(videoWindow, 'is-on', state.videoWindow);

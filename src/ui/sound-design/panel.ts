@@ -1641,8 +1641,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
      * the head of the composition.
      */
     toggle(
-      'Cut to video length',
-      'End the file exactly where the video ends, cutting anything still sounding',
+      'Cut to the length',
+      'End the file exactly where the piece ends, cutting anything still ' +
+        'sounding. The length is the one beside the clock, which follows the ' +
+        'video until you set it yourself.',
       settings.trimToDuration,
       (on) => {
         settings.trimToDuration = on;
