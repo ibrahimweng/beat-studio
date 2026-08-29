@@ -34,6 +34,7 @@ import { loadMine, loadPacks, saveMine, savePacks } from './persist.ts';
 import { encodeMp3 } from './export/mp3.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import { markerCsv } from './export/markers.ts';
+import { cueNotes, encodeProjectMidi } from './export/timeline-midi.ts';
 import { patchJson } from './export/patch.ts';
 import { encodeWav } from './export/wav.ts';
 import {
@@ -2199,6 +2200,31 @@ export class SoundDesignSession {
     const blob = new Blob([markerCsv(this.project)], { type: 'text/csv' });
     saveBlob(blob, `${this.#stem()}-markers.csv`);
     this.#store.set({ status: 'marker list exported' });
+  }
+
+  /**
+   * The same thing again, as a file a music program opens on its timeline.
+   *
+   * The marker list says where everything lands in a spreadsheet. This says it
+   * where somebody scoring the piece is already working, in sync, with every
+   * sound on a row of its own. The kit is written as real percussion, so it
+   * plays as a kit; nothing else is a note, so each voice is given a row and
+   * keeps it, and the piano roll reads as the shape of the piece.
+   */
+  exportTimelineMidi(): void {
+    if (!this.project.cues.length) {
+      this.#store.set({ status: 'place some sounds first' });
+      return;
+    }
+    const notes = cueNotes(this.project);
+    if (!notes.length) {
+      // Everything there is, is silenced. A file of nothing is not useful and
+      // saying why is better than handing one over.
+      this.#store.set({ status: 'every sound is muted, so there is nothing to write' });
+      return;
+    }
+    saveBlob(encodeProjectMidi(this.project), `${this.#stem()}.mid`);
+    this.#store.set({ status: `MIDI exported, ${notes.length} sounds` });
   }
 
   /** The file name everything an export writes is built from. */

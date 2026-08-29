@@ -156,6 +156,100 @@ export const MOMENT_GROUPS: readonly {
 
 export type PitchedName = 'piano' | 'guitar';
 
+/**
+ * The drum kit and the two instruments, filed under what they do for picture.
+ *
+ * They used to be three screens of their own, which is the right shape for
+ * working out a piece of music and the wrong one for scoring a video: a
+ * fretboard asks what you want to play, and somebody putting sound to a logo
+ * does not have an answer. What they have is a moment.
+ *
+ * So each one sits in the moment group it serves. The pads keep their own
+ * names, because a kick is called a kick and a video editor knows that word.
+ * The two pitched instruments do not: one piano note held low is a stinger and
+ * nothing about "piano, note 33" says so, which is why these are the gestures
+ * rather than a keyboard.
+ *
+ * A stack is one sound played at one moment, so a chord is here and a rising
+ * figure is not. Three notes in a row is three sounds, and belongs on the
+ * timeline rather than on a button.
+ */
+export interface InstrumentPick {
+  /** The moment group it appears under. */
+  group: string;
+  label: string;
+  /** What it is for, said in full where there is room to hover. */
+  about: string;
+  source: CueSource;
+}
+
+const piano = (midi: number, ...over: number[]): CueSource => ({
+  kind: 'pitched',
+  name: 'piano',
+  midi,
+  ...(over.length ? { with: over.map((n) => ({ kind: 'pitched', name: 'piano', midi: n } as CueSource)) } : {}),
+});
+
+const guitar = (midi: number): CueSource => ({ kind: 'pitched', name: 'guitar', midi });
+const pad = (name: PadName): CueSource => ({ kind: 'kit', name });
+
+export const INSTRUMENT_PICKS: readonly InstrumentPick[] = [
+  // Something appears.
+  { group: 'appears', label: 'Snare', about: 'A sharp crack, for something arriving with an edge on it', source: pad('snare') },
+  { group: 'appears', label: 'Tom 1', about: 'A tuned hit, higher and shorter than the others', source: pad('tom1') },
+  { group: 'appears', label: 'Tom 2', about: 'A tuned hit, in the middle', source: pad('tom2') },
+  { group: 'appears', label: 'Tom 3', about: 'A tuned hit, low and round', source: pad('tom3') },
+  {
+    group: 'appears',
+    label: 'Piano stinger',
+    about: 'One low piano note left to ring. The sound under a logo landing',
+    source: piano(33),
+  },
+
+  // Something lands hard.
+  { group: 'lands', label: 'Kick', about: 'Low weight, felt more than heard', source: pad('kick') },
+  { group: 'lands', label: 'Kick 2', about: 'The same, with more of a click on the front of it', source: pad('kick2') },
+  { group: 'lands', label: 'Floor tom', about: 'The lowest drum there is, for a moment with size', source: pad('floor') },
+
+  // Something builds.
+  {
+    group: 'builds',
+    label: 'Guitar tension',
+    about: 'A high steel note held. Unease before something is revealed',
+    source: guitar(81),
+  },
+
+  // Something is there.
+  {
+    group: 'there',
+    label: 'Piano chord',
+    about: 'Three notes at once, held. A bed under a scene rather than an event',
+    source: piano(48, 52, 55),
+  },
+  {
+    group: 'there',
+    label: 'Guitar low',
+    about: 'A low steel note, for weight under a whole stretch',
+    source: guitar(45),
+  },
+
+  // A small thing happens.
+  { group: 'small', label: 'Hat closed', about: 'A tick with a body to it', source: pad('hhc') },
+  { group: 'small', label: 'Hat open', about: 'The same, allowed to ring', source: pad('hho') },
+  { group: 'small', label: 'Ride', about: 'A bright repeated detail that does not stop dead', source: pad('ride') },
+  {
+    group: 'small',
+    label: 'Piano high',
+    about: 'One bright note near the top. A small thing noticed',
+    source: piano(84),
+  },
+
+  // A transition.
+  { group: 'transition', label: 'Crash', about: 'A wash that covers a cut', source: pad('crash1') },
+  { group: 'transition', label: 'Crash 2', about: 'A darker wash, longer', source: pad('crash2') },
+  { group: 'transition', label: 'Splash', about: 'A short wash, for a quick change', source: pad('splash') },
+];
+
 export interface CueSource {
   kind: SourceKind;
   /**

@@ -1,7 +1,6 @@
 import type { Credit } from './audio/samples.ts';
 import { fromSession, toSession } from './timeline/project.ts';
 import type { Project } from './timeline/types.ts';
-import type { Take } from './types.ts';
 
 /**
  * Keeping the piece you are working on, so a reload does not lose it.
@@ -294,7 +293,6 @@ function worthKeeping(project: Project): boolean {
 const DB_NAME = 'toolcraft.st88';
 const DB_VERSION = 3;
 const CLIP_STORE = 'clip';
-const TAKE_STORE = 'takes';
 const SAMPLE_STORE = 'samples';
 const CLIP_KEY = 'current';
 
@@ -324,9 +322,14 @@ function openDb(): Promise<IDBDatabase | null> {
     request.onupgradeneeded = () => {
       const db = request.result;
       // Both are created here rather than one per version, so a browser
-      // arriving from either earlier version ends up with the same shape.
+      // arriving from any earlier version ends up with the same shape.
+      //
+      // A third store, for recorded takes, was made here until the instrument
+      // screens were removed. It is not created any more and nothing reads it,
+      // but a browser that has one keeps it: what is in there is somebody's
+      // recordings, and quietly deleting those to tidy up a schema is not a
+      // trade this app gets to make on their behalf.
       if (!db.objectStoreNames.contains(CLIP_STORE)) db.createObjectStore(CLIP_STORE);
-      if (!db.objectStoreNames.contains(TAKE_STORE)) db.createObjectStore(TAKE_STORE);
       if (!db.objectStoreNames.contains(SAMPLE_STORE)) db.createObjectStore(SAMPLE_STORE);
     };
     request.onsuccess = () => resolve(request.result);
@@ -392,51 +395,6 @@ export async function heldVideo(): Promise<File | null> {
   return new File([held.blob], typeof held.name === 'string' ? held.name : 'clip', {
     type: typeof held.type === 'string' ? held.type : held.blob.type,
   });
-}
-
-// ---------- takes ----------
-
-/**
- * A take, as it is written down.
- *
- * The recording itself and everything worked out from it, minus the decoded
- * audio: that is hundreds of times larger than the compressed recording it
- * came from, and it can be made again from the blob in a moment. It is made
- * again lazily, when the take is first played, because decoding needs an audio
- * context and the browser will not give one until something is clicked.
- */
-type HeldTake = Omit<Take, 'buffer'>;
-
-/**
- * Keep the takes, because a reload losing them is now the odd one out.
- *
- * Everything else survives — the piece, the clip, the patterns, the sounds you
- * saved. A take is a performance, which makes it the least reproducible thing
- * in the app and the worst of all of them to drop on a refresh.
- */
-export async function keepTakes(takes: readonly Take[]): Promise<void> {
-  const held: HeldTake[] = takes.map(({ buffer: _buffer, ...rest }) => rest);
-  await inStore(TAKE_STORE, 'readwrite', (store) => store.put(held, CLIP_KEY));
-}
-
-/** The takes from last time, without their audio decoded. */
-export async function heldTakes(): Promise<Take[]> {
-  const held = (await inStore<HeldTake[]>(TAKE_STORE, 'readonly', (store) =>
-    store.get(CLIP_KEY),
-  )) as HeldTake[] | null;
-  if (!Array.isArray(held)) return [];
-  return held
-    .filter((take) => take && typeof take.id === 'string' && take.blob instanceof Blob)
-    .map((take) => ({
-      ...take,
-      name: typeof take.name === 'string' ? take.name : 'Take',
-      dur: typeof take.dur === 'number' && take.dur >= 0 ? take.dur : 0,
-      bars: Array.isArray(take.bars) ? take.bars : [],
-      events: Array.isArray(take.events) ? take.events : [],
-      layered: take.layered === true,
-      // Made again the first time it is played. See {@link HeldTake}.
-      buffer: null,
-    }));
 }
 
 // ---------- recordings ----------

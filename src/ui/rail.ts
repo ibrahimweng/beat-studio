@@ -1,58 +1,33 @@
 import type { Session } from '../session.ts';
 import type { AppState } from '../store.ts';
-import { button, el, setText, toggleClass } from './dom.ts';
-import {
-  drumsIcon,
-  guitarIcon,
-  keysIcon,
-  sequencerIcon,
-  soundDesignIcon,
-  takesIcon,
-  waveMark,
-} from './icons.ts';
+import { button, el } from './dom.ts';
+import { soundDesignIcon, waveMark } from './icons.ts';
 import type { View } from './view.ts';
 
 /**
- * The left rail: instrument selection on top, dock selection below the rule,
- * and the audio-engine light at the bottom.
+ * The left rail: where you are, help, and the audio engine.
+ *
+ * It used to offer six places to go, five of which were a drum machine
+ * running on bars and tempo. Somebody arriving to put sound to a video had to
+ * work out which of the six was theirs before they could start, and the
+ * answer was always the same one. What the instruments make is still here, in
+ * the library, filed under the moment it serves.
+ *
+ * The sound design button stays even though it is now the only screen. It
+ * says what this is, it is where the mark sits, and a rail with nothing in it
+ * but a question mark and a light reads as a rail that failed to load.
  */
 export function createRail(session: Session, options: { onHelp: () => void } = { onHelp: () => {} }): View {
-  const badge = el('span', { class: 'rail__badge', text: '0' });
   const engineLed = el('i', { class: 'led led--lg' });
 
-  const railButton = (
-    label: string,
-    icon: HTMLElement,
-    onClick: () => void,
-    marker: boolean,
-  ): HTMLButtonElement =>
-    button(
-      {
-        class: 'rail__btn',
-        title: label,
-        attrs: { 'aria-label': label },
-        dataset: marker ? { marker: 'true' } : {},
-        on: { click: onClick },
-      },
-      [icon],
-    );
-
-  const soundDesign = railButton('Sound design', soundDesignIcon(), () => session.setMode('sound-design'), true);
-  const drums = railButton('Drums', drumsIcon(), () => session.setView('drums'), true);
-  const keys = railButton('Keys', keysIcon(), () => session.setView('keys'), true);
-  const guitar = railButton('Guitar', guitarIcon(), () => session.setView('guitar'), true);
-  const seq = railButton('Sequencer', sequencerIcon(), () => session.setDock('seq'), false);
-  const takes = railButton('Takes', takesIcon(), () => session.setDock('takes'), false);
-  takes.appendChild(badge);
-
-  const power = button(
+  const soundDesign = button(
     {
-      class: 'rail__power',
-      title: 'Audio engine',
-      attrs: { 'aria-label': 'Start audio engine' },
-      on: { click: () => session.powerUp() },
+      class: 'rail__btn is-active',
+      title: 'Sound design',
+      attrs: { 'aria-label': 'Sound design', 'aria-current': 'page' },
+      dataset: { marker: 'true' },
     },
-    [engineLed],
+    [soundDesignIcon()],
   );
 
   const help = button(
@@ -65,16 +40,19 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
     ['?'],
   );
 
+  const power = button(
+    {
+      class: 'rail__power',
+      title: 'Audio engine',
+      attrs: { 'aria-label': 'Start audio engine' },
+      on: { click: () => session.powerUp() },
+    },
+    [engineLed],
+  );
+
   const root = el('nav', { class: 'rail', attrs: { 'aria-label': 'Views' } }, [
     el('div', { class: 'rail__logo' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
     soundDesign,
-    el('div', { class: 'rail__divider' }),
-    drums,
-    keys,
-    guitar,
-    el('div', { class: 'rail__divider' }),
-    seq,
-    takes,
     el('div', { class: 'rail__spacer' }),
     help,
     power,
@@ -83,17 +61,6 @@ export function createRail(session: Session, options: { onHelp: () => void } = {
   return {
     el: root,
     update(state: AppState) {
-      const play = state.mode === 'play';
-      toggleClass(soundDesign, 'is-active', state.mode === 'sound-design');
-      toggleClass(drums, 'is-active', play && state.view === 'drums');
-      toggleClass(keys, 'is-active', play && state.view === 'keys');
-      toggleClass(guitar, 'is-active', play && state.view === 'guitar');
-      toggleClass(seq, 'is-active', play && state.dock === 'seq');
-      toggleClass(takes, 'is-active', play && state.dock === 'takes');
-
-      badge.style.display = state.takes.length ? '' : 'none';
-      setText(badge, String(state.takes.length));
-
       engineLed.style.background = state.ready ? 'var(--ac)' : 'var(--led-dead)';
     },
   };

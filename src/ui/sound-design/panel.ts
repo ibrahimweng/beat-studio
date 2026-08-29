@@ -9,6 +9,7 @@ import type { AppState } from '../../store.ts';
 import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
 import {
   DESIGN_GROUPS,
+  INSTRUMENT_PICKS,
   MOMENT_GROUPS,
   type Anchor,
   type Cue,
@@ -375,15 +376,39 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   );
 
   /*
-   * The same forty voices, under what is happening on screen.
+   * The same forty voices, under what is happening on screen, with the kit and
+   * the two instruments among them.
    *
    * The other list sorts them by how they are made, which is how somebody who
    * already knows this looks at a library. Four of its ten groups are named
    * after a mechanism, and somebody watching a logo land cannot use "Struck".
+   *
+   * The drums and the instruments are in here rather than in sections of their
+   * own because that is what folding them in means: a crash is a wash that
+   * covers a cut, and belongs beside the other things that cover a cut, not
+   * behind a heading saying Kit. Which instrument made a sound is the least
+   * interesting thing about it when the question is what goes on this frame.
    */
   const momentSections = MOMENT_GROUPS.map((group) => ({
     id: group.id,
-    node: pickGroup(group.title, voicePicks(group.names), undefined, true, group.when),
+    node: pickGroup(
+      group.title,
+      [
+        ...voicePicks(group.names),
+        ...INSTRUMENT_PICKS.filter((pick) => pick.group === group.id).map((pick) =>
+          pickButton(
+            pick.label,
+            pick.source,
+            (current) => sameSource(current, pick.source),
+            null,
+            pick.about,
+          ),
+        ),
+      ],
+      undefined,
+      true,
+      group.when,
+    ),
   }));
 
   const kitSection = pickGroup(
@@ -437,7 +462,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   let browse = browseNow();
 
   const momentBox = el('div', {}, momentSections.map((section) => section.node));
-  const kindBox = el('div', {}, designSections);
+  // Under the sound type grouping the kit and the instruments are what they
+  // are made of, which is a kit and two instruments.
+  const kindBox = el('div', {}, [...designSections, kitSection, pitchedSection]);
 
   const browseWays: { way: Browse; node: HTMLButtonElement }[] = (
     [
@@ -479,8 +506,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     el('div', { class: 'pick-row pick-row--ways' }, browseWays.map((option) => option.node)),
     momentBox,
     kindBox,
-    kitSection,
-    pitchedSection,
   ]);
 
   /**
@@ -1491,13 +1516,32 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   const markerButton = button(
     {
       class: 'chip chip--sm',
-      style: { width: '100%' },
       title: 'A spreadsheet of every sound and the frame it lands on, for whoever picks this up next',
       on: { click: () => session.exportMarkers() },
     },
     ['Marker list'],
   );
   exportButtons.push(markerButton);
+
+  const midiButton = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'The same thing as a MIDI file, which a music program opens on its own ' +
+        'timeline in sync, with every sound on a row of its own',
+      on: { click: () => session.exportTimelineMidi() },
+    },
+    ['MIDI'],
+  );
+  exportButtons.push(midiButton);
+
+  // Two ways of handing the timing to somebody else, side by side.
+  markerButton.style.flex = '1 1 0';
+  midiButton.style.flex = '1 1 0';
+  const handoffRow = el('div', { style: { display: 'flex', gap: '4px' } }, [
+    markerButton,
+    midiButton,
+  ]);
 
   const exportBody = el('div', { class: 'card card--export', style: { padding: '12px 14px 14px' } }, [
     /*
@@ -1546,7 +1590,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       'Every impact in one file, every whoosh in another, so they can be balanced against each other later',
       (f) => void session.exportPerSound(f, settings),
     ),
-    el('div', { style: { marginTop: '10px' } }, [markerButton]),
+    el('div', { style: { marginTop: '10px' } }, [handoffRow]),
     exportStatus,
   ]);
 

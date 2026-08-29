@@ -1,5 +1,3 @@
-import { BPM_MAX, BPM_MIN } from './constants.ts';
-import { freshBanks } from './pattern.ts';
 import type { Pack, PackSound } from './audio/pack.ts';
 import type { Sample } from './audio/samples.ts';
 import type { Rebuilt } from './audio/rebuild.ts';
@@ -7,51 +5,15 @@ import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
 import type { Moment } from './video/moments.ts';
-import type { BankKey, Banks, Dock, Metro, Take, View } from './types.ts';
-
-/**
- * Which half of the app is showing.
- *
- * "sound-design" is the timeline, for placing sounds against a video. It is
- * where the app opens. "play" is the instrument, for working out ideas before
- * they go on the timeline.
- */
-export type Mode = 'play' | 'sound-design';
 
 export type PanelTab = 'moments' | 'sounds' | 'selected';
 
 export interface AppState {
-  mode: Mode;
-  /** Instrument shown on the main stage. */
-  view: View;
-  /** Panel shown in the bottom dock. */
-  dock: Dock;
-  /** Transport is running. */
-  playing: boolean;
-  /** A take is being captured. */
-  recording: boolean;
   /** The audio engine has been started by a user gesture. */
   ready: boolean;
-  bpm: number;
-  steps: 16 | 32;
-  metro: Metro;
-  /** Play a bar of clicks before a recording starts capturing. */
-  countIn: boolean;
-  /** Hold notes until re-triggered instead of releasing on key-up. */
-  sustain: boolean;
-  /** Bars to record before auto-stopping; 0 means keep going. */
-  loops: number;
-  /** Octave number of the lowest computer-keyboard row. */
-  octave: number;
-  bank: BankKey;
-  banks: Banks;
-  takes: Take[];
-  /** Transient message for the dock status line; null shows the default. */
+  /** Transient message for the status line; null shows the default. */
   status: string | null;
-  /** Label for the engine row in the inspector. */
-  engineName: string;
 
-  // ---------- sound design ----------
   /** The cue list, layers and timing settings for the loaded video. */
   project: Project;
   /** A video file has been loaded and can be played. */
@@ -194,28 +156,8 @@ export function emptyDetection(): Detection {
 
 export function initialState(): AppState {
   return {
-    view: 'drums',
-    dock: 'seq',
-    playing: false,
-    recording: false,
     ready: false,
-    bpm: 92,
-    steps: 16,
-    metro: 'beat',
-    countIn: false,
-    sustain: false,
-    loops: 2,
-    octave: 4,
-    bank: 'A',
-    banks: freshBanks(),
-    takes: [],
     status: null,
-    engineName: 'standby',
-
-    // The app opens on Sound design, because putting sound to a video is what
-    // most people come here to do. The instruments are one click away on the
-    // rail.
-    mode: 'sound-design',
     project: emptyProject(),
     videoReady: false,
     selection: [],
@@ -275,9 +217,4 @@ export class Store {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
-}
-
-/** Clamp a tempo into the range the transport supports. */
-export function clampBpm(value: number): number {
-  return Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(value)));
 }

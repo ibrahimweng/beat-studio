@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DESIGN_GROUPS,
   DESIGN_NAMES,
+  INSTRUMENT_PICKS,
   MOMENT_GROUPS,
   DESIGN_DEFAULT_LENGTH,
 } from './types.ts';
 import type { DesignName } from './types.ts';
+import { KIT_SOUNDS } from '../constants.ts';
 import { MOMENT_GROUP_FOR, MOMENT_TITLES } from '../audio/suggest.ts';
 
 const indexed = MOMENT_GROUPS.flatMap((group) => group.names);
@@ -122,5 +124,72 @@ describe('the way from a moment to the sounds that suit it', () => {
       const group = MOMENT_GROUPS.find((one) => one.id === MOMENT_GROUP_FOR[kind])!;
       expect(group.names.length).toBeGreaterThan(2);
     }
+  });
+});
+
+describe('the kit and the two instruments, folded into the library', () => {
+  it('files every one under a group that exists', () => {
+    const ids = new Set(MOMENT_GROUPS.map((group) => group.id));
+    for (const pick of INSTRUMENT_PICKS) {
+      expect(ids, `${pick.label} is filed under a group that is not there`).toContain(pick.group);
+    }
+  });
+
+  it('keeps every drum in the kit, exactly once', () => {
+    /*
+     * There is no screen with the pads on it any more, so this list is the
+     * only way to reach one. A pad missing from here is a pad that has left
+     * the app, and nothing would say so.
+     */
+    const pads = INSTRUMENT_PICKS.filter((pick) => pick.source.kind === 'kit').map(
+      (pick) => pick.source.name,
+    );
+    expect([...pads].sort()).toEqual(KIT_SOUNDS.map((sound) => sound.pad).sort());
+  });
+
+  it('gives each one a name and a line saying what it is for', () => {
+    for (const pick of INSTRUMENT_PICKS) {
+      expect(pick.label.trim()).not.toBe('');
+      // The about line is why these are worth having as buttons rather than as
+      // a keyboard: it says what the sound does, which the pitch never will.
+      expect(pick.about.length).toBeGreaterThan(20);
+    }
+  });
+
+  it('calls no two of them the same thing', () => {
+    const labels = INSTRUMENT_PICKS.map((pick) => pick.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('gives every pitched gesture a note a piano has', () => {
+    const pitched = INSTRUMENT_PICKS.filter((pick) => pick.source.kind === 'pitched');
+    expect(pitched.length).toBeGreaterThan(2);
+    for (const pick of pitched) {
+      const notes = [pick.source.midi, ...(pick.source.with ?? []).map((part) => part.midi)];
+      for (const note of notes) {
+        expect(note).toBeDefined();
+        // An 88 key piano runs from 21 to 108.
+        expect(note!).toBeGreaterThanOrEqual(21);
+        expect(note!).toBeLessThanOrEqual(108);
+      }
+    }
+  });
+
+  it('builds a chord out of notes rather than out of something else', () => {
+    /*
+     * A stack is one sound played at one moment, which is what makes a chord
+     * possible here and a rising figure not: three notes in a row is three
+     * sounds, and belongs on the timeline.
+     */
+    const chord = INSTRUMENT_PICKS.find((pick) => (pick.source.with ?? []).length > 0);
+    expect(chord).toBeDefined();
+    for (const part of chord!.source.with!) {
+      expect(part.kind).toBe('pitched');
+    }
+  });
+
+  it('spreads them across the moments rather than piling them into one', () => {
+    const used = new Set(INSTRUMENT_PICKS.map((pick) => pick.group));
+    expect(used.size).toBeGreaterThan(3);
   });
 });

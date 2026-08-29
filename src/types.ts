@@ -1,14 +1,4 @@
-/** Which instrument the main stage is showing. */
-export type View = 'drums' | 'keys' | 'guitar';
 
-/** Which panel the bottom dock is showing. */
-export type Dock = 'seq' | 'takes';
-
-/** Metronome subdivision. */
-export type Metro = 'off' | 'beat' | 'sixteenth';
-
-/** Pattern bank name. */
-export type BankKey = 'A' | 'B' | 'C' | 'D';
 
 /** Every drum voice the synth can render. */
 export type PadName =
@@ -26,23 +16,6 @@ export type PadName =
   | 'splash'
   | 'ride';
 
-/** The eight voices the step sequencer can drive. */
-export type LaneKey = 'kick' | 'snare' | 'hhc' | 'hho' | 'tom1' | 'tom2' | 'crash' | 'ride';
-
-/** A sequencer lane: a label, the pad it fires and the MIDI note it exports as. */
-export interface Lane {
-  key: LaneKey;
-  label: string;
-  pad: PadName;
-  midi: number;
-}
-
-/** One bank's step data: 32 slots per lane, regardless of the active step count. */
-export type Pattern = Record<LaneKey, boolean[]>;
-
-/** All four pattern banks. */
-export type Banks = Record<BankKey, Pattern>;
-
 /** A note captured while recording, in seconds relative to the take start. */
 export interface NoteEvent {
   midi: number;
@@ -54,24 +27,6 @@ export interface NoteEvent {
   vel: number;
   /** MIDI channel — 0 piano, 1 guitar, 9 drums. */
   ch: number;
-}
-
-/** A landed recording plus everything needed to play, draw and export it. */
-export interface Take {
-  id: string;
-  name: string;
-  /** Length in seconds. */
-  dur: number;
-  blob: Blob;
-  /** Decoded audio, absent if the browser could not decode the recording. */
-  buffer: AudioBuffer | null;
-  /** Normalised peaks, 0..100, for the waveform strip. */
-  bars: number[];
-  /** Replay this take underneath the next recording. */
-  layered: boolean;
-  events: NoteEvent[];
-  bpm: number;
-  meta: string;
 }
 
 /** Continuous master controls. */
@@ -93,9 +48,3 @@ export interface Voice {
   dur: number;
 }
 
-/** The shape persisted to localStorage. */
-export interface SavedState {
-  banks: Banks;
-  bpm: number;
-  bank: BankKey;
-}
