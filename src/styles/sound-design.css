@@ -14,7 +14,15 @@
   --lane-edge: color-mix(in oklab, var(--tc-fg) 15%, transparent);
   --tl-ruler: 26px;
   --tl-strip: 34px;
-  --tl-gutter: 140px;
+  /*
+   * Wide enough for the layer names.
+   *
+   * At 140 the four buttons and their gaps took all but 31px of the row, and
+   * "Impacts" wants 42 -- so every name was ellipsed to "Imp..." and "Mo...",
+   * which is no name at all. The lanes give up about three per cent of their
+   * width for it.
+   */
+  --tl-gutter: 172px;
 }
 
 /* ---------- the video ---------- */
@@ -180,22 +188,32 @@
 .sound-design-bar__time {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-left: 4px;
+  gap: 4px;
+  margin-left: 2px;
 }
 
+/*
+ * Figures that all take the same width.
+ *
+ * A running clock whose digits are different widths shifts sideways as it
+ * counts, and this one sits between two things that must not move. It also
+ * makes the width predictable, which matters more now the format carries
+ * hours: the old min-width here was cut for a seven character reading and
+ * meant nothing against eleven.
+ */
 .sound-design-bar__clock {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--ac);
-  min-width: 74px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sound-design-bar__sep,
 .sound-design-bar__total {
   font-size: 12px;
   color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -266,6 +284,17 @@
   /* The rules between groups earn less than the pixels they cost here. */
   .sound-design-bar .topbar__divider {
     margin: 0 1px;
+  }
+
+  /*
+   * A point off the clock, on the screens that cannot afford it.
+   *
+   * Timecode grew from seven characters to eleven when it gained hours, which
+   * is real width in a row that has none to give. Above 1500 the reading keeps
+   * its full size; below it, a point buys back most of what the hours cost.
+   */
+  .sound-design-bar__clock {
+    font-size: 14px;
   }
 }
 
