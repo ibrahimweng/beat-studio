@@ -112,9 +112,20 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
     ['Window'],
   );
 
+  /**
+   * A frame rate with its unit, so nothing has to stand beside it saying so.
+   *
+   * "FPS" used to be a separate word to the left of the box, which is a
+   * label, a gap and two more things to look at in a bar that had no room
+   * for any of them. In the option itself it costs four characters and
+   * reads better besides. The value stays the bare number, so choosing an
+   * option puts back exactly the rate that was measured.
+   */
+  const fpsLabel = (rate: number): string => `${rate} fps`;
+
   const fps = el('select', { class: 'sound-design-bar__select', title: 'Frame rate' }) as HTMLSelectElement;
   for (const rate of COMMON_FPS) {
-    fps.appendChild(el('option', { text: String(rate), attrs: { value: String(rate) } }));
+    fps.appendChild(el('option', { text: fpsLabel(rate), attrs: { value: String(rate) } }));
   }
   fps.addEventListener('change', () => session.setFps(Number(fps.value)));
 
@@ -139,37 +150,46 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
     ['Ref audio'],
   );
 
+  /**
+   * The transport, drawn as three things rather than as ten.
+   *
+   * The order was already right — get back, then the mirror around play,
+   * then record — but every button carried its own outline at the same
+   * spacing as its neighbour, so the eye had to read ten circles and work
+   * out which of the six triangles it wanted. Grouped, there is one outline
+   * per job: the pair that stops you, the run that moves you, and the one
+   * that writes. Nothing was taken away and nothing moved.
+   */
+  const cluster = (...within: HTMLElement[]): HTMLElement =>
+    el('div', { class: 'transport__grp' }, within);
+
   const root = el('header', { class: 'topbar sound-design-bar' }, [
     // The screen is named here as well as on the rail, because this is the
     // first thing the app opens on and it should say what it is.
     el('div', { class: 'topbar__title section-title--asks' }, [
       el('span', { text: 'Sound design' }),
+      // One "?" for the bar, at the name. A second one further along said
+      // nothing about where it sat, and the video window it pointed at is
+      // covered here and on the instruments bar as well.
       helpButton('transport', 'the transport'),
     ]),
     el('div', { class: 'topbar__divider' }),
-    toStart,
-    stop,
-    prev,
-    rewind,
-    back,
-    play,
-    forward,
-    fastForward,
-    next,
-    record,
+    el('div', { class: 'transport' }, [
+      cluster(toStart, stop),
+      cluster(prev, rewind, back, play, forward, fastForward, next),
+      cluster(record),
+    ]),
     el('div', { class: 'sound-design-bar__time' }, [
       clock,
       el('div', { class: 'sound-design-bar__sep', text: '/' }),
       total,
     ]),
     el('div', { class: 'topbar__divider' }),
-    el('div', { class: 'micro-label', text: 'FPS' }),
     fps,
-    el('div', { class: 'micro-label', style: { marginLeft: '6px' }, text: 'Snap' }),
-    el('div', { style: { display: 'flex', gap: '4px' } }, snapButtons),
+    el('div', { class: 'micro-label sound-design-bar__snap', text: 'Snap' }),
+    el('div', { class: 'sound-design-bar__snaps' }, snapButtons),
     el('div', { class: 'topbar__spacer' }),
     videoWindow,
-    helpButton('video', 'the video window'),
     reference,
   ]);
 
@@ -194,7 +214,7 @@ export function createSoundDesignBar(session: SoundDesignSession): SoundDesignBa
       if (fps.value !== value) {
         // A measured rate may not be one of the standard ones.
         if (!Array.from(fps.options).some((o) => o.value === value)) {
-          fps.appendChild(el('option', { text: value, attrs: { value } }));
+          fps.appendChild(el('option', { text: fpsLabel(project.fps), attrs: { value } }));
         }
         fps.value = value;
       }
