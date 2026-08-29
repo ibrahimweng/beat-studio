@@ -2190,3 +2190,171 @@
 .tl[data-tool='pen'] .tl__viewport {
   cursor: crosshair;
 }
+
+
+/* ---------- docks ---------- */
+
+/*
+ * A column of panels, with a strip of tabs over whichever one is showing.
+ *
+ * The width is the divider's to set. An empty column takes none at all, which
+ * is what lets the left one exist without costing anything until somebody
+ * drags a panel into it.
+ */
+.dock {
+  flex: 0 0 var(--panel-width, 340px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--side);
+  border-left: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.dock--left {
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+
+.dock.is-empty {
+  flex-basis: 0;
+  border: 0;
+}
+
+.dock__tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dock__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * A tab, which is a name and a handle at the same time.
+ *
+ * Nothing on it says "drag me", because in every editor that has these the
+ * answer to "can I move this" is to try it, and a tab that carried a grip
+ * would be the only one in the world that did.
+ */
+.dock__tab {
+  flex: 0 0 auto;
+  padding: 6px 10px 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--txt-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.dock__tab:hover {
+  color: var(--txt-2);
+}
+
+.dock__tab.is-on {
+  color: var(--txt);
+  border-bottom-color: var(--ac);
+}
+
+/* The one being carried, left dimmed where it came from. */
+.dock__tab.is-dragging {
+  opacity: 0.35;
+}
+
+.dock__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 20px;
+}
+
+/*
+ * The column a drop would land in.
+ *
+ * Filled rather than outlined, because the empty column is a few pixels wide
+ * and an outline on it would be two lines with nothing between them. Filled,
+ * it reads as a place at any width.
+ */
+.dock.is-target {
+  background: var(--ac-soft);
+  outline: 1px solid var(--ac);
+  outline-offset: -1px;
+}
+
+.dock--left.is-target,
+.dock--right.is-target {
+  flex-basis: max(var(--panel-width, 340px), 120px);
+}
+
+/*
+ * An empty column, open only while a panel is in the air.
+ *
+ * Nothing at rest, so the second column costs nobody anything until they want
+ * it. A real target the moment something is being carried, because a drop
+ * zone you cannot see is a drop that misses.
+ */
+.dock__drop {
+  display: none;
+  flex: 1 1 auto;
+  margin: 8px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-8);
+  place-items: center;
+  text-align: center;
+  font-size: 11px;
+  color: var(--txt-3);
+}
+
+body.is-docking .dock.is-empty {
+  flex-basis: 168px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+body.is-docking .dock.is-empty .dock__drop {
+  display: grid;
+}
+
+body.is-docking .dock.is-target .dock__drop {
+  border-color: var(--ac);
+  color: var(--txt-2);
+}
+
+/* What is being carried, following the pointer. */
+.dock__ghost {
+  position: fixed;
+  z-index: 130;
+  padding: 5px 10px;
+  border: 1px solid var(--ac);
+  border-radius: var(--r-6);
+  background: color-mix(in oklab, var(--tc-card) 55%, var(--bg));
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Nothing else takes the pointer while a tab is in the air. */
+body.is-docking {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.is-docking .dock__body,
+body.is-docking .main {
+  pointer-events: none;
+}

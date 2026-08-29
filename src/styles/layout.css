@@ -262,43 +262,18 @@
   background-size: 36px 36px;
 }
 
-/* ---------- dock ---------- */
-
-.dock {
-  flex: 0 0 auto;
-  height: 218px;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-
-.dock__bar {
-  flex: 0 0 auto;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 16px;
-  overflow: hidden;
-}
-
-.dock__divider {
-  width: 1px;
-  height: 18px;
-  background: var(--line);
-  margin: 0 6px;
-}
-
-.dock__spacer {
+/*
+ * The drum machine's dock used to live here, and had not for some time.
+ *
+ * `.dock`, `.dock__bar`, `.dock__divider` and `.dock__body` were left behind
+ * when the instrument screens went, styling nothing. That was harmless until
+ * the panel columns wanted the same names and silently inherited a height of
+ * 218 pixels from a thing that no longer exists. The one rule still doing
+ * work was a flex spacer in the timeline's toolbar, which is named for where
+ * it actually is now.
+ */
+.tl__spacer {
   flex: 1 1 auto;
-}
-
-.dock__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 16px 14px;
 }
 
 /* ---------- mixer strip ---------- */

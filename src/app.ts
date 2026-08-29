@@ -52,6 +52,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   const rail = createRail(session, { onHelp: () => help.toggle() });
   const soundDesignBar = createSoundDesignBar(soundDesign, {
     onExport: () => soundDesignPanel.showExport(),
+    panels: () =>
+      soundDesignPanel
+        .places()
+        .map(({ panel, side }) => ({ id: panel.id, title: panel.title, open: side !== null })),
+    onTogglePanel: (id) => soundDesignPanel.toggle(id),
+    onResetLayout: () => soundDesignPanel.resetLayout(),
   });
   const videoStage = createVideoStage(soundDesign);
   // The instruments screen borrows the same video element rather than making
@@ -65,7 +71,14 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
   });
   const transport = createTransport(soundDesign);
   const timeline = createTimeline(soundDesign, { transport: transport.el });
-  const soundDesignPanel = createWorkPanel(soundDesign);
+  const soundDesignPanel = createWorkPanel(soundDesign, {
+    // A column appearing or emptying changes how much width the lanes have.
+    onLayout: () => {
+      timeline.relayout();
+      leftDivider.refresh();
+      panelDivider.refresh();
+    },
+  });
   const divider = createDivider({
     container: () => main,
     timeline: () => timeline.el,
@@ -85,11 +98,29 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 
   const panelDivider = createPanelDivider({
     container: () => shell,
-    panel: () => soundDesignPanel.el,
+    panel: () => soundDesignPanel.docks.right,
     onResize: () => timeline.relayout(),
   });
+  const leftDivider = createPanelDivider({
+    container: () => shell,
+    panel: () => soundDesignPanel.docks.left,
+    onResize: () => timeline.relayout(),
+    side: 'left',
+  });
 
-  const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
+  /*
+   * The columns go either side of the work, with the work between them.
+   *
+   * The left one is empty to begin with and takes no width until something is
+   * dragged into it, so this reads as one column until somebody asks for two.
+   */
+  const shell = el('div', { class: 'app' }, [
+    rail.el,
+    soundDesignPanel.docks.left,
+    leftDivider.el,
+    main,
+    videoWindow.el,
+  ]);
   /*
    * The notice sits above the app rather than over it.
    *
@@ -128,8 +159,9 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
 
     if (first) {
       shell.appendChild(panelDivider.el);
-      shell.appendChild(soundDesignPanel.el);
+      shell.appendChild(soundDesignPanel.docks.right);
       panelDivider.refresh();
+      leftDivider.refresh();
       // The walkthrough points at parts of the screen, so it waits until
       // there is a screen to point at.
       requestAnimationFrame(() => tour.maybeStart());

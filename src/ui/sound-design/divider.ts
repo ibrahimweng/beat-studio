@@ -134,19 +134,45 @@ export function createPanelDivider(options: {
   /** The panel whose width is being set. */
   panel: () => HTMLElement;
   onResize?: () => void;
+  /**
+   * Which edge of the window the panel is against. Right by default.
+   *
+   * The only thing this changes is which way round the arithmetic goes, since
+   * a column on the left grows as the pointer moves right and one on the
+   * right grows as it moves left. Everything else — the minimums, the
+   * clamping, the double click — is the same on both.
+   */
+  side?: 'left' | 'right';
 }): Divider {
-  let width = loadPanel();
+  const side = options.side ?? 'right';
+  let width = loadPanel(side);
 
   const apply = (value: number): void => {
+    const node = options.panel();
+    /*
+     * An empty column has no width to set and no line to drag.
+     *
+     * Both go together: a five pixel handle against the edge of the window
+     * with nothing behind it is a thing to catch your pointer on and be
+     * puzzled by, and until something is docked there it would resize a
+     * column that is not there.
+     */
+    const empty = node.classList.contains('is-empty');
+    root.style.display = empty ? 'none' : '';
+    if (empty) {
+      node.style.setProperty('--panel-width', '0px');
+      return;
+    }
+
     const available = options.container().clientWidth;
     const max = Math.max(MIN_PANEL, available - MIN_MIDDLE);
     width = Math.max(MIN_PANEL, Math.min(max, value));
-    options.panel().style.setProperty('--panel-width', `${width}px`);
+    node.style.setProperty('--panel-width', `${width}px`);
     options.onResize?.();
   };
 
   const root = el('div', {
-    class: 'split split--side',
+    class: `split split--side split--${side}`,
     attrs: {
       role: 'separator',
       'aria-orientation': 'vertical',
@@ -161,9 +187,9 @@ export function createPanelDivider(options: {
         document.querySelector('.app')?.classList.add('is-resizing-side');
 
         const move = (e: PointerEvent): void => {
-          const right = options.container().getBoundingClientRect().right;
-          apply(right - e.clientX);
-          savePanel(width);
+          const box = options.container().getBoundingClientRect();
+          apply(side === 'right' ? box.right - e.clientX : e.clientX - box.left);
+          savePanel(side, width);
         };
         const end = (): void => {
           root.classList.remove('is-dragging');
@@ -179,7 +205,7 @@ export function createPanelDivider(options: {
       },
       dblclick: () => {
         apply(DEFAULT_PANEL);
-        savePanel(DEFAULT_PANEL);
+        savePanel(side, DEFAULT_PANEL);
       },
     },
   });
@@ -192,18 +218,19 @@ export function createPanelDivider(options: {
   };
 }
 
-function loadPanel(): number {
+/** Each column remembers its own width, since they are not the same job. */
+function loadPanel(side: 'left' | 'right'): number {
   try {
-    const raw = Number(localStorage.getItem(PANEL_KEY));
+    const raw = Number(localStorage.getItem(`${PANEL_KEY}.${side}`));
     return Number.isFinite(raw) && raw >= MIN_PANEL ? raw : DEFAULT_PANEL;
   } catch {
     return DEFAULT_PANEL;
   }
 }
 
-function savePanel(value: number): void {
+function savePanel(side: 'left' | 'right', value: number): void {
   try {
-    localStorage.setItem(PANEL_KEY, String(Math.round(value)));
+    localStorage.setItem(`${PANEL_KEY}.${side}`, String(Math.round(value)));
   } catch {
     // Not being able to remember the size is not worth interrupting anyone.
   }
