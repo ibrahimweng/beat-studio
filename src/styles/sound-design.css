@@ -82,6 +82,101 @@
 
 /* ---------- transport bar ---------- */
 
+/*
+ * The transport, as three objects rather than as ten.
+ *
+ * Ten round buttons at one spacing, each with its own outline, is a picket
+ * fence: nothing in it says that the first two stop you, the middle seven
+ * move you and the last one writes. The grouping puts the outline on the
+ * group, takes it off the buttons inside, and closes the gap between them
+ * to two pixels, so each cluster reads as one control with several ends.
+ * The buttons themselves are the same buttons, in the same order.
+ */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.transport__grp {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.transport__grp .round-btn {
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.transport__grp .round-btn:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--panel-2);
+}
+
+/* Play is the one you look for, so it keeps its fill and its extra width. */
+.transport__grp .play-btn {
+  width: 36px;
+  height: 28px;
+  border-radius: 999px;
+  border-color: transparent;
+}
+
+/*
+ * Armed, with no border of its own to turn red, record fills instead.
+ *
+ * A filled red disc inside the group says the same thing the red ring said,
+ * and says it at a glance from across the room, which is the whole point of
+ * a record button in a bar you never stop looking at.
+ */
+.transport__grp .round-btn--rec.is-on {
+  background: var(--rec);
+  border-color: transparent;
+}
+
+.transport__grp .round-btn--rec.is-on .round-btn__glyph {
+  color: #fff;
+}
+
+/*
+ * The bar's own spacing, and what happens when there is not enough of it.
+ *
+ * Ten pixels between every one of these is more air than a row this dense
+ * can afford; eight reads the same and gives back the width of a button.
+ * The row is one line that cannot wrap, so past some window width something
+ * has to give. It used to be whatever sat furthest right — "Window" and
+ * "Ref audio" were quietly cut off with nothing to say they had been. Now
+ * it scrolls: rare, because the breakpoint below buys back the common case,
+ * but when it happens the controls are still there to be reached.
+ */
+.sound-design-bar {
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.sound-design-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.sound-design-bar__snaps {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.sound-design-bar__snap {
+  margin-left: 2px;
+}
+
 .sound-design-bar__time {
   display: flex;
   align-items: baseline;
@@ -103,15 +198,56 @@
   color: var(--txt-3);
 }
 
+/*
+ * The frame rate.
+ *
+ * A platform select draws its own arrow, which is the one piece of chrome in
+ * this bar that came from somewhere else and looked it. Drawing the caret
+ * here costs eight pixels of padding and matches the cells beside it. The
+ * text carries "fps", so there is no separate label to keep beside it.
+ */
 .sound-design-bar__select {
   height: 26px;
   border-radius: var(--r-6);
   border: 1px solid var(--line);
-  background: var(--panel);
+  background-color: var(--panel);
   color: var(--txt);
   font: inherit;
   font-size: 12px;
-  padding: 0 6px;
+  padding: 0 20px 0 7px;
+  appearance: none;
+  flex: 0 0 auto;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--txt-3) 50%),
+    linear-gradient(135deg, var(--txt-3) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) calc(50% - 1px),
+    calc(100% - 8px) calc(50% - 1px);
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.sound-design-bar__select:hover {
+  border-color: var(--ac-line);
+}
+
+/*
+ * What goes when the window is not wide enough for all of it.
+ *
+ * The bar is one fixed row that clips what does not fit, so past a certain
+ * width it was silently eating "Window" and "Ref audio" off the right-hand
+ * end — controls that were there a moment ago and then simply were not. A
+ * word is the right thing to lose first: the three snap cells still say
+ * Frame, Beat and Free, and still carry what they do on hover.
+ */
+@media (max-width: 1500px) {
+  .sound-design-bar__snap {
+    display: none;
+  }
+
+  .sound-design-bar .chip--sm {
+    padding: 0 9px;
+  }
 }
 
 /* ---------- timeline ---------- */
