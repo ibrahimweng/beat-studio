@@ -8,7 +8,7 @@ import { el } from './ui/dom.ts';
 import { createRail } from './ui/rail.ts';
 import { createSoundDesignBar } from './ui/sound-design/bar.ts';
 import { createTransport } from './ui/sound-design/transport.ts';
-import { createDivider } from './ui/sound-design/divider.ts';
+import { createDivider, createPanelDivider } from './ui/sound-design/divider.ts';
 import {
   flushProject,
   heldProject,
@@ -83,6 +83,12 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     rail, soundDesignBar, transport, videoStage, timeline, soundDesignPanel, keepNotice,
   ];
 
+  const panelDivider = createPanelDivider({
+    container: () => shell,
+    panel: () => soundDesignPanel.el,
+    onResize: () => timeline.relayout(),
+  });
+
   const shell = el('div', { class: 'app' }, [rail.el, main, videoWindow.el]);
   /*
    * The notice sits above the app rather than over it.
@@ -121,7 +127,9 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
     if (!floating) divider.refresh();
 
     if (first) {
+      shell.appendChild(panelDivider.el);
       shell.appendChild(soundDesignPanel.el);
+      panelDivider.refresh();
       // The walkthrough points at parts of the screen, so it waits until
       // there is a screen to point at.
       requestAnimationFrame(() => tour.maybeStart());

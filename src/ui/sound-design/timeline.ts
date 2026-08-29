@@ -13,6 +13,7 @@ import {
 import { button, clear, el, setText, svg, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 import { helpButton } from '../help.ts';
+import { MOD, openMenu, type MenuItem } from '../menu.ts';
 import { createMotionStrip } from './motion-strip.ts';
 
 const MIN_PX_PER_SEC = 8;
@@ -269,7 +270,17 @@ export function createTimeline(
    * pressed, so a drag that wanders off the ruler — up into the bar, or down
    * over the lanes — keeps scrubbing until it is let go.
    */
+  /*
+   * Only the primary button, here and at every other press on this panel.
+   *
+   * A right-click is a question about what is under the pointer, not an
+   * instruction to it. Left unguarded, asking that question also scrubbed the
+   * playhead, took hold of a sound, or started drawing on a curve -- and
+   * calling preventDefault on the press is enough to stop the menu ever
+   * arriving, so the side effect happened and the menu did not.
+   */
   function scrubFrom(event: PointerEvent): void {
+    if (event.button !== 0) return;
     event.preventDefault();
     const wasPlaying = session.playing;
     if (wasPlaying) session.pause();
@@ -325,6 +336,14 @@ export function createTimeline(
     if (tool === 'zoom') return zoomFrom(event);
     if (tool === 'range') return rangeFrom(event);
     if (tool === 'cut') return cutAt(event);
+    if (tool === 'pen') {
+      // The pen only has anywhere to draw on an open curve lane, and those
+      // are excluded above, so arriving here means it was used on the lanes
+      // themselves. Say where it works rather than swallowing the press.
+      session.store.set({
+        status: 'the pen draws on a layer’s curve lanes — open them with A beside the layer’s name',
+      });
+    }
   }
 
   /** Drag the view along under a still timeline. */
@@ -452,11 +471,163 @@ export function createTimeline(
     const drawn = id ? cueNodes.get(id) : undefined;
     if (!id || !drawn) return;
 
-    const at = pointIn(event).x / pxPerSec;
-    const start = cueStart(drawn.cue);
-    const wanted = drawn.cue.anchor === 'end' ? drawn.cue.time - at : at - start;
-    // Below a frame there is nothing left to hear, so the cut is a refusal
-    // rather than a sound of no length.
+    // Below a frame there is nothing left to hear, so a cut that close to the
+    // start is a refusal rather than a sound of no length. The menu offers the
+    // same cut at the same point, so both go through one place.
+    cutCueAt(id, pointIn(event).x / pxPerSec);
+  }
+
+  viewport.addEventListener('pointerdown', toolPress, true);
+
+  /* ---------- what you can do with the thing under the pointer ---------- */
+
+  /**
+   * Right-click anywhere on the timeline.
+   *
+   * One listener rather than one per drawn thing, because the sounds and the
+   * lanes are rebuilt constantly and a menu attached to each of them would be
+   * attached again on every repaint. What was clicked is worked out here from
+   * where the press landed, which is also how the menu comes to be about that
+   * sound rather than about the timeline in general.
+   */
+  function contextFrom(event: MouseEvent): void {
+    const target = event.target as Element | null;
+    if (!target) return;
+
+    const point = target.closest<SVGElement>('[data-index]');
+    const cue = target.closest<HTMLElement>('.cue');
+    const row = target.closest<HTMLElement>('[data-gutter-layer]');
+    const lane = target.closest<HTMLElement>('.tl__lane');
+
+    let items: readonly MenuItem[] = [];
+    if (point) items = autoPointMenu(point);
+    else if (cue) items = cueMenu(cue, event);
+    else if (row) items = layerMenu(row.dataset.gutterLayer ?? '');
+    else if (lane) items = laneMenu(lane, event);
+
+    if (!items.length) return;
+    event.preventDefault();
+    openMenu(event.clientX, event.clientY, items);
+  }
+
+  /** A sound: hear it, move it about, take it away. */
+  function cueMenu(node: HTMLElement, event: MouseEvent): readonly MenuItem[] {
+    const id = node.dataset.cue ?? '';
+    const drawn = cueNodes.get(id);
+    if (!drawn) return [];
+
+    // Right-clicking something that is not part of what is chosen makes it
+    // the thing you are working on, which is what every editor does and what
+    // stops a menu acting on a selection somewhere off screen.
+    const chosen = session.store.state.selection;
+    if (!chosen.includes(id)) session.select([id]);
+    const many = session.store.state.selection.length > 1;
+    const what = many ? `${session.store.state.selection.length} sounds` : 'sound';
+
+    return [
+      { label: 'Hear it', run: () => session.audition(drawn.cue) },
+      { label: 'Play from just before it', run: () => session.playFrom(cueStart(drawn.cue)) },
+      { separator: true },
+      { label: `Copy ${what}`, keys: `${MOD} C`, run: () => session.copySelection() },
+      { label: `Cut ${what}`, keys: `${MOD} X`, run: () => session.cutSelection() },
+      { label: `Duplicate ${what}`, keys: `${MOD} D`, run: () => session.duplicateSelection() },
+      { separator: true },
+      {
+        label: drawn.cue.muted ? 'Let it sound' : 'Silence it',
+        on: drawn.cue.muted,
+        run: () => session.updateCue(id, { muted: !drawn.cue.muted }),
+      },
+      {
+        label: 'Cut it short here',
+        run: () => cutCueAt(id, (event.clientX - content.getBoundingClientRect().left) / pxPerSec),
+      },
+      { separator: true },
+      { label: `Delete ${what}`, keys: 'Del', run: () => session.removeSelected() },
+    ];
+  }
+
+  /** A layer: the four buttons in its row, and the two that are not there. */
+  function layerMenu(layerId: string): readonly MenuItem[] {
+    const layer = session.project.layers.find((one) => one.id === layerId);
+    if (!layer) return [];
+    const on = session.countOnLayer(layer.id);
+
+    return [
+      { label: 'Rename…', run: () => renameFromMenu(layer.id) },
+      { separator: true },
+      {
+        label: layer.muted ? 'Unmute' : 'Mute',
+        on: layer.muted,
+        run: () => session.updateLayer(layer.id, { muted: !layer.muted }),
+      },
+      {
+        label: layer.solo ? 'Stop soloing' : 'Solo',
+        on: layer.solo,
+        run: () => session.updateLayer(layer.id, { solo: !layer.solo }),
+      },
+      {
+        label: opened.has(layer.id) ? 'Hide the curves' : 'Show the curves',
+        on: opened.has(layer.id),
+        run: () => {
+          toggleLayer(layer);
+          paint(session.project, true);
+        },
+      },
+      { separator: true },
+      { label: 'Add a layer below', run: () => session.addLayer() },
+      {
+        label: on ? `Delete, and its ${on} sound${on === 1 ? '' : 's'}` : 'Delete',
+        run: () => session.removeLayer(layer.id),
+      },
+    ];
+  }
+
+  /** Empty lane: what can arrive here. */
+  function laneMenu(lane: HTMLElement, event: MouseEvent): readonly MenuItem[] {
+    const layerId = lane.dataset.layer ?? '';
+    const at = timeAt(event as unknown as PointerEvent, lane);
+    return [
+      {
+        label: 'Place a sound here',
+        run: () => {
+          session.setActiveLayer(layerId);
+          session.addCue(at, undefined, layerId);
+        },
+      },
+      { label: 'Paste here', keys: `${MOD} V`, run: () => session.pasteAt(at, layerId) },
+      { separator: true },
+      { label: 'Play from here', run: () => session.playFrom(at) },
+      { separator: true },
+      { label: 'Choose everything', keys: `${MOD} A`, run: () => session.selectAll() },
+    ];
+  }
+
+  /** One drawn point on a curve. */
+  function autoPointMenu(dot: SVGElement): readonly MenuItem[] {
+    const holder = dot.closest<SVGSVGElement>('.tl__auto');
+    const layerId = holder?.dataset.layer;
+    const laneName = holder?.dataset.lane as LaneName | undefined;
+    const index = Number(dot.dataset.index);
+    if (!holder || !layerId || !laneName || !Number.isFinite(index)) return [];
+
+    return [
+      {
+        label: 'Take this point away',
+        run: () => session.removeAutoPoint(layerId, laneName, index),
+      },
+      {
+        label: 'Clear the whole curve',
+        run: () => session.setAuto(layerId, laneName, []),
+      },
+    ];
+  }
+
+  /** Shorten a sound so it stops at a moment, shared by the blade and the menu. */
+  function cutCueAt(id: string, at: number): void {
+    const drawn = cueNodes.get(id);
+    if (!drawn) return;
+    const wanted =
+      drawn.cue.anchor === 'end' ? drawn.cue.time - at : at - cueStart(drawn.cue);
     if (wanted < 0.02) {
       session.store.set({ status: 'too close to the start of that sound to cut it' });
       return;
@@ -464,7 +635,90 @@ export function createTimeline(
     session.updateCue(id, { length: wanted });
   }
 
-  viewport.addEventListener('pointerdown', toolPress, true);
+  /** Put a layer's name into its own edit box, as double clicking it does. */
+  function renameFromMenu(layerId: string): void {
+    const row = gutterRows.querySelector<HTMLElement>(`[data-gutter-layer="${layerId}"]`);
+    const name = row?.querySelector<HTMLElement>('.tl__layer-name');
+    const layer = session.project.layers.find((one) => one.id === layerId);
+    if (name && layer) startRename(name, layer.id, layer.name);
+  }
+
+  root.addEventListener('contextmenu', contextFrom);
+
+
+  /**
+   * How far the pointer has to travel before the pen writes another point.
+   *
+   * Sampling every movement gives several hundred points across one drag,
+   * which is a curve nobody can then edit and a project file to match. Six
+   * pixels is close enough that the drawn line follows the hand and far
+   * enough that what is left behind can be picked up and moved.
+   */
+  const PEN_STEP_PX = 6;
+
+  /**
+   * Draw a curve by dragging along it.
+   *
+   * The lane could already be edited a point at a time -- press to add, drag
+   * to move, press twice to take away -- and that is the right way to place
+   * four points exactly. It is the wrong way to say "fall away over here and
+   * come back after the hit", which is a shape rather than four numbers, and
+   * which is what a pen is for.
+   *
+   * What is drawn replaces what it is drawn over, and nothing else. Anything
+   * outside the stretch the hand covered is left exactly as it was, so a pass
+   * over the middle of a lane does not straighten out either end of it.
+   */
+  function penFrom(
+    event: PointerEvent,
+    node: SVGSVGElement,
+    layer: Layer,
+    spec: LaneSpec,
+    height: number,
+  ): void {
+    const existing = session.project.layers.find((l) => l.id === layer.id)?.auto[spec.name] ?? [];
+    const width = Number(node.getAttribute('width')) || 1;
+    const step = PEN_STEP_PX / pxPerSec;
+
+    const first = readAuto(event, node, spec, height);
+    const drawn: AutoPoint[] = [first];
+    node.setPointerCapture(event.pointerId);
+    node.classList.add('is-drawing');
+
+    /** What the lane will hold if the pen stops here. */
+    const merged = (): AutoPoint[] => {
+      const from = Math.min(drawn[0].t, drawn[drawn.length - 1].t);
+      const to = Math.max(drawn[0].t, drawn[drawn.length - 1].t);
+      const kept = existing.filter((point) => point.t < from || point.t > to);
+      return [...kept, ...drawn].sort((a, b) => a.t - b.t);
+    };
+
+    const move = (e: PointerEvent): void => {
+      const at = readAuto(e, node, spec, height);
+      const last = drawn[drawn.length - 1];
+      if (Math.abs(at.t - last.t) < step) {
+        // Standing still but moving up or down is still worth following, so
+        // the last point is dragged rather than a new one added beside it.
+        last.value = at.value;
+      } else {
+        drawn.push(at);
+      }
+      drawAuto(node, spec, merged(), width, height, true);
+    };
+
+    const end = (): void => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', end);
+      node.removeEventListener('pointercancel', end);
+      node.classList.remove('is-drawing');
+      session.setAuto(layer.id, spec.name, merged());
+    };
+
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', end);
+    node.addEventListener('pointercancel', end);
+  }
+
 
 
   /** Where a pointer is, in the timeline's own coordinates. */
@@ -758,7 +1012,11 @@ export function createTimeline(
         ['×'],
       );
 
-      const row = el('div', { class: 'tl__gutter-row' }, [name, mute, solo, curves, remove]);
+      // Named, so a right-click anywhere in the row can find out whose it is.
+      const row = el('div', {
+        class: 'tl__gutter-row',
+        dataset: { gutterLayer: layer.id },
+      }, [name, mute, solo, curves, remove]);
       toggleClass(row, 'is-automating', opened.has(layer.id));
       gutterRows.appendChild(row);
 
@@ -768,7 +1026,7 @@ export function createTimeline(
         on: {
           pointerdown: (event) => {
             // Only empty space. A sound handles its own presses.
-            if (event.target !== lane) return;
+            if (event.target !== lane || event.button !== 0) return;
             event.preventDefault();
             beginPress(event, lane, layer.id);
           },
@@ -1047,12 +1305,16 @@ export function createTimeline(
     open: boolean,
     height: number,
   ): SVGSVGElement {
+    // Which layer's which lane, for the menu on a point drawn in it.
     const node = svg('svg', { class: 'tl__auto' });
+    node.dataset.layer = layer.id;
+    node.dataset.lane = spec.name;
     toggleClass(node, 'is-shut', !open);
 
     // A closed lane is there to be read, not drawn on, so a press opens it.
     if (!open) {
       node.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
         toggleLane(layer.id, spec.name);
@@ -1070,8 +1332,14 @@ export function createTimeline(
     let lastPress = { index: -1, at: 0 };
 
     node.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
+
+      if (session.store.state.tool === 'pen') {
+        penFrom(event, node, layer, spec, height);
+        return;
+      }
 
       const target = event.target as SVGElement;
       const existing = target.dataset?.index;
@@ -1354,6 +1622,7 @@ export function createTimeline(
       title: cueTitle(cue),
       on: {
         pointerdown: (event) => {
+          if (event.button !== 0) return;
           event.preventDefault();
           event.stopPropagation();
 
@@ -1383,6 +1652,7 @@ export function createTimeline(
       title: 'Drag to change how long it sounds for',
       on: {
         pointerdown: (event) => {
+          if (event.button !== 0) return;
           event.preventDefault();
           event.stopPropagation();
 

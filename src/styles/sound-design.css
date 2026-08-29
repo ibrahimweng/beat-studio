@@ -196,6 +196,39 @@
   background: var(--ac);
 }
 
+/*
+ * The same line, turned ninety degrees, between the work and the panel.
+ *
+ * Narrower than the one above it because a column of pixels reads as wider
+ * than a row of them does, and because this one runs the whole height of the
+ * window where that one runs a fraction of its width.
+ */
+.split--side {
+  width: 5px;
+  height: auto;
+  cursor: col-resize;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.split--side::after {
+  width: 1px;
+  height: 38px;
+}
+
+.app.is-resizing-side {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.app.is-resizing-side .vstage,
+.app.is-resizing-side .tl__body,
+.app.is-resizing-side .inspector {
+  pointer-events: none;
+}
+
 /* Everything stops responding to the pointer while a drag is in progress,
    otherwise the video swallows the moves as soon as the pointer crosses it. */
 .app.is-resizing {
@@ -2013,4 +2046,110 @@
 
 .tl.is-grabbing .tl__viewport {
   cursor: grabbing;
+}
+
+
+/* ---------- context menus ---------- */
+
+/*
+ * A menu about the thing under the pointer.
+ *
+ * Fixed rather than absolute, because it is placed from the pointer's own
+ * coordinates and those are the window's, and because a menu inside a
+ * scrolling panel would scroll away from what it is about. Above everything,
+ * including the floating video, since it is the most recent thing anybody has
+ * asked for.
+ */
+.menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  /*
+   * The panel colour, but opaque.
+   *
+   * `--panel` is 55% of the card colour and lets the app show through, which
+   * is right for something docked against that app and wrong for something
+   * floating over it: the transport was legible straight through the middle
+   * of this menu. Mixed against the background instead of over it, so the
+   * colour is the one every other panel has and nothing reads through it.
+   */
+  background: color-mix(in oklab, var(--tc-card) 55%, var(--bg));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-6);
+  background: transparent;
+  color: var(--txt-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__item:hover:not(:disabled) {
+  background: var(--ac);
+  color: #fff;
+}
+
+.menu__item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* An entry that is a state rather than an action, and is currently on. */
+.menu__item.is-on .menu__label::before {
+  content: '✓ ';
+  color: var(--ac);
+}
+
+.menu__item.is-on:hover .menu__label::before {
+  color: #fff;
+}
+
+.menu__label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+/*
+ * The shortcut, which is the whole reason a menu is worth having twice.
+ *
+ * Somebody who opens a menu to find a thing reads the keys beside it on the
+ * way past, and the next time does not open the menu. Dimmer than the label
+ * so it is available without being read first.
+ */
+.menu__keys {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu__item:hover:not(:disabled) .menu__keys {
+  color: color-mix(in oklab, #fff 75%, transparent);
+}
+
+.menu__rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+
+/* While the pen is drawing, the line follows the hand rather than the data. */
+.tl__auto.is-drawing {
+  cursor: crosshair;
+}
+
+.tl[data-tool='pen'] .tl__viewport {
+  cursor: crosshair;
 }

@@ -7,6 +7,13 @@ const MIN_VIDEO = 56;
 const DEFAULT_TIMELINE = 268;
 const STORAGE_KEY = 'toolcraft.st88.split';
 
+/** Narrow enough to be out of the way, wide enough that a sound row still reads. */
+const MIN_PANEL = 260;
+/** Leave this much of the middle column, whatever the panel is dragged to. */
+const MIN_MIDDLE = 420;
+const DEFAULT_PANEL = 340;
+const PANEL_KEY = 'toolcraft.st88.panel';
+
 export interface Divider {
   el: HTMLElement;
   /** Re-apply the stored height, clamped to the space now available. */
@@ -101,6 +108,102 @@ function load(): number {
 function save(value: number): void {
   try {
     localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
+  } catch {
+    // Not being able to remember the size is not worth interrupting anyone.
+  }
+}
+
+
+/**
+ * The line between the middle column and the panel on the right.
+ *
+ * The same thing as the one above, turned ninety degrees, and separate from
+ * it because almost nothing is shared once the axis changes: a different
+ * property, a different edge to measure from, a different pair of minimums
+ * and a different key to remember it under. Folding the two together came out
+ * as a function that took an axis and then branched on it in every line.
+ *
+ * The panel is where the moment list, the library and the export card all
+ * live, and 340 pixels is a guess at how wide a sentence about a moment wants
+ * to be. It is a guess somebody should be able to overrule, which is what
+ * this is for.
+ */
+export function createPanelDivider(options: {
+  /** The row the middle column and the panel sit in. */
+  container: () => HTMLElement;
+  /** The panel whose width is being set. */
+  panel: () => HTMLElement;
+  onResize?: () => void;
+}): Divider {
+  let width = loadPanel();
+
+  const apply = (value: number): void => {
+    const available = options.container().clientWidth;
+    const max = Math.max(MIN_PANEL, available - MIN_MIDDLE);
+    width = Math.max(MIN_PANEL, Math.min(max, value));
+    options.panel().style.setProperty('--panel-width', `${width}px`);
+    options.onResize?.();
+  };
+
+  const root = el('div', {
+    class: 'split split--side',
+    attrs: {
+      role: 'separator',
+      'aria-orientation': 'vertical',
+      'aria-label': 'Resize the panel',
+      title: 'Drag to resize. Double click to reset.',
+    },
+    on: {
+      pointerdown: (event) => {
+        event.preventDefault();
+        root.setPointerCapture(event.pointerId);
+        root.classList.add('is-dragging');
+        document.querySelector('.app')?.classList.add('is-resizing-side');
+
+        const move = (e: PointerEvent): void => {
+          const right = options.container().getBoundingClientRect().right;
+          apply(right - e.clientX);
+          savePanel(width);
+        };
+        const end = (): void => {
+          root.classList.remove('is-dragging');
+          document.querySelector('.app')?.classList.remove('is-resizing-side');
+          root.removeEventListener('pointermove', move);
+          root.removeEventListener('pointerup', end);
+          root.removeEventListener('pointercancel', end);
+        };
+
+        root.addEventListener('pointermove', move);
+        root.addEventListener('pointerup', end);
+        root.addEventListener('pointercancel', end);
+      },
+      dblclick: () => {
+        apply(DEFAULT_PANEL);
+        savePanel(DEFAULT_PANEL);
+      },
+    },
+  });
+
+  window.addEventListener('resize', () => apply(width));
+
+  return {
+    el: root,
+    refresh: () => apply(width),
+  };
+}
+
+function loadPanel(): number {
+  try {
+    const raw = Number(localStorage.getItem(PANEL_KEY));
+    return Number.isFinite(raw) && raw >= MIN_PANEL ? raw : DEFAULT_PANEL;
+  } catch {
+    return DEFAULT_PANEL;
+  }
+}
+
+function savePanel(value: number): void {
+  try {
+    localStorage.setItem(PANEL_KEY, String(Math.round(value)));
   } catch {
     // Not being able to remember the size is not worth interrupting anyone.
   }

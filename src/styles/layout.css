@@ -326,7 +326,7 @@
    * five short pieces and stopped being read. The sentence is the whole point
    * of the panel, so the panel gives way.
    */
-  flex: 0 1 340px;
+  flex: 0 0 var(--panel-width, 340px);
   min-width: 268px;
   background: var(--side);
   border-left: 1px solid var(--line);

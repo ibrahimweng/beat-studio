@@ -1756,13 +1756,31 @@ export class SoundDesignSession {
    * going on, rather than being dropped.
    */
   paste(): void {
+    this.pasteAt(this.time);
+  }
+
+  /**
+   * Paste at a moment, keeping the group's shape.
+   *
+   * The keyboard pastes at the playhead, which is where you are looking.
+   * Right-clicking is a way of pointing at somewhere you are not, so it says
+   * where instead. Both land the earliest of the copied sounds on the moment
+   * given and lay the rest out behind it at the spacing they had.
+   */
+  pasteAt(at: number, layerId?: string): void {
     if (!this.#clipboard.length) {
       this.#store.set({ status: 'nothing to paste' });
       return;
     }
     const earliest = Math.min(...this.#clipboard.map((cue) => cue.time));
-    const at = snapTime(this.project, this.#insideVideo(this.time));
-    const cues = this.#clipboard.map((cue) => this.#copyOf(cue, at + (cue.time - earliest)));
+    const landing = snapTime(this.project, this.#insideVideo(at));
+    const cues = this.#clipboard.map((cue) => {
+      const copy = this.#copyOf(cue, landing + (cue.time - earliest));
+      // Pasting onto a named layer puts the whole group there, since asking
+      // for it on that lane and getting it on the lane it was cut from is
+      // not what pointing at a lane means.
+      return layerId ? { ...copy, layerId } : copy;
+    });
 
     this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'paste');
     this.#store.set({
@@ -1912,6 +1930,19 @@ export class SoundDesignSession {
   /** Play from a little before a cue, so it is heard in context. */
   previewInContext(cue: Cue, lead = 1): void {
     this.seek(Math.max(0, cueStart(cue) - lead));
+    void this.#clock?.play();
+  }
+
+  /**
+   * Run from a moment, with a little of what leads into it.
+   *
+   * The same thing {@link previewInContext} does for a sound, said in
+   * seconds, for the places that have a time and no cue to hand: a
+   * right-click on empty timeline, or on a sound whose start is what is
+   * wanted rather than the sound itself.
+   */
+  playFrom(at: number, lead = 1): void {
+    this.seek(Math.max(0, at - lead));
     void this.#clock?.play();
   }
 
