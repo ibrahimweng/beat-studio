@@ -107,6 +107,7 @@ export const TOOLS = [
   { id: 'cut', key: 'C', name: 'Cut', job: 'Click a sound to cut it short at that point' },
   { id: 'hand', key: 'H', name: 'Hand', job: 'Drag the timeline along without moving anything on it' },
   { id: 'zoom', key: 'Z', name: 'Zoom', job: 'Click to go in, alt-click to go out, drag to fill the width with a stretch' },
+  { id: 'pen', key: 'P', name: 'Pen', job: 'Draw a curve by dragging across an open lane, instead of placing points one at a time' },
 ] as const;
 
 export type Tool = (typeof TOOLS)[number]['id'];

@@ -234,6 +234,24 @@ export function toolIcon(tool: string): SVGElement {
     // when the same tool goes both ways.
     case 'zoom':
       return stroke('M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2M10.6 10.6 14 14');
+    /*
+     * A nib on a line, rather than the whole pen.
+     *
+     * At sixteen pixels a drawn pen is a diagonal smudge; what says pen is
+     * the nib and the stroke coming away from it, which is also what this
+     * tool does -- you drag and a curve follows.
+     */
+    case 'pen':
+      return svg('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' }, [
+        svg('path', { d: 'M11.2 1.9 14 4.7l-6.4 6.4-3.5.7.7-3.5z', fill: 'currentColor' }),
+        svg('path', {
+          d: 'M1.6 14.4c2.4 0 3.2-2.2 5.2-2.2',
+          fill: 'none',
+          stroke: 'currentColor',
+          'stroke-width': 1.5,
+          'stroke-linecap': 'round',
+        }),
+      ]);
     default:
       return stroke('M4 8h8');
   }
