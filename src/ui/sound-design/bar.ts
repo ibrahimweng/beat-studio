@@ -3,6 +3,7 @@ import type { AppState } from '../../store.ts';
 import { button, el, setText } from '../dom.ts';
 import type { View } from '../view.ts';
 import { helpButton } from '../help.ts';
+import { openMenu } from '../menu.ts';
 import { waveMark } from '../icons.ts';
 
 export interface SoundDesignBarView extends View {}
@@ -10,6 +11,17 @@ export interface SoundDesignBarView extends View {}
 export interface SoundDesignBarOptions {
   /** Put the export options in front. */
   onExport?(): void;
+  /**
+   * The panels and where they are, asked for when the menu is opened.
+   *
+   * A function rather than a list, because panels move: reading it at the
+   * moment the menu opens is what makes the ticks right.
+   */
+  panels?(): { id: string; title: string; open: boolean }[];
+  /** Put a closed panel back, or take an open one away. */
+  onTogglePanel?(id: string): void;
+  /** Everything back where it started. */
+  onResetLayout?(): void;
 }
 
 /**
@@ -48,10 +60,42 @@ export function createSoundDesignBar(
     ['Export'],
   );
 
+  /**
+   * Which panels are on screen, and how to get one back.
+   *
+   * Dragging a panel somewhere is only half of arranging a window; the other
+   * half is putting one away and finding it again afterwards, and a panel you
+   * have closed is by definition not somewhere you can click. Every editor
+   * keeps that list under Window, so this is called Window.
+   */
+  const windowButton = button(
+    {
+      class: 'chip chip--sm',
+      title: 'Which panels are on screen',
+      on: {
+        click: (event) => {
+          const at = (event.currentTarget as HTMLElement).getBoundingClientRect();
+          const panels = options.panels?.() ?? [];
+          openMenu(at.left, at.bottom + 4, [
+            ...panels.map((panel) => ({
+              label: panel.title,
+              on: panel.open,
+              run: () => options.onTogglePanel?.(panel.id),
+            })),
+            { separator: true as const },
+            { label: 'Put the panels back', run: () => options.onResetLayout?.() },
+          ]);
+        },
+      },
+    },
+    ['Window'],
+  );
+
   const root = el('header', { class: 'topbar appbar' }, [
     el('div', { class: 'appbar__mark' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
     title,
     el('div', { class: 'topbar__spacer' }),
+    windowButton,
     exportButton,
     helpButton('start', 'this app'),
   ]);

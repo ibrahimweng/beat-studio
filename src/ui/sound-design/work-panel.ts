@@ -1,35 +1,45 @@
 import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState, PanelTab } from '../../store.ts';
-import { button, el, setText, toggleClass } from '../dom.ts';
+import { el } from '../dom.ts';
 import type { View } from '../view.ts';
 import { MOMENT_GROUP_FOR } from '../../audio/suggest.ts';
+import { createDocks, type DockPanel, type DockSide, type Docks } from '../dock.ts';
 import { createMomentsPanel } from './moments.ts';
 import { createSoundDesignPanel } from './panel.ts';
 
 /**
- * The right panel: what to do next, what to choose, and what is chosen.
+ * The panels, and the two columns they can be put in.
  *
- * Three jobs used to be one column six screens deep, which meant the first
- * thing somebody new saw was a wall of sounds and no reason to prefer any of
- * them. They are separated here because they are done at different times.
- * Moments is what a scanned video opens on, since for somebody who has never
- * done this the list of what to do next is the app; Sounds is for choosing
- * something yourself; Selected is the sound already down.
+ * These used to be one column: three tabs over a shared body, with three more
+ * cards stuck underneath belonging to no tab at all. That is a fixed
+ * arrangement, and the one thing everybody who works in an editor does first
+ * is rearrange it — usually to put the list of what to do next beside the
+ * library rather than behind it, which was the one thing that column could
+ * not do.
  *
- * The tab strip is the only new thing on screen. Everything under it is the
- * panel that was already there, moved rather than rebuilt, so nothing that
- * worked before works differently now.
+ * So the six are panels now, each draggable by its tab into either column.
+ * Everything starts on the right, exactly where it was, and the left column
+ * costs nothing until something is dragged into it.
  */
 export interface WorkPanelView extends View {
+  /** The two columns, for the page to put either side of the work. */
+  docks: Record<DockSide, HTMLElement>;
   /** Open the library at one moment group, unfolding whatever is in the way. */
   openGroup(id: string): void;
-  /** Back to the moment list, at the top. */
-  home(): void;
-  /** Put the export options in front, wherever the panel was left. */
+  /** Put the export options in front, wherever they have been put. */
   showExport(): void;
+  /** Every panel and where it is, for the window menu. */
+  places(): { panel: DockPanel; side: DockSide | null }[];
+  /** Put a closed panel back, or take an open one away. */
+  toggle(id: string): void;
+  /** Everything back where it started. */
+  resetLayout(): void;
 }
 
-export function createWorkPanel(session: SoundDesignSession): WorkPanelView {
+export function createWorkPanel(
+  session: SoundDesignSession,
+  options: { onLayout?(): void } = {},
+): WorkPanelView {
   const panel = createSoundDesignPanel(session);
 
   /*
@@ -47,89 +57,76 @@ export function createWorkPanel(session: SoundDesignSession): WorkPanelView {
     },
   });
 
-  const TABS: readonly { id: PanelTab; label: string; title: string }[] = [
-    { id: 'moments', label: 'Moments', title: 'What the video suggests, and why' },
-    { id: 'sounds', label: 'Sounds', title: 'Choose a sound yourself' },
-    { id: 'selected', label: 'Selected', title: 'The sound picked on the timeline' },
+  const PANELS: readonly DockPanel[] = [
+    { id: 'moments', title: 'Moments', hint: 'What the video suggests, and why', el: moments.el },
+    { id: 'sounds', title: 'Sounds', hint: 'Choose a sound yourself', el: panel.soundsPage },
+    { id: 'selected', title: 'Selected', hint: 'The sound picked on the timeline', el: panel.selectedPage },
+    { id: 'export', title: 'Export', hint: 'Write the piece out as a file', el: panel.exportCard },
+    { id: 'session', title: 'Session', hint: 'Save, open, or start again', el: panel.sessionCard },
+    { id: 'palette', title: 'Palette', hint: 'Write the sound catalogue out for somebody else', el: panel.paletteCard },
   ];
 
-  /**
-   * The count beside the Moments tab.
+  const docks: Docks = createDocks(PANELS, {
+    onResize: () => options.onLayout?.(),
+  });
+
+  /*
+   * A holder for the view interface, which nothing puts on screen.
    *
-   * There so that somebody working in the Sounds tab can see there is still a
-   * list waiting without going back to look. It disappears at nought rather
-   * than showing a zero, because a badge saying nothing is left is a badge
-   * asking to be read for no reason.
+   * The two columns go into the page on either side of the work rather than
+   * together, so there is no single element that is "the panel" any more.
    */
-  const waiting = el('span', { class: 'panel-tab__count' });
+  const root = el('div', { class: 'docks' });
 
-  const buttons = TABS.map((tab) => ({
-    ...tab,
-    node: button(
-      {
-        class: 'panel-tab',
-        title: tab.title,
-        on: { click: () => session.setPanelTab(tab.id) },
-      },
-      tab.id === 'moments' ? [el('span', { text: tab.label }), waiting] : [tab.label],
-    ),
-  }));
+  /** Which panel a tab id in the store refers to. They are the same words. */
+  const forTab = (tab: PanelTab): string => tab;
 
-  const strip = el(
-    'div',
-    { class: 'panel-tabs', attrs: { role: 'tablist' } },
-    buttons.map((tab) => tab.node),
-  );
-
-  const body = el('div', { class: 'panel-body' }, [
-    moments.el,
-    panel.soundsPage,
-    panel.selectedPage,
-  ]);
-
-  const root = el('aside', { class: 'inspector inspector--work' }, [strip, body, panel.tail]);
-
-  const pages: Record<PanelTab, HTMLElement> = {
-    moments: moments.el,
-    sounds: panel.soundsPage,
-    selected: panel.selectedPage,
-  };
+  let shownTab: PanelTab | null = null;
 
   return {
     el: root,
+    docks: docks.nodes,
     openGroup: (id) => panel.openGroup(id),
-
-    home() {
-      session.setPanelTab('moments');
-      // Scrolled as well as switched: a panel left half way down the library
-      // is not "back", it is the same place with different contents.
-      root.scrollTop = 0;
-    },
+    places: () => docks.places(),
+    toggle: (id) => docks.toggle(id),
+    resetLayout: () => docks.reset(),
 
     showExport() {
-      // Only what the panel does itself: it scrolls to the export card, which
-      // is not the bottom of the panel — the palette is under it.
+      docks.reveal('export');
       panel.showExport();
     },
 
     update(state: AppState, previous: AppState | null) {
-      // Both children are updated whichever tab is showing. They are cheap,
+      // Both children are updated whichever panel is showing. They are cheap,
       // and a panel that only refreshes what is visible is a panel that shows
-      // the state from two tabs ago the moment you switch.
+      // the state from two tabs ago the moment it comes back to the front.
       panel.update(state, previous);
       moments.update(state, previous);
 
-      const left = session.momentsLeft;
-      setText(waiting, left ? String(left) : '');
-      waiting.style.display = left ? '' : 'none';
+      /*
+       * The count that used to ride on the Moments tab is gone from here.
+       *
+       * A dock tab is a name and nothing else: one that is sometimes wider
+       * than itself makes the whole strip shift as you work, and worse, it
+       * has to be redrawn on every change to a thing it is not about. The
+       * moment list's own heading has said "three waiting on you" all along,
+       * next to the three, which is where a count belongs.
+       */
 
-      for (const tab of buttons) {
-        const on = state.panelTab === tab.id;
-        toggleClass(tab.node, 'is-on', on);
-        tab.node.setAttribute('aria-selected', on ? 'true' : 'false');
-      }
-      for (const [id, page] of Object.entries(pages)) {
-        page.style.display = state.panelTab === id ? '' : 'none';
+      /*
+       * The store still says which of the three is wanted, and the docks are
+       * what answer it.
+       *
+       * Everything that used to switch tabs — the walkthrough, the rail's home
+       * button, going to the library from a moment row — still says the same
+       * thing it always did. What changed is that the answer is now "bring
+       * that panel to the front of whichever column it is in" rather than
+       * "show page two of three", so none of those callers had to learn where
+       * anything is.
+       */
+      if (state.panelTab !== shownTab) {
+        shownTab = state.panelTab;
+        docks.reveal(forTab(state.panelTab));
       }
     },
   };

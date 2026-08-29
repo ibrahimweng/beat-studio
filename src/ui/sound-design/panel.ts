@@ -90,8 +90,12 @@ export interface SoundDesignPanelView extends View {
   soundsPage: HTMLElement;
   /** The settings of whatever is picked on the timeline. */
   selectedPage: HTMLElement;
-  /** Export, session and palette, which belong to no tab. */
-  tail: HTMLElement;
+  /** Getting a file out. */
+  exportCard: HTMLElement;
+  /** Saving, opening and starting again. */
+  sessionCard: HTMLElement;
+  /** Writing the sound catalogue out for somebody else. */
+  paletteCard: HTMLElement;
   /** Open the library at one moment group, unfolding whatever is in the way. */
   openGroup(id: string): void;
   /** Unfold the export options and bring them into view. */
@@ -1852,16 +1856,31 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     cueBody,
   ]);
 
-  const tail = el('div', { class: 'panel-tail' }, [
-    foldable('export', 'Export', 'export', exportBody),
-    foldable('session', 'Session', 'session', sessionBody),
-    foldable('palette', 'Palette', 'export', paletteBody),
-  ]);
+  /*
+   * Three cards that used to be one strip under the tabs.
+   *
+   * Kept as separate elements now rather than as one "tail", because each of
+   * them is a panel that can be docked somewhere of its own. They are still
+   * folded the same way and still sit together by default; what changed is
+   * that nothing here decides they have to.
+   */
+  const exportCard = foldable('export', 'Export', 'export', exportBody);
+  const sessionCard = foldable('session', 'Session', 'session', sessionBody);
+  const paletteCard = foldable('palette', 'Palette', 'export', paletteBody);
 
+  /*
+   * A holder, not a place.
+   *
+   * Everything above is re-parented into whichever dock it has been put in,
+   * so this only exists because a view has to have an element. Nothing ever
+   * puts it on screen.
+   */
   const root = el('aside', { class: 'inspector inspector--work' }, [
     soundsPage,
     selectedPage,
-    tail,
+    exportCard,
+    sessionCard,
+    paletteCard,
   ]);
 
   let paintedLayers: AppState['project']['layers'] | null = null;
@@ -2008,7 +2027,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     el: root,
     soundsPage,
     selectedPage,
-    tail,
+    exportCard,
+    sessionCard,
+    paletteCard,
     openGroup,
     showExport,
 

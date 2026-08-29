@@ -220,7 +220,7 @@ export function createTimeline(
       redo,
       helpButton('edit', 'editing on the timeline'),
       detectGroup,
-      el('div', { class: 'dock__spacer' }),
+      el('div', { class: 'tl__spacer' }),
       /*
        * What the app has to say, beside the work it is about.
        *
