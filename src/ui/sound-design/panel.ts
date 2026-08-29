@@ -94,6 +94,8 @@ export interface SoundDesignPanelView extends View {
   tail: HTMLElement;
   /** Open the library at one moment group, unfolding whatever is in the way. */
   openGroup(id: string): void;
+  /** Unfold the export options and bring them into view. */
+  showExport(): void;
 }
 
 export function createSoundDesignPanel(session: SoundDesignSession): SoundDesignPanelView {
@@ -541,6 +543,20 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
 
     // After the fold, since nothing can be scrolled to while it is closed.
     section.node.scrollIntoView({ block: 'nearest' });
+  }
+
+  /**
+   * Put the export options in front.
+   *
+   * Getting a file out is what the whole thing is for, and it sat at the
+   * bottom of a panel nearly twice the height of the window: reachable only by
+   * scrolling past the library, the recordings and the layers. The button that
+   * calls this lives in the bar, where it cannot be scrolled away from.
+   */
+  function showExport(): void {
+    const fold = foldHeads.get('export');
+    if (fold?.getAttribute('aria-expanded') === 'false') fold.click();
+    foldWraps.get('export')?.scrollIntoView({ block: 'nearest' });
   }
 
   paintBrowse();
@@ -1972,6 +1988,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     selectedPage,
     tail,
     openGroup,
+    showExport,
 
     update(state: AppState) {
       const { project } = state;

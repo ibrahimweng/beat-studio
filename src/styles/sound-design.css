@@ -246,7 +246,26 @@
   }
 
   .sound-design-bar .chip--sm {
-    padding: 0 9px;
+    padding: 0 8px;
+  }
+
+  /*
+   * Tighter between the groups, not inside them.
+   *
+   * The bar is one row that cannot wrap. It scrolls sideways rather than
+   * truncating, but with the scrollbar hidden, so what runs off the right of
+   * it is reachable only by somebody who thinks to swipe at it. At 1440, the
+   * commonest laptop, it was over by forty six pixels before any of this and
+   * ate "Ref audio". Two pixels off each gap between groups buys more than
+   * that back, and is invisible.
+   */
+  .sound-design-bar {
+    gap: 6px;
+  }
+
+  /* The rules between groups earn less than the pixels they cost here. */
+  .sound-design-bar .topbar__divider {
+    margin: 0 1px;
   }
 }
 
@@ -1903,4 +1922,23 @@
   margin-top: 6px;
   line-height: 1.45;
   text-wrap: pretty;
+}
+
+/*
+ * The way out of the app, pinned to the right edge of a bar that scrolls.
+ *
+ * Narrow enough and the row is wider than the window; it scrolls, but the
+ * scrollbar is hidden, so anything past the edge is gone as far as most people
+ * are concerned. Sticky keeps this one where the eye already is while the rest
+ * of the bar slides under it. The button is already opaque, so nothing reads
+ * through it; the shadow is only so the transport does not appear to butt
+ * against its left edge on the way past.
+ */
+.sound-design-bar__export {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  box-shadow: -8px 0 8px -6px var(--bg);
 }

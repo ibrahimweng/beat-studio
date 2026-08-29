@@ -13,19 +13,29 @@ import type { View } from './view.ts';
  * answer was always the same one. What the instruments make is still here, in
  * the library, filed under the moment it serves.
  *
- * The sound design button stays even though it is now the only screen. It
- * says what this is, it is where the mark sits, and a rail with nothing in it
- * but a question mark and a light reads as a rail that failed to load.
+ * The sound design button stays even though it is now the only screen, and it
+ * does something: it goes back to the moment list and puts the panel back at
+ * the top. That is what somebody expects from the lit thing in the top corner,
+ * and it was worth fixing rather than removing, because a button with a
+ * pointer cursor and a hover state that answers a click with nothing is worse
+ * than no button at all.
  */
-export function createRail(session: Session, options: { onHelp: () => void } = { onHelp: () => {} }): View {
+export interface RailOptions {
+  onHelp: () => void;
+  /** Back to the moment list, and back to the top of the panel. */
+  onHome?: () => void;
+}
+
+export function createRail(session: Session, options: RailOptions = { onHelp: () => {} }): View {
   const engineLed = el('i', { class: 'led led--lg' });
 
   const soundDesign = button(
     {
       class: 'rail__btn is-active',
-      title: 'Sound design',
-      attrs: { 'aria-label': 'Sound design', 'aria-current': 'page' },
+      title: 'Sound design — back to what the video suggests',
+      attrs: { 'aria-label': 'Sound design, back to the moment list', 'aria-current': 'page' },
       dataset: { marker: 'true' },
+      on: { click: () => options.onHome?.() },
     },
     [soundDesignIcon()],
   );
