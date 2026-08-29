@@ -134,8 +134,9 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
 
   const folded = foldedNow();
 
-  /** Each fold's own button, so something else can open one. */
+  /** Each fold's own button and body, so something else can open one. */
   const foldHeads = new Map<string, HTMLButtonElement>();
+  const foldWraps = new Map<string, HTMLElement>();
 
   const foldable = (
     id: string,
@@ -185,6 +186,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     });
 
     foldHeads.set(id, head);
+    foldWraps.set(id, wrap);
     wrap.appendChild(el('div', { class: 'folds__head' }, [head, helpButton(help, text.toLowerCase())]));
     wrap.appendChild(el('div', { class: 'folds__body' }, [body]));
     return wrap;
@@ -1141,6 +1143,45 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     },
   }) as HTMLInputElement;
 
+  /**
+   * Whether the search is the reason the browser is open.
+   *
+   * So that clearing the box puts it back, the way a group that opened itself
+   * closes again, while a browser somebody opened for themselves is left
+   * alone.
+   */
+  let browseOpenedBySearch = false;
+
+  /**
+   * Open the grouped browser when a word only matches inside it.
+   *
+   * It is folded away until it is wanted, which is right for browsing and
+   * wrong for searching: typing "piano" matched the three piano gestures, the
+   * filter dutifully opened the group holding them, and all of it happened
+   * inside a closed box. The word came back with nothing, which reads as the
+   * app not having a piano at all — and finding these by name is the whole
+   * reason the instruments were folded into the library.
+   *
+   * The fold is moved directly rather than through its button, so a search
+   * never changes what somebody chose to have open next time.
+   */
+  function revealBrowse(want: boolean): void {
+    const wrap = foldWraps.get('kinds');
+    const head = foldHeads.get('kinds');
+    if (!wrap || !head) return;
+
+    const shut = wrap.classList.contains('folds--shut');
+    if (want && shut) {
+      browseOpenedBySearch = true;
+    } else if (want || !browseOpenedBySearch) {
+      return;
+    } else {
+      browseOpenedBySearch = false;
+    }
+    toggleClass(wrap, 'folds--shut', !want);
+    head.setAttribute('aria-expanded', want ? 'true' : 'false');
+  }
+
   function applyFilter(): void {
     const term = search.value.trim().toLowerCase();
     for (const section of sections) {
@@ -1164,6 +1205,13 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       const group = openable.find((o) => o.node === section.node);
       if (group) group.open(Boolean(term) && showing > 0);
     }
+
+    // Anything the browser holds is behind a fold of its own.
+    const inside = sections.some(
+      (section) => browseBody.contains(section.node) && section.node.style.display !== 'none',
+    );
+    revealBrowse(Boolean(term) && inside);
+
     // Buttons the filter just built have never been lit, and the next state
     // update may be a long way off if nothing is clicked.
     paintChosen();
