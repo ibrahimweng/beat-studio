@@ -279,6 +279,32 @@ seconds at that density. Around fifty sounds, which is a lot for half a minute
 of picture, everything is immediate and the file writes in about five
 seconds.
 
+### Browsing by what is happening on screen
+
+Under Browse there are two ways to look at the same forty voices, and it opens
+on the first of them.
+
+**By moment** groups them by what is on screen when you want one. Something
+appears. Something moves. Something builds. Something lands hard. Something is
+there. A small thing happens. A transition. Each group carries a line saying
+when to reach for it, and the names are the ones the Moments panel uses for
+what it finds in a video, so reading "Something builds" beside a moment and
+then finding "Something builds" here is the same thought twice.
+
+**By sound type** groups them by what the sound is made of, which is how
+somebody who already knows this work would expect to find them. Hits, movement,
+lead in, low end, detail, texture, struck, plucked, grains, mechanical.
+
+Neither is a selection from the other. They are two indexes over the same forty
+voices, nothing is added and nothing is left out, and which one you last used is
+remembered.
+
+Four of the ten sound type groups are named after a mechanism rather than a
+use, and that is the reason for the second index: somebody watching a logo land
+does not think "I need something from Struck". They think something needs to
+happen here. The old grouping is kept because learning those names is a real
+thing that happens, and an app that forgets them is an app you outgrow.
+
 ### Describe what you want
 
 The same box takes a sentence. "A huge metal door slamming in a warehouse",
@@ -863,7 +889,9 @@ src/
     transport.ts   the step clock
     recorder.ts    capturing takes
     suggest.ts     what sound belongs on a moment, and the line saying why
-  timeline/        the cue list, layers and timing
+  timeline/        the cue list, layers and timing, and the two ways the
+                   voices are grouped: by how a sound is made, and by what is
+                   happening on screen when you want it
   video/           loading a video, following its clock, and reading its hits
     moments.ts     what kind of moment each hit is, from the shape around it
   export/

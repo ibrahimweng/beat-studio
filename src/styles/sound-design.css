@@ -1475,6 +1475,37 @@
   display: none;
 }
 
+/*
+ * The line saying when a group is the one you want.
+ *
+ * Folds away with the buttons rather than staying with the title. Seven of
+ * these on screen at once is a paragraph nobody reads; one of them beside the
+ * sounds it describes is the sentence that makes the group mean something.
+ */
+.pick-group__when {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--txt-3);
+  margin: -1px 0 5px;
+  text-wrap: pretty;
+}
+
+.pick-group--shut > .pick-group__when {
+  display: none;
+}
+
+/* The two ways of indexing the voices, one line above the groups. */
+.pick-row--ways {
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.pick-row--ways .pick {
+  flex: 1 1 0;
+  justify-content: center;
+  text-transform: none;
+}
+
 /* ---------- sections that fold, and stay as you left them ---------- */
 
 .folds__head {

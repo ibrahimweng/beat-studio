@@ -9,10 +9,12 @@ import type { AppState } from '../../store.ts';
 import { MAX_LENGTH, MIN_LENGTH, timecode } from '../../timeline/project.ts';
 import {
   DESIGN_GROUPS,
+  MOMENT_GROUPS,
   type Anchor,
   type Cue,
   type CuePreset,
   type CueSource,
+  type DesignName,
 } from '../../timeline/types.ts';
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
@@ -297,6 +299,15 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
      * palette collapsed the user's own library with it.
      */
     collapses = false,
+    /**
+     * A line saying when this group is the one you want.
+     *
+     * Only the moment groups carry one. It folds away with the buttons rather
+     * than staying with the title, because seven of these on screen at once is
+     * a paragraph nobody reads, and one of them beside the sounds it describes
+     * is the sentence that makes the group mean something.
+     */
+    note?: string,
   ): HTMLElement => {
     const row = el('div', { class: 'pick-row' }, group.map((p) => p.node));
 
@@ -329,6 +340,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         },
         [caret, el('span', { text: title })],
       ),
+      ...(note ? [el('div', { class: 'pick-group__when', text: note })] : []),
       row,
       ...(extra ? [extra] : []),
     ]);
@@ -346,16 +358,25 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     return node;
   };
 
+  const voicePicks = (names: readonly DesignName[]): Pick[] =>
+    names.map((name) =>
+      pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
+    );
+
   // Twenty four in one row is a wall. Grouped by what they are for, it reads.
   const designSections = DESIGN_GROUPS.map((group) =>
-    pickGroup(
-      group.title,
-      group.names.map((name) =>
-        pickButton(name, { kind: 'design', name }, (c) => c.kind === 'design' && c.name === name),
-      ),
-      undefined,
-      true,
-    ),
+    pickGroup(group.title, voicePicks(group.names), undefined, true),
+  );
+
+  /*
+   * The same forty voices, under what is happening on screen.
+   *
+   * The other list sorts them by how they are made, which is how somebody who
+   * already knows this looks at a library. Four of its ten groups are named
+   * after a mechanism, and somebody watching a logo land cannot use "Struck".
+   */
+  const momentSections = MOMENT_GROUPS.map((group) =>
+    pickGroup(group.title, voicePicks(group.names), undefined, true, group.when),
   );
 
   const kitSection = pickGroup(
@@ -381,6 +402,81 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     undefined,
     true,
   );
+
+  /*
+   * Which way the forty voices are indexed.
+   *
+   * By moment for anybody who has not done this before, since it is the only
+   * one of the two that answers the question they actually have. By sound type
+   * is the same voices under the names somebody who knows the craft would
+   * expect, and it is kept because learning those names is a real thing that
+   * happens and an app that forgets them is an app you outgrow.
+   *
+   * Remembered, like the folds, because a panel that resets its arrangement
+   * every visit teaches you not to arrange it.
+   */
+  const BROWSE_STORE = 'toolcraft.st88.browse';
+  type Browse = 'moment' | 'kind';
+
+  const browseNow = (): Browse => {
+    try {
+      return localStorage.getItem(BROWSE_STORE) === 'kind' ? 'kind' : 'moment';
+    } catch {
+      // Site data blocked. By moment, which is the default either way.
+      return 'moment';
+    }
+  };
+
+  let browse = browseNow();
+
+  const momentBox = el('div', {}, momentSections);
+  const kindBox = el('div', {}, designSections);
+
+  const browseWays: { way: Browse; node: HTMLButtonElement }[] = (
+    [
+      { way: 'moment', label: 'By moment', title: 'Grouped by what is happening on screen' },
+      { way: 'kind', label: 'By sound type', title: 'Grouped by what the sound is made of' },
+    ] as const
+  ).map(({ way, label, title }) => ({
+    way,
+    node: button(
+      { class: 'cell pick', title, on: { click: () => setBrowse(way) } },
+      [el('span', { text: label })],
+    ),
+  }));
+
+  function setBrowse(way: Browse): void {
+    browse = way;
+    try {
+      localStorage.setItem(BROWSE_STORE, way);
+    } catch {
+      // Not being able to remember it is not a reason to refuse to do it.
+    }
+    paintBrowse();
+  }
+
+  function paintBrowse(): void {
+    momentBox.style.display = browse === 'moment' ? '' : 'none';
+    kindBox.style.display = browse === 'kind' ? '' : 'none';
+    for (const option of browseWays) toggleClass(option.node, 'is-on', option.way === browse);
+  }
+
+  /*
+   * The kit and the instruments sit under both, rather than inside either.
+   *
+   * The switch is about how the forty voices are indexed, and those are not
+   * among them: a kick is a kick under any grouping. Describing them by what
+   * they do for picture is the next piece of work, not this one.
+   */
+  const browseBody = el('div', {}, [
+    el('div', { class: 'pick-row pick-row--ways' }, browseWays.map((option) => option.node)),
+    momentBox,
+    kindBox,
+    kitSection,
+    pitchedSection,
+  ]);
+
+  paintBrowse();
 
   /* ---------- library ---------- */
 
@@ -1532,12 +1628,10 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
        * Twelve groups were collapsed to one line each, which was still twelve
        * lines and three hundred pixels of headings for something most people
        * never open: the search and the library shelf above are how a sound is
-       * actually found. Browsing by kind is the fallback, so it costs one line
-       * until it is wanted, and inside it the groups still open one at a time.
+       * actually found. Browsing is the fallback, so it costs one line until
+       * it is wanted, and inside it the groups still open one at a time.
        */
-      foldable('kinds', 'Browse by kind', 'library',
-        el('div', {}, [...designSections, kitSection, pitchedSection]),
-        { marginTop: '8px' }, true),
+      foldable('kinds', 'Browse', 'library', browseBody, { marginTop: '8px' }, true),
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       sampleSections,

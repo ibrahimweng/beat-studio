@@ -83,6 +83,77 @@ export const DESIGN_GROUPS: readonly { title: string; names: readonly DesignName
   { title: 'Mechanical', names: ['ratchet', 'clockwork', 'zip', 'motor'] },
 ];
 
+/**
+ * The same forty voices, indexed by what is happening on screen.
+ *
+ * {@link DESIGN_GROUPS} above sorts them by how they are made, which is a
+ * sound designer's way of looking at a library and is the wrong way round for
+ * everybody else. Somebody watching a logo land does not think "I need
+ * something from Struck". They think "something needs to happen here", and
+ * four of the ten groups above describe a mechanism rather than a use.
+ *
+ * So this is a second index over exactly the same voices. Nothing is added and
+ * nothing is left out, and the old grouping is still there for anybody who has
+ * learned the vocabulary and prefers it.
+ *
+ * The titles are the ones the Moments panel uses for what it finds in a video,
+ * on purpose: reading "Something builds" beside a moment and then finding
+ * "Something builds" in the library is the whole point of naming them this
+ * way. Two of them differ, because a moment describes what the picture did and
+ * a group describes what you are reaching for, and forcing those to be one
+ * word would make both worse.
+ */
+export const MOMENT_GROUPS: readonly {
+  id: string;
+  title: string;
+  /** What is on screen when you want this group. */
+  when: string;
+  names: readonly DesignName[];
+}[] = [
+  {
+    id: 'appears',
+    title: 'Something appears',
+    when: 'A logo lands, text pops in, an element enters',
+    names: ['impact', 'thud', 'clank', 'pop', 'bell', 'glass', 'wood', 'pipe', 'thunk'],
+  },
+  {
+    id: 'moves',
+    title: 'Something moves',
+    when: 'A pan, a swipe, a camera move, an element travelling',
+    names: ['whoosh', 'swipe', 'flutter', 'wobble', 'zip'],
+  },
+  {
+    id: 'builds',
+    title: 'Something builds',
+    when: 'Before a reveal, a countdown, a push in',
+    names: ['riser', 'swell', 'reverse', 'swarm', 'shimmer'],
+  },
+  {
+    id: 'lands',
+    title: 'Something lands hard',
+    when: 'The hero moment, the one that has to be felt',
+    names: ['slam', 'metal', 'sub', 'rumble'],
+  },
+  {
+    id: 'there',
+    title: 'Something is there',
+    when: 'A bed under a scene, a room, weather',
+    names: ['drone', 'rain', 'fire', 'gravel', 'pour', 'motor'],
+  },
+  {
+    id: 'small',
+    title: 'A small thing happens',
+    when: 'A tick, a counter, a cursor, interface sound',
+    names: ['click', 'tick', 'beep', 'chirp', 'string', 'wire', 'ratchet', 'clockwork'],
+  },
+  {
+    id: 'transition',
+    title: 'A transition',
+    when: 'A cut, a wipe, a glitch between two things',
+    names: ['zap', 'glitch', 'static'],
+  },
+];
+
 export type PitchedName = 'piano' | 'guitar';
 
 export interface CueSource {
