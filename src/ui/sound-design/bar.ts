@@ -1,251 +1,71 @@
 import type { SoundDesignSession } from '../../sound-design-session.ts';
 import type { AppState } from '../../store.ts';
-import { COMMON_FPS, timecode } from '../../timeline/project.ts';
-import type { SnapMode } from '../../timeline/types.ts';
-import { button, el, setText, toggleClass } from '../dom.ts';
+import { button, el, setText } from '../dom.ts';
 import type { View } from '../view.ts';
 import { helpButton } from '../help.ts';
+import { waveMark } from '../icons.ts';
 
-/** How many times normal speed a held fast forward runs at. */
-const SHUTTLE_RATE = 6;
-
-const SNAP_MODES: readonly { value: SnapMode; label: string; title: string }[] = [
-  { value: 'frame', label: 'Frame', title: 'Snap to whole frames' },
-  { value: 'beat', label: 'Beat', title: 'Snap to the tempo, for work cut to music' },
-  { value: 'off', label: 'Free', title: 'No snapping' },
-];
-
-export interface SoundDesignBarView extends View {
-  setTime(time: number): void;
-}
+export interface SoundDesignBarView extends View {}
 
 export interface SoundDesignBarOptions {
   /** Put the export options in front. */
   onExport?(): void;
 }
 
-/** Transport, timecode and the settings that decide where a sound can land. */
+/**
+ * The app bar: what is open, and the way out.
+ *
+ * It used to hold the transport, the timecode, the frame rate, the snapping
+ * and two switches, which is everything you touch while you work sitting
+ * above everything you work on. That made sense while there were six screens
+ * and this bar was the part they had in common. There is one screen now.
+ *
+ * So the working controls went down onto the timeline they drive, and what
+ * is left here is what belongs to the piece rather than to the moment: what
+ * is loaded, how to get a file out of it, and where to ask. One row, nothing
+ * in it that changes while the playhead moves, and room enough that nothing
+ * has to be measured against a breakpoint to fit.
+ */
 export function createSoundDesignBar(
   session: SoundDesignSession,
   options: SoundDesignBarOptions = {},
 ): SoundDesignBarView {
-  const clock = el('div', { class: 'sound-design-bar__clock', text: '0:00:00' });
-  const total = el('div', { class: 'sound-design-bar__total', text: '0:00:00' });
-
-  const play = button(
-    { class: 'play-btn', title: 'Play or pause (Space)', on: { click: () => session.togglePlay() } },
-    [el('i', { class: 'play-btn__glyph' })],
-  );
-
-  /** A small round transport button, which is most of this bar. */
-  const round = (glyph: string, title: string, onClick: () => void): HTMLButtonElement =>
-    button({ class: 'round-btn', title, on: { click: onClick } }, [
-      el('span', { class: 'round-btn__glyph', text: glyph }),
-    ]);
-
-  /*
-   * The glyphs are built from plain triangles and bars rather than from the
-   * transport characters that look right in a code editor.
-   *
-   * U+23EA and its neighbours carry an emoji presentation by default, so a
-   * browser that has a colour font renders two of the nine buttons in orange
-   * and leaves the rest grey. Doubling a triangle and putting a bar beside it
-   * says the same thing in characters that have only one way of being drawn.
-   */
-  const back = round('◀', 'Back one frame (left arrow)', () => session.stepFrames(-1));
-  const forward = round('▶', 'On one frame (right arrow)', () => session.stepFrames(1));
-  const toStart = round('❘◀', 'Back to the start', () => session.seek(0));
-  const stop = round('■', 'Stop, and go back to where play started', () => session.stop());
-  const prev = round('❘◀◀', 'The sound before this one', () => session.toSound(-1));
-  const next = round('▶▶❘', 'The sound after this one', () => session.toSound(1));
-
   /**
-   * Fast forward and rewind, which run while they are held.
+   * The name of the clip being worked on, which is what a title bar is for.
    *
-   * Held rather than pressed, because what it is for is finding a moment by
-   * watching the picture go past. Pointer capture is what makes letting go
-   * outside the button still stop it — without it, releasing anywhere else
-   * leaves the clip running away.
+   * Nothing said what was loaded anywhere in the app. On a second pass over
+   * a folder of takes that is the one thing you want the window to tell you
+   * without being asked.
    */
-  const shuttle = (glyph: string, title: string, rate: number): HTMLButtonElement => {
-    const node = round(glyph, title, () => {});
-    node.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      node.setPointerCapture(event.pointerId);
-      session.shuttle(rate);
-    });
-    const stopIt = (): void => session.stopShuttle();
-    node.addEventListener('pointerup', stopIt);
-    node.addEventListener('pointercancel', stopIt);
-    node.addEventListener('lostpointercapture', stopIt);
-    return node;
-  };
+  const title = el('div', { class: 'appbar__title', text: 'No video loaded' });
 
-  const rewind = shuttle('◀◀', 'Hold to run backwards', -SHUTTLE_RATE);
-  const fastForward = shuttle('▶▶', 'Hold to run forwards', SHUTTLE_RATE);
-
-  /**
-   * Record: with this on, whatever you play lands on the timeline.
-   *
-   * The drums, the keys and the guitar alike, wherever you play them from.
-   * It does not need the transport running — unarmed it is a pass you play
-   * in against the picture, and standing still it drops everything at the
-   * same moment, which is occasionally what you want.
-   */
-  const record = button(
-    {
-      class: 'round-btn round-btn--rec',
-      title:
-        'Record: what you play on the drums, keys or guitar lands on the ' +
-        'timeline at the playhead',
-      on: { click: () => session.toggleArmed() },
-    },
-    [el('span', { class: 'round-btn__glyph', text: '●' })],
-  );
-
-  /**
-   * Put the video in a window that floats over everything.
-   *
-   * The big stage above the timeline is usually what you want. This is for
-   * when you would rather have the height: with the clip in a window the
-   * stage is gone rather than empty, and all of it goes to the lanes.
-   */
-  const videoWindow = button(
-    {
-      class: 'chip chip--sm',
-      title: 'Float the video in a small window instead of the stage above',
-      on: { click: () => session.toggleVideoWindow() },
-    },
-    ['Window'],
-  );
-
-  /**
-   * A frame rate with its unit, so nothing has to stand beside it saying so.
-   *
-   * "FPS" used to be a separate word to the left of the box, which is a
-   * label, a gap and two more things to look at in a bar that had no room
-   * for any of them. In the option itself it costs four characters and
-   * reads better besides. The value stays the bare number, so choosing an
-   * option puts back exactly the rate that was measured.
-   */
-  const fpsLabel = (rate: number): string => `${rate} fps`;
-
-  const fps = el('select', { class: 'sound-design-bar__select', title: 'Frame rate' }) as HTMLSelectElement;
-  for (const rate of COMMON_FPS) {
-    fps.appendChild(el('option', { text: fpsLabel(rate), attrs: { value: String(rate) } }));
-  }
-  fps.addEventListener('change', () => session.setFps(Number(fps.value)));
-
-  const snapButtons = SNAP_MODES.map((mode) =>
-    button(
-      { class: 'cell', title: mode.title, on: { click: () => session.setSnap(mode.value) } },
-      [el('span', { text: mode.label })],
-    ),
-  );
-
-  const reference = button(
-    {
-      class: 'chip chip--sm',
-      title: 'Hear the video’s own sound while you work. It is never exported.',
-      on: {
-        click: () => {
-          session.setReferenceAudio(!session.referenceAudio);
-          toggleClass(reference, 'is-on', session.referenceAudio);
-        },
-      },
-    },
-    ['Ref audio'],
-  );
-
-  /**
-   * The transport, drawn as three things rather than as ten.
-   *
-   * The order was already right — get back, then the mirror around play,
-   * then record — but every button carried its own outline at the same
-   * spacing as its neighbour, so the eye had to read ten circles and work
-   * out which of the six triangles it wanted. Grouped, there is one outline
-   * per job: the pair that stops you, the run that moves you, and the one
-   * that writes. Nothing was taken away and nothing moved.
-   */
-  const cluster = (...within: HTMLElement[]): HTMLElement =>
-    el('div', { class: 'transport__grp' }, within);
-
-  /**
-   * Getting a file out, from where it cannot be scrolled away from.
-   *
-   * It lived at the bottom of a panel nearly twice the height of the window,
-   * under the library, the recordings and the layers. The last thing you do
-   * was the hardest thing to reach.
-   */
   const exportButton = button(
     {
-      class: 'btn-accent sound-design-bar__export',
+      class: 'btn-accent appbar__export',
       title: 'Write the piece out as a file',
       on: { click: () => options.onExport?.() },
     },
     ['Export'],
   );
 
-  const root = el('header', { class: 'topbar sound-design-bar' }, [
-    /*
-     * The "?" without the name beside it.
-     *
-     * The bar used to say "Sound design" as well as the rail. That was fair
-     * while the rail button was only a label, and became a hundred and twelve
-     * pixels of duplicate signage the moment that button was given a job. The
-     * bar needs those pixels: it is one row that cannot wrap, and what runs
-     * off the right of it is silently gone.
-     */
-    helpButton('transport', 'the transport'),
-    el('div', { class: 'topbar__divider' }),
-    el('div', { class: 'transport' }, [
-      cluster(toStart, stop),
-      cluster(prev, rewind, back, play, forward, fastForward, next),
-      cluster(record),
-    ]),
-    el('div', { class: 'sound-design-bar__time' }, [
-      clock,
-      el('div', { class: 'sound-design-bar__sep', text: '/' }),
-      total,
-    ]),
-    el('div', { class: 'topbar__divider' }),
-    fps,
-    el('div', { class: 'micro-label sound-design-bar__snap', text: 'Snap' }),
-    el('div', { class: 'sound-design-bar__snaps' }, snapButtons),
+  const root = el('header', { class: 'topbar appbar' }, [
+    el('div', { class: 'appbar__mark' }, [waveMark([6, 14, 9, 4], 2, 2, 3)]),
+    title,
     el('div', { class: 'topbar__spacer' }),
-    videoWindow,
-    reference,
     exportButton,
+    helpButton('start', 'this app'),
   ]);
 
   return {
     el: root,
     update(state: AppState) {
-      const { project } = state;
-      setText(total, timecode(project.duration, project.fps));
-      toggleClass(play, 'is-playing', session.playing);
-      toggleClass(record, 'is-on', state.armed);
-      toggleClass(videoWindow, 'is-on', state.videoWindow);
-      // Nothing to step between, nothing to float, nothing to stop.
-      const has = state.videoReady;
-      for (const node of [stop, prev, next, rewind, fastForward, toStart]) {
-        node.disabled = !has;
-      }
-      videoWindow.disabled = !has;
-      prev.disabled = !has || !project.cues.length;
-      next.disabled = prev.disabled;
-      snapButtons.forEach((node, i) => toggleClass(node, 'is-on', project.snap === SNAP_MODES[i].value));
-      const value = String(project.fps);
-      if (fps.value !== value) {
-        // A measured rate may not be one of the standard ones.
-        if (!Array.from(fps.options).some((o) => o.value === value)) {
-          fps.appendChild(el('option', { text: fpsLabel(project.fps), attrs: { value } }));
-        }
-        fps.value = value;
-      }
-    },
-    setTime(time: number) {
-      setText(clock, timecode(time, session.project.fps));
+      const name = state.project.videoName;
+      setText(title, name ?? 'No video loaded');
+      // Nothing to write until something is on the timeline. The card in the
+      // panel says the same thing at more length; this is the button that
+      // opens it, so it goes quiet on the same terms.
+      exportButton.disabled = state.project.cues.length === 0;
+      void session;
     },
   };
 }

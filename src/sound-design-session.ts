@@ -116,7 +116,7 @@ const AUDIO_FILE = /\.(wav|wave|mp3|m4a|aac|ogg|oga|opus|flac|aif|aiff|webm)$/i;
 const TABLE_FILE = /\.(csv|tsv)$/i;
 
 import { rebuild, type Made } from './audio/rebuild.ts';
-import { emptyDetection, type MomentState, type PanelTab, type Store } from './store.ts';
+import { emptyDetection, type MomentState, type PanelTab, type Store, type TimeRange } from './store.ts';
 
 export type ExportFormat = 'wav' | 'mp3';
 
@@ -1674,6 +1674,47 @@ export class SoundDesignSession {
     this.#store.set({
       selection: [],
       status: chosen.size === 1 ? 'sound removed' : `${chosen.size} sounds removed`,
+    });
+  }
+
+  // ---------- the range tool ----------
+
+  /** The stretch of time drawn with the range tool, or null to clear it. */
+  setRange(range: TimeRange | null): void {
+    this.#store.set({ range });
+  }
+
+  /**
+   * Clear every sound inside the drawn range.
+   *
+   * The range is a selection, so Delete does to it what Delete does to chosen
+   * sounds. A sound counts as inside when it starts inside: judging it by the
+   * whole of its length would take out a long tail that merely reaches into
+   * the range from before it, which is not what was drawn round.
+   */
+  clearRange(): void {
+    const range = this.#store.state.range;
+    if (!range) return;
+    const from = Math.min(range.from, range.to);
+    const to = Math.max(range.from, range.to);
+
+    const going = this.project.cues.filter((cue) => {
+      const at = cueStart(cue);
+      return at >= from && at <= to;
+    });
+    if (!going.length) {
+      this.#store.set({ status: 'nothing in that stretch' });
+      return;
+    }
+
+    const gone = new Set(going.map((cue) => cue.id));
+    this.#setProject(
+      { ...this.project, cues: this.project.cues.filter((cue) => !gone.has(cue.id)) },
+      `range:${from.toFixed(2)}-${to.toFixed(2)}`,
+    );
+    this.#store.set({
+      selection: [],
+      status: gone.size === 1 ? 'sound removed' : `${gone.size} sounds removed`,
     });
   }
 

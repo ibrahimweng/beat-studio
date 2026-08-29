@@ -29,6 +29,19 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: 'tools',
+    title: 'The tools, down the left',
+    rows: [
+      ['Move (V)', 'Choose sounds, drag them along, and drag a sound’s far edge to change how long it lasts. This is what the timeline has always done, and it is what you start on.'],
+      ['Range (T)', 'Drag out a stretch of time across the lanes. Delete clears every sound that starts inside it. Escape lets it go.'],
+      ['Cut (C)', 'Click a sound anywhere along its length to cut it short there. A sound anchored to its end keeps landing on its marker and loses its front instead.'],
+      ['Hand (H)', 'Drag the timeline along without moving anything on it.'],
+      ['Zoom (Z)', 'Click to go in, hold alt and click to go out, or drag across a stretch to fill the width with it.'],
+      ['The letters', 'V, T, C, H and Z change tool, the way they do in an edit suite. They are printed on the buttons so you only have to read them once.'],
+      ['While record is armed', 'The letters play the drums instead, because thirteen drum pads and five tools want the same keys. Record decides which. Disarm it and the letters are tools again.'],
+    ],
+  },
+  {
     id: 'transport',
     title: 'Transport and the playhead',
     rows: [
@@ -38,6 +51,10 @@ const SECTIONS: readonly Section[] = [
       ['The bar and arrow, at the far left', 'Back to the start.'],
       ['The two single arrows', 'One frame back or on, either side of play. The left and right arrow keys do the same.'],
       ['Hold rewind or fast forward', 'Runs through the clip at six times speed while you hold it, so you can find a moment by watching.'],
+      ['J, K and L', 'Run backwards, stop, run forwards. Press J or L again to go faster — two, four, then eight times. This is the quick way to find a moment.'],
+      ['Home and End', 'To the start of the clip, or to the end of it.'],
+      ['S', 'Cycles the snapping: frame, then beat, then off.'],
+      ['Where this row is', 'On the timeline rather than across the top, because it drives the timeline. Floating the video into its own window takes the picture away and leaves these where they are.'],
       ['The skip buttons', 'At the two ends of the middle group: jump to the sound before or after the playhead, and select it. This is how you step through your work.'],
       ['Record', 'On its own at the right. With this on, tapping a pad key drops that sound at the playhead as the video runs, so a pass can be played in by hand. The button fills red while it is on.'],
       ['Drag the ruler', 'Moves the playhead. Dragging while it is playing scrubs and then picks up where it was.'],
@@ -193,7 +210,7 @@ const SECTIONS: readonly Section[] = [
       ['Ctrl or Cmd and C, X, V', 'Copy, cut and paste. Paste lands at the playhead.'],
       ['Ctrl or Cmd and D', 'Duplicate, laid out straight after the original.'],
       ['Escape', 'Deselect'],
-      ['Pad keys, such as D or J', 'Drop that drum sound at the playhead'],
+      ['Pad keys, such as D or J', 'Drop that drum sound at the playhead. Only while record is armed: disarmed, the letters are the tools instead.'],
     ],
   },
   {

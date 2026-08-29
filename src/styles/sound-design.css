@@ -153,151 +153,6 @@
   color: #fff;
 }
 
-/*
- * The bar's own spacing, and what happens when there is not enough of it.
- *
- * Ten pixels between every one of these is more air than a row this dense
- * can afford; eight reads the same and gives back the width of a button.
- * The row is one line that cannot wrap, so past some window width something
- * has to give. It used to be whatever sat furthest right — "Window" and
- * "Ref audio" were quietly cut off with nothing to say they had been. Now
- * it scrolls: rare, because the breakpoint below buys back the common case,
- * but when it happens the controls are still there to be reached.
- */
-.sound-design-bar {
-  gap: 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.sound-design-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.sound-design-bar__snaps {
-  display: flex;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-
-.sound-design-bar__snap {
-  margin-left: 2px;
-}
-
-.sound-design-bar__time {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin-left: 2px;
-}
-
-/*
- * Figures that all take the same width.
- *
- * A running clock whose digits are different widths shifts sideways as it
- * counts, and this one sits between two things that must not move. It also
- * makes the width predictable, which matters more now the format carries
- * hours: the old min-width here was cut for a seven character reading and
- * meant nothing against eleven.
- */
-.sound-design-bar__clock {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ac);
-  font-variant-numeric: tabular-nums;
-}
-
-.sound-design-bar__sep,
-.sound-design-bar__total {
-  font-size: 12px;
-  color: var(--txt-3);
-  font-variant-numeric: tabular-nums;
-}
-
-/*
- * The frame rate.
- *
- * A platform select draws its own arrow, which is the one piece of chrome in
- * this bar that came from somewhere else and looked it. Drawing the caret
- * here costs eight pixels of padding and matches the cells beside it. The
- * text carries "fps", so there is no separate label to keep beside it.
- */
-.sound-design-bar__select {
-  height: 26px;
-  border-radius: var(--r-6);
-  border: 1px solid var(--line);
-  background-color: var(--panel);
-  color: var(--txt);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 20px 0 7px;
-  appearance: none;
-  flex: 0 0 auto;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--txt-3) 50%),
-    linear-gradient(135deg, var(--txt-3) 50%, transparent 50%);
-  background-position:
-    calc(100% - 12px) calc(50% - 1px),
-    calc(100% - 8px) calc(50% - 1px);
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
-}
-
-.sound-design-bar__select:hover {
-  border-color: var(--ac-line);
-}
-
-/*
- * What goes when the window is not wide enough for all of it.
- *
- * The bar is one fixed row that clips what does not fit, so past a certain
- * width it was silently eating "Window" and "Ref audio" off the right-hand
- * end — controls that were there a moment ago and then simply were not. A
- * word is the right thing to lose first: the three snap cells still say
- * Frame, Beat and Free, and still carry what they do on hover.
- */
-@media (max-width: 1500px) {
-  .sound-design-bar__snap {
-    display: none;
-  }
-
-  .sound-design-bar .chip--sm {
-    padding: 0 8px;
-  }
-
-  /*
-   * Tighter between the groups, not inside them.
-   *
-   * The bar is one row that cannot wrap. It scrolls sideways rather than
-   * truncating, but with the scrollbar hidden, so what runs off the right of
-   * it is reachable only by somebody who thinks to swipe at it. At 1440, the
-   * commonest laptop, it was over by forty six pixels before any of this and
-   * ate "Ref audio". Two pixels off each gap between groups buys more than
-   * that back, and is invisible.
-   */
-  .sound-design-bar {
-    gap: 6px;
-  }
-
-  /* The rules between groups earn less than the pixels they cost here. */
-  .sound-design-bar .topbar__divider {
-    margin: 0 1px;
-  }
-
-  /*
-   * A point off the clock, on the screens that cannot afford it.
-   *
-   * Timecode grew from seven characters to eleven when it gained hours, which
-   * is real width in a row that has none to give. Above 1500 the reading keeps
-   * its full size; below it, a point buys back most of what the hours cost.
-   */
-  .sound-design-bar__clock {
-    font-size: 14px;
-  }
-}
-
 /* ---------- timeline ---------- */
 
 /* Height is set by dragging the divider above it, and remembered. */
@@ -912,17 +767,12 @@
 }
 
 /* The sensitivity only means something once the video has been read. */
-.tl__detect .strip__sensitivity,
-.tl__detect .hint,
-.tl__detect .chip:nth-child(4),
-.tl__detect .chip:nth-child(5) {
+/* Nothing to tune or clear until a scan has been done. */
+.tl__detect .tl__after-scan {
   display: none;
 }
 
-.tl__detect.is-ready .strip__sensitivity,
-.tl__detect.is-ready .hint,
-.tl__detect.is-ready .chip:nth-child(4),
-.tl__detect.is-ready .chip:nth-child(5) {
+.tl__detect.is-ready .tl__after-scan {
   display: revert;
 }
 
@@ -1980,21 +1830,187 @@
   text-wrap: pretty;
 }
 
+
+
+/* ---------- the app bar, and the transport that left it ---------- */
+
 /*
- * The way out of the app, pinned to the right edge of a bar that scrolls.
+ * What is left above: the piece, and the way out of it.
  *
- * Narrow enough and the row is wider than the window; it scrolls, but the
- * scrollbar is hidden, so anything past the edge is gone as far as most people
- * are concerned. Sticky keeps this one where the eye already is while the rest
- * of the bar slides under it. The button is already opaque, so nothing reads
- * through it; the shadow is only so the transport does not appear to butt
- * against its left edge on the way past.
+ * Everything that changes while the playhead moves went down to the timeline,
+ * so this row is short by construction rather than by breakpoint. It was one
+ * line that could not wrap, silently losing whatever ran off the right; there
+ * is now nothing near enough the edge for that to be a question.
  */
-.sound-design-bar__export {
-  position: sticky;
-  right: 0;
-  z-index: 1;
+.appbar {
+  gap: 10px;
+}
+
+.appbar__mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-6);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
+}
+
+.appbar__title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--txt-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appbar__export {
+  flex: 0 0 auto;
+}
+
+/*
+ * The transport, docked to the timeline it drives.
+ *
+ * Its own row above the timeline's toolbar rather than folded into it: these
+ * are the controls a hand rests on, and putting them in the same line as the
+ * scan settings and the zoom would make one long row of unrelated things,
+ * which is what the top of the window used to be.
+ */
+.transport-row {
+  flex: 0 0 auto;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.transport-row::-webkit-scrollbar {
+  display: none;
+}
+
+.transport__time {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   margin-left: 2px;
-  box-shadow: -8px 0 8px -6px var(--bg);
+  flex: 0 0 auto;
+}
+
+/*
+ * Figures that all take the same width, so a running clock does not shift
+ * sideways as it counts and the things beside it do not move with it.
+ */
+.transport__clock {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ac);
+  font-variant-numeric: tabular-nums;
+}
+
+.transport__sep,
+.transport__total {
+  font-size: 12px;
+  color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.transport__select {
+  height: 26px;
+  flex: 0 0 auto;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--panel-2);
+  color: var(--txt-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 12px, calc(100% - 9px) 12px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.transport__snap {
+  flex: 0 0 auto;
+}
+
+.transport__snaps {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+/* ---------- what the tools draw ---------- */
+
+/*
+ * The stretch of time the range tool has drawn.
+ *
+ * Lighter than the marquee that chooses sounds, and it stays on screen after
+ * the pointer comes up, because it is a standing selection rather than a
+ * gesture in progress. It never takes the pointer: what is under it has to
+ * stay clickable.
+ */
+.tl__range {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  background: color-mix(in oklab, var(--ac) 14%, transparent);
+  border-left: 1px solid var(--ac);
+  border-right: 1px solid var(--ac);
+}
+
+/*
+ * The pointer says which tool is holding it, over the whole panel.
+ *
+ * Set from the root by the tool rather than on each of the dozen things
+ * underneath, so a tool cannot be half applied.
+ */
+.tl[data-tool='range'] .tl__viewport {
+  cursor: text;
+}
+
+.tl[data-tool='cut'] .tl__viewport {
+  cursor: crosshair;
+}
+
+/*
+ * Under the blade, the whole of a sound can be clicked; otherwise only its head.
+ *
+ * A drawn sound takes no pointer events at all, so that a long tail lying
+ * across the lane never stops you placing something underneath it. That is
+ * right for every tool but this one, where the tail is exactly what you are
+ * aiming at: you cut a sound at a point along its length, and most of that
+ * length is tail. Capture phase cannot rescue this -- an element with no
+ * pointer events is not in the event's path at all, so the press arrives
+ * addressed to the empty lane behind it.
+ */
+.tl[data-tool='cut'] .cue {
+  pointer-events: auto;
+}
+
+.tl[data-tool='hand'] .tl__viewport {
+  cursor: grab;
+}
+
+.tl[data-tool='zoom'] .tl__viewport {
+  cursor: zoom-in;
+}
+
+.tl.is-grabbing .tl__viewport {
+  cursor: grabbing;
 }
