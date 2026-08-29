@@ -1800,6 +1800,32 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
        * it is wanted, and inside it the groups still open one at a time.
        */
       foldable('kinds', 'Browse', 'library', browseBody, { marginTop: '8px' }, true),
+      /*
+       * Where the sound lands, above the things that get a sound into the app.
+       *
+       * This used to be the last thing on the page, under the pack loader, the
+       * recording importer and the extractor. Those are setup: most people run
+       * them once, and plenty never run them at all. The layer is the opposite
+       * — it is the answer to "where does the next thing I click go", which
+       * matters on every single placement.
+       *
+       * On an empty session that put it at 510px rather than 333px, which is
+       * on screen either way. What makes it worth moving is that the lists it
+       * sat under start empty and grow. Six hundred pixels of loaded packs —
+       * not many — used to carry it from 510 to 1110 and off the bottom of a
+       * 900px window; from here it does not move at all. The order was getting
+       * worse the more somebody used the app, which is backwards.
+       *
+       * It goes under the ways of finding a sound rather than above them,
+       * because finding is still what the page is for and the search is what
+       * somebody reaches for first. Everything below is now setup, in one run.
+       */
+      el('div', { class: 'layer-head' }, [
+        heading('On layer', 'timeline', { marginTop: '12px' }),
+        balanceButton,
+      ]),
+      layerRow,
+      layerJobLine,
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
       sampleSections,
@@ -1814,12 +1840,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         helpButton('recordings', 'your own recordings'),
       ]),
       heardBody,
-      el('div', { class: 'layer-head' }, [
-        heading('On layer', 'timeline', { marginTop: '12px' }),
-        balanceButton,
-      ]),
-      layerRow,
-      layerJobLine,
     ]),
   ]);
 
