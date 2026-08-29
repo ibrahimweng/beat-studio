@@ -7,3 +7,7 @@ dist/
 # Vercel
 .vercel
 tools/.wk/
+
+# The assembled design canvas, which bundles the whole editor into one 2.5 MB
+# file. Generated from the .dc.html sources beside it, so it is not kept.
+design/**/beat-studio-*.html

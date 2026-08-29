@@ -8,9 +8,11 @@ Design source for the redesign in `docs/plan-for-newcomers.md`.
   decides what sound is proposed for it.
 - `Rail.dc.html` shows the left rail as it is now and as proposed.
 - `canvas.json` places the three on the canvas.
-- `beat-studio-newcomer-interface.html` is the three of them assembled into one
-  page. It is generated, so edit the files above and assemble it again rather
-  than editing it.
+
+Assembling these into the page that was published produces a single file of
+about two and a half megabytes, because the canvas editor is bundled into it.
+That file is generated and is not kept here: the four above are the source, and
+between them they are under fifty kilobytes.
 
 Colours, type sizes, radii and control heights are taken from
 `src/styles/tokens.css`, `src/styles/layout.css`, `src/styles/controls.css` and
