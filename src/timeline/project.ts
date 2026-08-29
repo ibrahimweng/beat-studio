@@ -170,6 +170,51 @@ export function timecode(time: number, fps: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
 }
 
+/**
+ * Read a length back out of something somebody typed.
+ *
+ * Generous about the shape, because the field this serves shows
+ * `HH:MM:SS:FF` and nobody types four fields to say "thirty seconds". How
+ * many parts there are decides what they mean, counting from the right in
+ * the order a clock is read:
+ *
+ * - `30` — thirty seconds
+ * - `1:30` — a minute and a half
+ * - `1:20:00` — an hour and twenty minutes
+ * - `00:01:30:12` — a minute, thirty seconds and twelve frames
+ *
+ * Four is the app's own format, so a value copied out of the timecode goes
+ * back in unchanged. Three is a wall clock rather than minutes and frames,
+ * because that is what three numbers separated by colons means to everybody
+ * outside an edit suite and to most people inside one.
+ *
+ * Null for anything that is not a length, rather than a guess: a field that
+ * silently reads "abc" as zero is a field that empties the timeline.
+ */
+export function parseTimecode(text: string, fps: number): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split(':');
+  if (parts.length > 4) return null;
+  if (parts.some((part) => !/^\d*\.?\d+$/.test(part.trim()))) return null;
+
+  const numbers = parts.map((part) => Number(part));
+  if (numbers.some((value) => !Number.isFinite(value) || value < 0)) return null;
+
+  const rate = fps || DEFAULT_FPS;
+  switch (numbers.length) {
+    case 1:
+      return numbers[0];
+    case 2:
+      return numbers[0] * 60 + numbers[1];
+    case 3:
+      return numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
+    default:
+      return numbers[0] * 3600 + numbers[1] * 60 + numbers[2] + numbers[3] / rate;
+  }
+}
+
 /** Cues that should be heard, taking mute and solo into account. */
 export function audibleCues(project: Project): Cue[] {
   const soloed = project.layers.filter((l) => l.solo).map((l) => l.id);
