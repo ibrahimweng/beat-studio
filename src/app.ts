@@ -131,6 +131,41 @@ export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): (
    */
   root.appendChild(el('div', { class: 'frame' }, [keepNotice.el, shell]));
 
+  /*
+   * The tool the pointer is holding, written once for the whole screen.
+   *
+   * An attribute on the shell rather than a cursor set on each of the dozen
+   * surfaces underneath, so a tool cannot be half applied: whatever is under
+   * the pointer, the shape it takes says which tool is held. It sat on the
+   * timeline until the picture gained a zoom of its own, and a stage that is
+   * not inside the timeline cannot read an attribute that is.
+   */
+  const writeTool = (state: AppState): void => {
+    shell.dataset.tool = state.tool;
+  };
+  // Written now as well as on every change: subscribing does not deliver the
+  // state as it stands, and a shell with no tool on it at all is a shell that
+  // matches "not the move tool".
+  writeTool(session.store.state);
+  session.store.subscribe(writeTool);
+
+  /*
+   * Alt, watched only so the zoom tool can say which way it will go.
+   *
+   * On the window rather than on a panel because a modifier held down before
+   * the pointer arrives is the common case, and an element only hears about
+   * keys while it has focus. Both edges are needed: releasing alt somewhere
+   * else would otherwise leave the cursor promising a zoom out that is no
+   * longer what a click does. Blur clears it for the same reason -- alt is
+   * often what took the window away.
+   */
+  const readAlt = (event: KeyboardEvent): void => {
+    shell.classList.toggle('is-alt', event.altKey);
+  };
+  window.addEventListener('keydown', readAlt);
+  window.addEventListener('keyup', readAlt);
+  window.addEventListener('blur', () => shell.classList.remove('is-alt'));
+
   /**
    * Whether the video is floating, which is the one thing that changes the
    * layout: with the clip in a window the stage above the lanes is not just
@@ -438,16 +473,18 @@ function editKey(soundDesign: SoundDesignSession, event: KeyboardEvent): boolean
  * Holding shift moves the selected sound instead, so a hit that feels late
  * can be pulled back without losing your place.
  *
- * The letters are shared, and the record button decides who has them.
+ * Some letters are shared, and the record button decides who has those.
  *
- * There are thirteen drum pads on the letter keys and an editor wants those
- * same letters for its tools: T, H, J, K, L and S were claimed by both. That
- * is not a clash to arbitrate key by key, it is two modes -- you are either
- * playing something in or you are editing, and never both in the same
- * keystroke. Record already said as much on its own tooltip and then did
- * nothing at all, so it is what says which. Armed, the letters are drums;
- * otherwise they are tools, which is what somebody arriving from an edit
- * suite will try first.
+ * There are thirteen drum pads on the letter keys and an editor wants some of
+ * the same letters for its tools. Six are claimed twice: T, H, J, K, L and S.
+ * You are either playing something in or you are editing, never both in the
+ * same keystroke, and record already said as much on its own tooltip -- so it
+ * is what settles those six. Armed they are drums; otherwise they are tools,
+ * which is what somebody arriving from an edit suite will try first.
+ *
+ * Only those six, though. C, V, Z and P are not pads, and arming once took
+ * them anyway: reaching for the blade with record on did nothing at all and
+ * said nothing about why. A clash is settled where there is one.
  */
 function soundDesignKey(
   session: Session,
@@ -510,15 +547,24 @@ function soundDesignKey(
     return;
   }
 
-  /* ---- armed: the letters are drums ---- */
-
+  /*
+   * Armed: the letters that are drums are drums. The rest are still tools.
+   *
+   * This used to swallow every letter while the record button was on, which
+   * is more than the clash needs. Only six letters are claimed twice -- T, H,
+   * J, K, L and S -- and C, V, Z and P are not pads at all, so arming meant
+   * giving up four tools to a conflict they were never in. Reaching for the
+   * blade with record on did nothing and said nothing.
+   */
   if (session.state.armed) {
     const pad = PAD_KEYS[lower];
-    if (pad && !event.repeat) {
-      event.preventDefault();
-      soundDesign.addCueAtPlayhead({ kind: 'kit', name: pad });
+    if (pad) {
+      if (!event.repeat) {
+        event.preventDefault();
+        soundDesign.addCueAtPlayhead({ kind: 'kit', name: pad });
+      }
+      return;
     }
-    return;
   }
 
   /* ---- otherwise: the letters are an editor's ---- */

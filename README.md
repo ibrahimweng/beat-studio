@@ -99,7 +99,10 @@ to decode. The blade itself looking for `.tl__cue`, a class that has never
 existed. A panel dropped into the empty column landing nowhere, because tearing
 down the drag collapsed that column before the drop was worked out. Six panel
 tabs overflowing their column into a scrollbar that had been switched off, so
-two panels could not be opened at all. None of those is reachable from Node,
+two panels could not be opened at all. Every tool writing a point into a
+layer's automation, because the handler that routes them stepped aside for a
+curve lane and the curve editor asks only whether the pen is held — so panning
+across an open layer edited the piece. None of those is reachable from Node,
 none is a type error, and every one of them shipped.
 
 Each test names the fault it is for. `test/browser/app.ts` holds what they all
@@ -108,11 +111,20 @@ seconds of canvas recorded through `MediaRecorder` in the page — about ninety
 kilobytes, made in under a second, and no binary in the repository that
 somebody has to take on trust.
 
+`tool-scope.spec.ts` is the odd one out and worth knowing about: it is a tool
+crossed with a surface rather than a tool on its own, because the tools were
+right about what they do and wrong about where. Every case is "this tool, on
+that surface, does this and nothing else".
+
 Every test here was checked the same way as the ones above, by putting the
-fault back and watching it fail, and writing them found two more: the transport
-was hiding its last three controls behind a scrollbar it had disabled, and the
-frame rate measurement that runs just after a clip loads was undoing a play
-started while it ran.
+fault back and watching it fail, and writing them found four more: the
+transport was hiding its last three controls behind a scrollbar it had
+disabled; the frame rate measurement that runs just after a clip loads was
+undoing a play started while it ran; the picture could be dragged off its own
+frame, because the pan was clamped against the stage box rather than the
+video's and the stage carries fourteen pixels of padding; and zooming back out
+never quite reached Fit, since 2.56 divided by 1.6 twice is 1.0000000000000002
+rather than 1.
 
 What is not tested yet: the parts that reach the audio graph.
 

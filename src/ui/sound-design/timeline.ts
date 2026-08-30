@@ -325,9 +325,26 @@ export function createTimeline(
     const tool = session.store.state.tool;
     if (tool === 'move' || event.button !== 0) return;
 
-    // Opening and closing a curve lane stays available under every tool: it
-    // is about what you can see rather than about what you are editing.
-    if ((event.target as Element | null)?.closest?.('.tl__auto')) return;
+    /*
+     * An open curve lane is the pen's surface, and only the pen's.
+     *
+     * Every tool used to be let through here, on the reasoning that opening
+     * and closing a lane is about what you can see rather than what you are
+     * editing. What that actually did was hand the press to the curve
+     * editor, which asks only whether the pen is held and treats everything
+     * else as "add a point and drag it" -- so panning across a layer with
+     * its curves open wrote a point into the automation, and so did zooming,
+     * and so did the blade. A tool that quietly edits the piece while doing
+     * its own job is worse than one that does nothing.
+     *
+     * So the lanes are surfaces like any other now: the hand pans over them,
+     * zoom zooms, and the two tools that draw on a curve -- the pen here,
+     * Move by falling through above -- are the two that reach it. Lanes are
+     * opened from the A beside the layer's name, which works whatever is
+     * held.
+     */
+    const onOpenCurve = (event.target as Element | null)?.closest?.('.tl__auto:not(.is-shut)');
+    if (tool === 'pen' && onOpenCurve) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -337,9 +354,9 @@ export function createTimeline(
     if (tool === 'range') return rangeFrom(event);
     if (tool === 'cut') return cutAt(event);
     if (tool === 'pen') {
-      // The pen only has anywhere to draw on an open curve lane, and those
-      // are excluded above, so arriving here means it was used on the lanes
-      // themselves. Say where it works rather than swallowing the press.
+      // Arriving here is the pen used anywhere but an open curve, since that
+      // is the one case returned above. Say where it works rather than
+      // swallowing the press.
       session.store.set({
         status: 'the pen draws on a layer’s curve lanes — open them with A beside the layer’s name',
       });
@@ -466,7 +483,13 @@ export function createTimeline(
    */
   function cutAt(event: PointerEvent): void {
     const node = (event.target as Element | null)?.closest?.('.cue');
-    if (!node) return;
+    // Said rather than ignored: a blade that does nothing on empty lane looks
+    // exactly like a blade that is broken, which is how the one that really
+    // was broken went a whole release without being noticed.
+    if (!node) {
+      session.store.set({ status: 'nothing there to cut — the blade shortens a sound you click on' });
+      return;
+    }
     const id = (node as HTMLElement).dataset.cue;
     const drawn = id ? cueNodes.get(id) : undefined;
     if (!id || !drawn) return;
@@ -478,24 +501,6 @@ export function createTimeline(
   }
 
   viewport.addEventListener('pointerdown', toolPress, true);
-
-  /*
-   * Alt, watched only so the zoom tool can say which way it will go.
-   *
-   * On the window rather than the panel because a modifier held down before
-   * the pointer arrives is the common case, and an element only hears about
-   * keys while it has focus. Both edges are needed: releasing alt somewhere
-   * else would otherwise leave the cursor promising a zoom out that is no
-   * longer what a click does. Blur clears it for the same reason -- alt is
-   * often what took the window away.
-   */
-  const readAlt = (event: KeyboardEvent): void => {
-    root.classList.toggle('is-alt', event.altKey);
-  };
-  const clearAlt = (): void => root.classList.remove('is-alt');
-  window.addEventListener('keydown', readAlt);
-  window.addEventListener('keyup', readAlt);
-  window.addEventListener('blur', clearAlt);
 
 
   /* ---------- what you can do with the thing under the pointer ---------- */
@@ -1788,15 +1793,6 @@ export function createTimeline(
       paint(state.project);
       undo.disabled = !session.canUndo;
       redo.disabled = !session.canRedo;
-
-      /*
-       * The tool decides what the pointer looks like over the whole panel.
-       *
-       * A class on the root rather than a cursor set on each of the dozen
-       * things underneath, so a tool cannot be half applied: whatever is
-       * under the pointer, the shape it takes says which tool is holding it.
-       */
-      root.dataset.tool = state.tool;
 
       const { range } = state;
       if (range && state.tool === 'range') {
