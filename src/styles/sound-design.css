@@ -39,6 +39,35 @@
   place-items: center;
   background: var(--stage);
   padding: 14px;
+  /* A picture taken in past Fit is larger than the stage by definition, and
+     without this it spills over the timeline below it. */
+  overflow: hidden;
+}
+
+/*
+ * The magnification, and the way back from it.
+ *
+ * Only there while it is saying something: at Fit the picture is whole and a
+ * chip reading "100% · Fit" is a control that does nothing next to a label
+ * nobody needs. Bottom right rather than over the middle of the frame, and
+ * faint until it is pointed at, because it sits on top of the work.
+ */
+.vstage__fit {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2;
+  display: none;
+  opacity: 0.72;
+}
+
+.vstage.is-zoomed .vstage__fit {
+  display: inline-flex;
+}
+
+.vstage__fit:hover,
+.vstage__fit:focus-visible {
+  opacity: 1;
 }
 
 .vstage.is-over {
@@ -2070,8 +2099,8 @@
  * which is both the default arrow somebody expects from a selection tool and
  * more informative than one shape over everything.
  */
-.tl[data-tool='range'] .tl__viewport,
-.tl[data-tool='range'] .tl__viewport * {
+.app[data-tool='range'] .tl__viewport,
+.app[data-tool='range'] .tl__viewport * {
   cursor: text;
 }
 
@@ -2094,8 +2123,8 @@
  * says so. Both of these shipped in that state until an image was built from
  * the computed value to see whether it actually loaded.
  */
-.tl[data-tool='cut'] .tl__viewport,
-.tl[data-tool='cut'] .tl__viewport * {
+.app[data-tool='cut'] .tl__viewport,
+.app[data-tool='cut'] .tl__viewport * {
   cursor: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2222%22%20height=%2222%22%20viewBox=%220%200%2022%2022%22%3E%3Cpath%20d=%22M7.4%202h4.2l1.3%208.4H6.1z%22%20fill=%22white%22%20stroke=%22black%22%20stroke-width=%221.2%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M9.5%2011.4V20%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%222.6%22%20stroke-linecap=%22round%22/%3E%3Cpath%20d=%22M9.5%2011.4V20%22%20fill=%22none%22%20stroke=%22white%22%20stroke-width=%221.2%22%20stroke-linecap=%22round%22/%3E%3C/svg%3E') 9 20, crosshair;
 }
 
@@ -2110,17 +2139,17 @@
  * pointer events is not in the event's path at all, so the press arrives
  * addressed to the empty lane behind it.
  */
-.tl[data-tool='cut'] .cue {
+.app[data-tool='cut'] .cue {
   pointer-events: auto;
 }
 
-.tl[data-tool='hand'] .tl__viewport,
-.tl[data-tool='hand'] .tl__viewport * {
+.app[data-tool='hand'] .tl__viewport,
+.app[data-tool='hand'] .tl__viewport * {
   cursor: grab;
 }
 
-.tl[data-tool='zoom'] .tl__viewport,
-.tl[data-tool='zoom'] .tl__viewport * {
+.app[data-tool='zoom'] .tl__viewport,
+.app[data-tool='zoom'] .tl__viewport * {
   cursor: zoom-in;
 }
 
@@ -2130,14 +2159,68 @@
  * The tool does both jobs off one button, so without this the only way to
  * find out which one a click will do is to do it.
  */
-.tl[data-tool='zoom'].is-alt .tl__viewport,
-.tl[data-tool='zoom'].is-alt .tl__viewport * {
+.app[data-tool='zoom'].is-alt .tl__viewport,
+.app[data-tool='zoom'].is-alt .tl__viewport * {
   cursor: zoom-out;
 }
 
 .tl.is-grabbing .tl__viewport,
 .tl.is-grabbing .tl__viewport * {
   cursor: grabbing;
+}
+
+/*
+ * The picture answers to the same two tools, and says so.
+ *
+ * Written against the app rather than the timeline, because the stage is not
+ * inside the timeline and the tool is a property of the whole screen. The
+ * other three are deliberately absent: there is nothing on a frame for a
+ * blade, a time range or a pen to act on, so they keep the plain arrow and
+ * the press says as much in the status line.
+ */
+.app[data-tool='hand'] .vstage,
+.app[data-tool='hand'] .vstage * {
+  cursor: grab;
+}
+
+.vstage.is-grabbing,
+.vstage.is-grabbing * {
+  cursor: grabbing;
+}
+
+.app[data-tool='zoom'] .vstage,
+.app[data-tool='zoom'] .vstage * {
+  cursor: zoom-in;
+}
+
+.app[data-tool='zoom'].is-alt .vstage,
+.app[data-tool='zoom'].is-alt .vstage * {
+  cursor: zoom-out;
+}
+
+/* The Fit chip is a button whatever is held, since it is chrome over the
+   picture rather than part of it. */
+.vstage__fit,
+.app[data-tool] .vstage__fit {
+  cursor: pointer;
+}
+
+/*
+ * The layer column keeps its own pointers, whatever tool is held.
+ *
+ * Renaming a layer, muting it and opening its curves work under every tool,
+ * the way a track header does in an edit suite -- so the column is not a
+ * surface the tools apply to. What it must not do is claim otherwise: it was
+ * showing a text caret over every layer name while the hand or the blade was
+ * held, promising a rename to a pointer that was about to pan.
+ */
+.app:not([data-tool='move']) .tl__gutter,
+.app:not([data-tool='move']) .tl__gutter .tl__layer-name {
+  cursor: default;
+}
+
+.app:not([data-tool='move']) .tl__gutter button {
+  cursor: pointer;
 }
 
 
@@ -2242,8 +2325,8 @@
   cursor: crosshair;
 }
 
-.tl[data-tool='pen'] .tl__viewport,
-.tl[data-tool='pen'] .tl__viewport * {
+.app[data-tool='pen'] .tl__viewport,
+.app[data-tool='pen'] .tl__viewport * {
   cursor: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2222%22%20height=%2222%22%20viewBox=%220%200%2022%2022%22%3E%3Cpath%20d=%22M15.4%202.2%2019%205.8%208.2%2016.6l-4.6%201%201-4.6z%22%20fill=%22white%22%20stroke=%22black%22%20stroke-width=%221.2%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M12.6%205%2016.2%208.6%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%221.1%22/%3E%3C/svg%3E') 3 19, crosshair;
 }
 

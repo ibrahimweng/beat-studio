@@ -115,8 +115,8 @@ export const TOOLS = [
   { id: 'move', key: 'V', name: 'Move', job: 'Choose sounds, drag them, drag their edges to change how long they are' },
   { id: 'range', key: 'T', name: 'Range', job: 'Drag out a stretch of time. Delete clears every sound inside it' },
   { id: 'cut', key: 'C', name: 'Cut', job: 'Click a sound to cut it short at that point' },
-  { id: 'hand', key: 'H', name: 'Hand', job: 'Drag the timeline along without moving anything on it' },
-  { id: 'zoom', key: 'Z', name: 'Zoom', job: 'Click to go in, alt-click to go out, drag to fill the width with a stretch' },
+  { id: 'hand', key: 'H', name: 'Hand', job: 'Drag the timeline along, or the picture once you have gone into it. Nothing on either moves' },
+  { id: 'zoom', key: 'Z', name: 'Zoom', job: 'Click to go in, alt-click to go out. On the timeline, drag to fill the width with a stretch; on the picture, Fit gets the whole frame back' },
   { id: 'pen', key: 'P', name: 'Pen', job: 'Draw a curve by dragging across an open lane, instead of placing points one at a time' },
 ] as const;
 
