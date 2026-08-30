@@ -284,12 +284,21 @@ export function createTransport(session: SoundDesignSession): TransportView {
       toggleClass(play, 'is-playing', session.playing);
       toggleClass(record, 'is-on', state.armed);
       toggleClass(videoWindow, 'is-on', state.videoWindow);
-      // Nothing to step between, nothing to float, nothing to stop.
-      const has = state.videoReady;
+      /*
+       * Something to move about in, which is a piece rather than a clip.
+       *
+       * This was the loaded video, and that was too narrow: a piece has had a
+       * length of its own since it became something you can set, so sound can
+       * be made without a picture. Somebody doing that had a live play button
+       * that did nothing and a stop button greyed out beside it. The window
+       * toggle is the exception, since a window with no picture in it is
+       * nothing at all.
+       */
+      const has = project.duration > 0;
       for (const node of [stop, prev, next, rewind, fastForward, toStart, toEnd]) {
         node.disabled = !has;
       }
-      videoWindow.disabled = !has;
+      videoWindow.disabled = !state.videoReady;
       prev.disabled = !has || !project.cues.length;
       next.disabled = prev.disabled;
       snapButtons.forEach((node, i) => toggleClass(node, 'is-on', project.snap === SNAP_MODES[i].value));

@@ -41,10 +41,23 @@ export const DEFAULT_FPS = 30;
 /** Frame rates worth offering. Anything else can be typed in. */
 export const COMMON_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60] as const;
 
+/**
+ * How long a piece is before anything says otherwise.
+ *
+ * Zero, until sound without a picture became a thing you could do. A piece of
+ * no length has no ruler worth reading, no room to put anything, and nothing
+ * for the transport to run through -- so somebody starting without a clip met
+ * an app that looked broken until they found the length control. Thirty
+ * seconds is a working length for a title card or a sting, and it is replaced
+ * outright the moment a video is loaded, so nobody who starts with a clip
+ * ever sees it.
+ */
+export const DEFAULT_DURATION = 30;
+
 export function emptyProject(): Project {
   return {
     fps: DEFAULT_FPS,
-    duration: 0,
+    duration: DEFAULT_DURATION,
     videoName: null,
     layers: STARTER_LAYERS.map((l) => ({ ...l, muted: false, solo: false, gain: 1, auto: emptyLanes() })),
     cues: [],

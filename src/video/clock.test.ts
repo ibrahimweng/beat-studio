@@ -425,3 +425,72 @@ describe('past the end of the clip', () => {
     expect(it_.video.currentTime).toBeCloseTo(0.75, 3);
   });
 });
+
+/**
+ * With no clip at all, which is the same case arrived at from the other end.
+ *
+ * A piece has had a length of its own since that became something you could
+ * set, so sound can be made without a picture — a sting, a title card, a
+ * logo. Somebody doing that used to press play and get nothing: the button
+ * was live, `video.play()` was refused on an element with no source, and the
+ * refusal was swallowed as though a browser had blocked autoplay. Nothing on
+ * screen said why, and the position never moved.
+ */
+describe('with no clip loaded', () => {
+  it('runs on the audio clock from the first frame', async () => {
+    const one = { ...emptyProject(), duration: 10, cues: [] };
+    const it_ = rig(one, 0);
+    await it_.clock.play();
+    it_.run(1);
+
+    expect(it_.clock.playing, 'it started').toBe(true);
+    expect(it_.clock.time, 'and moved').toBeGreaterThan(0.9);
+  });
+
+  it('queues the cues on the way past', async () => {
+    const one = {
+      ...emptyProject(),
+      duration: 10,
+      cues: [cue({ id: 'c1', time: 0.5, layerId: LAYERS[0] }), cue({ id: 'c2', time: 1.5, layerId: LAYERS[1] })],
+    };
+    const it_ = rig(one, 0);
+    await it_.clock.play();
+    it_.run(2);
+
+    expect(it_.queued.map((q) => q.id)).toEqual(['c1', 'c2']);
+  });
+
+  it('stops at the end of the piece', async () => {
+    const one = { ...emptyProject(), duration: 1, cues: [] };
+    const it_ = rig(one, 0);
+    await it_.clock.play();
+    it_.run(2);
+
+    expect(it_.clock.playing).toBe(false);
+    expect(it_.clock.time).toBeCloseTo(1, 3);
+  });
+
+  it('can be seeked, and holds where it was put', async () => {
+    const one = { ...emptyProject(), duration: 10, cues: [] };
+    const it_ = rig(one, 0);
+    it_.clock.seek(4);
+    expect(it_.clock.time, 'it went there').toBeCloseTo(4, 3);
+
+    await it_.clock.play();
+    it_.run(0.5);
+    expect(it_.clock.time, 'and carried on from there').toBeGreaterThan(4.4);
+  });
+
+  it('pausing holds the position rather than losing it', async () => {
+    const one = { ...emptyProject(), duration: 10, cues: [] };
+    const it_ = rig(one, 0);
+    await it_.clock.play();
+    it_.run(1);
+    it_.clock.pause();
+
+    const stopped = it_.clock.time;
+    expect(stopped).toBeGreaterThan(0.9);
+    it_.run(1);
+    expect(it_.clock.time, 'it stayed where it stopped').toBeCloseTo(stopped, 5);
+  });
+});
