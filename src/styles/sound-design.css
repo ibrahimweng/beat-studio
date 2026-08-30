@@ -927,6 +927,77 @@
   margin-bottom: 6px;
 }
 
+/*
+ * Asking something, over the top of the work.
+ *
+ * The same dimmed backdrop as the help panel, because it is the same idea —
+ * everything behind it is out of reach until this is dealt with — and a
+ * smaller card, because a question is one line and two buttons rather than a
+ * document. Above the help panel's own layer, since help can be open when
+ * something is asked from inside it.
+ */
+.ask {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 9, 10, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.ask__card {
+  width: min(400px, calc(100vw - 48px));
+  padding: 16px 18px 14px;
+  border-radius: var(--r-12);
+  background: var(--tc-card);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px -24px #000;
+}
+
+.ask__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.ask__what {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--txt-2);
+}
+
+.ask__field {
+  width: 100%;
+  margin-top: 12px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: var(--r-8);
+  border: 1px solid var(--line);
+  background: var(--tc-well);
+  color: var(--txt);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ask__field:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: -1px;
+}
+
+/*
+ * The way out on the left, the thing you asked for on the right, which is the
+ * order every desktop but one puts them in and the order the rest of this app
+ * already reads in.
+ */
+.ask__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 14px;
+}
+
 .help {
   position: fixed;
   inset: 0;

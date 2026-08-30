@@ -161,6 +161,21 @@ What is not tested yet: the mixer and the master chain end to end — what
 `chain.ts` and `master.ts` do to a signal is exercised by the render tests only
 as far as "something came out".
 
+## Asking things
+
+The app asks three questions: name this sound, remove this layer and the
+sounds on it, start a new project. All three were the browser's own
+`window.prompt` and `window.confirm` — the only places the app dropped out of
+its own language. `src/ui/ask.ts` is the replacement: one modal, two shapes,
+following the help panel's dimmed backdrop.
+
+It is not only about looking right. A native dialog cannot say which of its two
+answers is the destructive one, cannot put focus on the safe one, and is
+suppressed outright in some embedded contexts — where a confirm returns false
+and the thing somebody asked for silently does not happen. The two destructive
+questions now open with Cancel focused, so a stray Return cannot throw work
+away.
+
 ## How far the timeline zooms
 
 As far out as the whole piece and no further, since there is nothing past the

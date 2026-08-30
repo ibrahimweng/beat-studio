@@ -13,6 +13,7 @@ import {
 import { button, clear, el, setText, svg, toggleClass } from '../dom.ts';
 import type { View } from '../view.ts';
 import { helpButton } from '../help.ts';
+import { askYesNo } from '../ask.ts';
 import { MOD, openMenu, type MenuItem } from '../menu.ts';
 import { createMotionStrip } from './motion-strip.ts';
 
@@ -1090,12 +1091,21 @@ export function createTimeline(
           class: 'tl__layer-btn tl__layer-btn--remove',
           title: `Remove ${layer.name}`,
           on: {
-            click: () => {
+            click: async () => {
               const count = session.countOnLayer(layer.id);
               // Only interrupt when something would actually be lost.
               if (count > 0) {
-                const word = count === 1 ? 'sound' : 'sounds';
-                if (!window.confirm(`Remove ${layer.name} and its ${count} ${word}?`)) return;
+                const goes =
+                  count === 1
+                    ? 'The one sound on it goes with it'
+                    : `The ${count} sounds on it go with it`;
+                const yes = await askYesNo({
+                  title: `Remove ${layer.name}?`,
+                  what: `${goes}. Undo brings them back.`,
+                  ok: 'Remove it',
+                  danger: true,
+                });
+                if (!yes) return;
               }
               session.removeLayer(layer.id);
             },
