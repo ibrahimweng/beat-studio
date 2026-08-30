@@ -229,7 +229,25 @@ describe('the same sound twice', () => {
     for (let at = 0; at < first.length; at += 1) {
       worst = Math.max(worst, Math.abs(first[at] - again[at]));
     }
-    expect(worst, 'sample for sample the same').toBe(0);
+
+    /*
+     * Not bit-for-bit, which was the first thing this asked for and was wrong
+     * to.
+     *
+     * Two renders of the same project came back differing by 5e-22 on one CI
+     * runner while matching exactly on two other machines — denormal-sized
+     * noise in the convolver's tail, four hundred decibels below anything
+     * that is a sound. Exact equality is a claim about the renderer's
+     * arithmetic rather than about our seeding, and it is not one the
+     * renderer makes.
+     *
+     * A billionth is about a hundred and eighty decibels down: far below the
+     * smallest step a float can take at any level you could hear, and nine
+     * orders of magnitude above the noise seen. The fault this is for — the
+     * voice drawing fresh noise rather than from the cue's id — moves samples
+     * by tenths, so there is no risk of it slipping under.
+     */
+    expect(worst, 'the same sound, to well below anything audible').toBeLessThan(1e-9);
   });
 
   /*
