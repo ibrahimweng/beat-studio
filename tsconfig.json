@@ -40,5 +40,5 @@
    * build was green, the deployment was not. Anything that gets deployed is
    * checked.
    */
-  "include": ["src", "api", "test", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "api", "test", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
 }

@@ -28,19 +28,33 @@ npm run build      # type check, then build into dist/
 npm run preview    # serve the built files
 npm test           # run the tests once
 npm run test:watch # run them again whenever a file changes
+npm run test:browser # drive the built site in a real browser
 ```
+
+The browser tests need a browser to drive. `npx playwright install chromium`
+fetches the one they are pinned to. On a machine that already has a Chromium
+and cannot fetch another, point `CHROMIUM_PATH` at it instead.
 
 After a build, the `dist/` folder contains plain static files. You can host that
 folder on any web server. Paths in the build are relative, so it also works from
 a subfolder.
 
 Every push and pull request runs the type check, the tests and the build on
-both versions of Node. The workflow is at `.github/workflows/ci.yml`.
+both versions of Node, and the browser tests once. The workflow is at
+`.github/workflows/ci.yml`.
 
 ## Tests
 
-The tests run under Vitest and live beside what they test, as `*.test.ts`. Run
-them with `npm test`.
+There are two suites, and the split is not about speed. The Vitest one answers
+questions that have an answer on paper: given this curve, what kind of moment
+is it. The browser one answers questions that only a browser can be asked:
+given this stylesheet and this layout, what does the pointer look like over a
+sound.
+
+### What is a plain function of its inputs
+
+These run under Vitest and live beside what they test, as `*.test.ts`. Run them
+with `npm test`.
 
 What is tested is the part of the app that is a plain function of its inputs:
 what kind of moment a curve in the picture describes, what sound belongs on it,
@@ -70,8 +84,37 @@ when they always go up, since they are rebuilt by adding deltas and a delta is
 never written negative however wrong it is. One invented a curve to stand in
 for real measurements and tuned it until it passed.
 
-What is not tested yet: anything that draws, and the parts that reach the audio
-graph.
+### What only a browser can answer
+
+These run under Playwright, live in `test/browser/` as `*.spec.ts`, and are run
+with `npm run test:browser`. They drive the built site rather than the
+development server, because one of the faults below was found by comparing what
+shipped to the design and would not have shown up any other way.
+
+They exist because a particular kind of fault kept getting through. A tool
+cursor set on the timeline viewport, which every surface inside it overrides,
+so picking up the blade changed nothing you could see. A cursor drawn from a
+data URI that the browser accepted, reported back intact, and silently failed
+to decode. The blade itself looking for `.tl__cue`, a class that has never
+existed. A panel dropped into the empty column landing nowhere, because tearing
+down the drag collapsed that column before the drop was worked out. Six panel
+tabs overflowing their column into a scrollbar that had been switched off, so
+two panels could not be opened at all. None of those is reachable from Node,
+none is a type error, and every one of them shipped.
+
+Each test names the fault it is for. `test/browser/app.ts` holds what they all
+need: opening the app past the walkthrough, and a clip. The clip is a few
+seconds of canvas recorded through `MediaRecorder` in the page — about ninety
+kilobytes, made in under a second, and no binary in the repository that
+somebody has to take on trust.
+
+Every test here was checked the same way as the ones above, by putting the
+fault back and watching it fail, and writing them found two more: the transport
+was hiding its last three controls behind a scrollbar it had disabled, and the
+frame rate measurement that runs just after a clip loads was undoing a play
+started while it ran.
+
+What is not tested yet: the parts that reach the audio graph.
 
 ## Deploying
 
@@ -936,6 +979,7 @@ src/
       work-panel.ts the three tabs the right panel shows one at a time
   styles/          design tokens and stylesheets
 test/fixtures/     measurements taken off real clips, for the tests to read
+test/browser/      the suite that drives the built site in a real browser
 public/            files copied to the site root, which is where the icons live
 ```
 

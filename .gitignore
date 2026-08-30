@@ -11,3 +11,10 @@ tools/.wk/
 # The assembled design canvas, which bundles the whole editor into one 2.5 MB
 # file. Generated from the .dc.html sources beside it, so it is not kept.
 design/**/beat-studio-*.html
+
+# What a browser test run leaves behind: the traces and screenshots kept for
+# a failure, and the report built from them. Both are about one run on one
+# machine and neither is worth keeping.
+test-results/
+playwright-report/
+blob-report/
