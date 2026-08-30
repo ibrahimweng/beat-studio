@@ -2045,17 +2045,51 @@
 }
 
 /*
- * The pointer says which tool is holding it, over the whole panel.
+ * The pointer says which tool is holding it, everywhere the tool works.
  *
- * Set from the root by the tool rather than on each of the dozen things
- * underneath, so a tool cannot be half applied.
+ * This was set on the viewport alone and did nothing at all: every surface
+ * inside it carries a cursor of its own — a sound says grab, an empty lane
+ * says copy, the ruler says ew-resize, a layer name says text — and a cursor
+ * on the parent loses to every one of them. Picking up the blade changed
+ * nothing you could see, which is the opposite of what a tool cursor is for.
+ *
+ * So each rule names the descendants too, which also outranks them. It stops
+ * at the viewport rather than covering the whole panel, because that is where
+ * these tools act: the toolbar above and the layer names beside it keep their
+ * own pointers, since they still do their own jobs whatever is selected.
+ *
+ * Move is deliberately absent. Its cursor is the contextual one each surface
+ * already sets — grab over a sound, an I-beam over a name it can rename —
+ * which is both the default arrow somebody expects from a selection tool and
+ * more informative than one shape over everything.
  */
-.tl[data-tool='range'] .tl__viewport {
+.tl[data-tool='range'] .tl__viewport,
+.tl[data-tool='range'] .tl__viewport * {
   cursor: text;
 }
 
-.tl[data-tool='cut'] .tl__viewport {
-  cursor: crosshair;
+/*
+ * The blade and the nib are drawn, where the others are named.
+ *
+ * Every standard cursor that suits Cut also suits Pen — both are "put this
+ * exact point somewhere", which is `crosshair` — so naming them would give
+ * two of the six tools the same pointer and lose exactly the distinction this
+ * is for. Drawn from the same shapes as the buttons in the strip, so the
+ * thing in your hand looks like the thing you clicked. White with a dark
+ * outline, because it has to read against a picture as well as against the
+ * lanes, and the last coordinates are the hotspot: the tip of the blade, the
+ * tip of the nib.
+ *
+ * Percent encoded, which is not decoration. Written out plainly, with raw
+ * angle brackets and quotes, the browser accepts the declaration, reports it
+ * back from getComputedStyle intact, and then silently fails to decode the
+ * image and falls through to the crosshair after the comma. Nothing anywhere
+ * says so. Both of these shipped in that state until an image was built from
+ * the computed value to see whether it actually loaded.
+ */
+.tl[data-tool='cut'] .tl__viewport,
+.tl[data-tool='cut'] .tl__viewport * {
+  cursor: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2222%22%20height=%2222%22%20viewBox=%220%200%2022%2022%22%3E%3Cpath%20d=%22M7.4%202h4.2l1.3%208.4H6.1z%22%20fill=%22white%22%20stroke=%22black%22%20stroke-width=%221.2%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M9.5%2011.4V20%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%222.6%22%20stroke-linecap=%22round%22/%3E%3Cpath%20d=%22M9.5%2011.4V20%22%20fill=%22none%22%20stroke=%22white%22%20stroke-width=%221.2%22%20stroke-linecap=%22round%22/%3E%3C/svg%3E') 9 20, crosshair;
 }
 
 /*
@@ -2073,15 +2107,29 @@
   pointer-events: auto;
 }
 
-.tl[data-tool='hand'] .tl__viewport {
+.tl[data-tool='hand'] .tl__viewport,
+.tl[data-tool='hand'] .tl__viewport * {
   cursor: grab;
 }
 
-.tl[data-tool='zoom'] .tl__viewport {
+.tl[data-tool='zoom'] .tl__viewport,
+.tl[data-tool='zoom'] .tl__viewport * {
   cursor: zoom-in;
 }
 
-.tl.is-grabbing .tl__viewport {
+/*
+ * Alt held over the zoom tool goes the other way, and says so first.
+ *
+ * The tool does both jobs off one button, so without this the only way to
+ * find out which one a click will do is to do it.
+ */
+.tl[data-tool='zoom'].is-alt .tl__viewport,
+.tl[data-tool='zoom'].is-alt .tl__viewport * {
+  cursor: zoom-out;
+}
+
+.tl.is-grabbing .tl__viewport,
+.tl.is-grabbing .tl__viewport * {
   cursor: grabbing;
 }
 
@@ -2187,8 +2235,9 @@
   cursor: crosshair;
 }
 
-.tl[data-tool='pen'] .tl__viewport {
-  cursor: crosshair;
+.tl[data-tool='pen'] .tl__viewport,
+.tl[data-tool='pen'] .tl__viewport * {
+  cursor: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2222%22%20height=%2222%22%20viewBox=%220%200%2022%2022%22%3E%3Cpath%20d=%22M15.4%202.2%2019%205.8%208.2%2016.6l-4.6%201%201-4.6z%22%20fill=%22white%22%20stroke=%22black%22%20stroke-width=%221.2%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M12.6%205%2016.2%208.6%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%221.1%22/%3E%3C/svg%3E') 3 19, crosshair;
 }
 
 
@@ -2221,19 +2270,27 @@
   border: 0;
 }
 
+/*
+ * The tabs wrap rather than scrolling away.
+ *
+ * Six names do not fit 340 pixels: this scrolled sideways with the scrollbar
+ * hidden, so "Session" and "Palette" sat 75 pixels past the edge with nothing
+ * saying they were there. A tab is the way you reach a panel, so two of the
+ * six were reachable only by dragging or by the Window menu — which is the
+ * same silent overflow the top bar used to have, shipped again somewhere
+ * narrower.
+ *
+ * Wrapping costs a row of height when the column is narrow and nothing when
+ * it is wide, and there is no width at which something is missing.
+ */
 .dock__tabs {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 2px;
   padding: 6px 8px 0;
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.dock__tabs::-webkit-scrollbar {
-  display: none;
 }
 
 /*
