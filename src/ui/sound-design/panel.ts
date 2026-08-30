@@ -20,6 +20,7 @@ import {
 } from '../../timeline/types.ts';
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
+import { askText, askYesNo } from '../ask.ts';
 import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import type { Sample } from '../../audio/samples.ts';
 import {
@@ -1491,11 +1492,19 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       class: 'chip chip--sm',
       title: 'Keep this sound as it is, under a name, for this and every other project',
       on: {
-        click: () => {
+        click: async () => {
           if (!selected) return;
-          const suggested = String(selected.source.name);
-          const name = window.prompt('Name this sound', suggested);
-          if (name !== null) session.saveAsMine(selected, name);
+          // Read before asking: the question takes focus, and what is chosen
+          // can change under a dialog that is waiting.
+          const cue = selected;
+          const name = await askText({
+            title: 'Name this sound',
+            what: 'Kept under this name for every project, exactly as it is now.',
+            label: 'A name for this sound',
+            value: String(cue.source.name),
+            ok: 'Save it',
+          });
+          if (name !== null) session.saveAsMine(cue, name);
         },
       },
     },
@@ -1720,12 +1729,20 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       style: { width: '100%' },
       title: 'Clear the timeline and the clip, and start on nothing',
       on: {
-        click: () => {
+        click: async () => {
           const { project } = session.store.state;
           const count = project.cues.length;
           const has = count > 0 || project.videoName;
           const what = count ? `${count} sound${count === 1 ? '' : 's'}` : 'the clip';
-          if (has && !window.confirm(`Start a new project? This throws away ${what}.`)) return;
+          if (has) {
+            const yes = await askYesNo({
+              title: 'Start a new project?',
+              what: `This throws away ${what}, and the kept copy with it. It cannot be undone.`,
+              ok: 'Start again',
+              danger: true,
+            });
+            if (!yes) return;
+          }
           void session.newProject();
         },
       },
