@@ -68,6 +68,20 @@ them they read four things off it: how many channels there are, how long it is,
 what rate it was made at, and the samples. `test/audio-buffer.ts` is those four
 things and nothing else.
 
+The audio graph is here too, which for a while it was not. The export path is
+an `OfflineAudioContext` rendering faster than real time, and that is a plain
+function of its inputs in every sense that matters: the same project gives the
+same samples, with no page, no device and no clock. It only ever needed an
+implementation, and `node-web-audio-api` is one — `test/web-audio.ts` puts its
+names on the global before the tests run. So `render.test.ts` asks the
+questions that are actually about sound: does a cue start on the sample its
+time works out to, does an end-anchored one begin a length earlier, does mute
+silence it, does solo silence everything else, do the stems add back up to the
+mix, and is the same placed sound the same file every time it is rendered.
+What that does not check is that two Web Audio implementations sound alike —
+it checks that we schedule and mix what we meant to. The browser suite is where
+the real thing gets driven.
+
 `test/fixtures/motion-shapes.json` holds real measurements taken by the scan
 itself, off a clip built with one of each shape in it: a cut, a build, a move,
 a flurry and a still passage. It is kept because it is decoder output rather
@@ -126,7 +140,10 @@ video's and the stage carries fourteen pixels of padding; and zooming back out
 never quite reached Fit, since 2.56 divided by 1.6 twice is 1.0000000000000002
 rather than 1.
 
-What is not tested yet: the parts that reach the audio graph.
+What is not tested yet: the live playback path — the clock, the buses and the
+scheduling that happen while you are listening rather than exporting. The
+browser suite covers the playhead crossing the end of the clip; what a sound
+does under a moving playhead it does not.
 
 ## Deploying
 
