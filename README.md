@@ -140,10 +140,26 @@ video's and the stage carries fourteen pixels of padding; and zooming back out
 never quite reached Fit, since 2.56 divided by 1.6 twice is 1.0000000000000002
 rather than 1.
 
-What is not tested yet: the live playback path — the clock, the buses and the
-scheduling that happen while you are listening rather than exporting. The
-browser suite covers the playhead crossing the end of the clip; what a sound
-does under a moving playhead it does not.
+The live playback path is here too, in `video/clock.test.ts`, and it is a
+different shape again. Rendering is one pass over a project known in advance;
+playing is a loop waking every twenty-five milliseconds, reading where the
+video has got to, working out what audio time that corresponds to *now*, and
+queueing whatever falls in the next fraction of a second. That is two clocks
+being kept together, and it goes wrong in three ways: a cue fired twice, a cue
+never fired, or a playhead that stops when the picture does.
+
+It is testable because the clock takes all three things it depends on — the
+video, the engine, and the hooks it publishes through. The video is stubbed at
+the six members it actually reads. The engine is stubbed at the three. The
+context is a real one with `currentTime` overridden in front of it, because the
+nodes have to be real while the passing of time has to be ours; a live
+`AudioContext` opens an audio device, which on a machine without one is a pile
+of ALSA errors rather than a context. `onCue` reports every cue queued and the
+audio time it was given, which is the claim worth checking.
+
+What is not tested yet: the mixer and the master chain end to end — what
+`chain.ts` and `master.ts` do to a signal is exercised by the render tests only
+as far as "something came out".
 
 ## Deploying
 
