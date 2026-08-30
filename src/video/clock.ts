@@ -110,6 +110,20 @@ export class VideoClock {
   async play(): Promise<void> {
     const ctx = this.#engine.start();
     if (this.#timer) return;
+
+    /*
+     * With no clip at all, the audio clock drives from the first frame.
+     *
+     * Not only past the end of a picture, which is what this position was
+     * built for. There is a case with no picture from the start: a piece has
+     * had its own length since it became something you can set, so sound can
+     * be made without a video and somebody doing that used to press play and
+     * get nothing at all -- the button was live, `video.play()` was refused
+     * on an element with no source, and the refusal was swallowed as though
+     * it were a browser blocking autoplay. Nothing on screen said why.
+     */
+    if (this.#picture <= 0 && this.#beyondAt === null) this.#beyondAt = 0;
+
     // Already at the end: start again rather than sitting there doing nothing.
     if (this.time >= this.#end - 1e-3) this.seek(0);
     this.#queuedUpTo = this.time;
@@ -150,15 +164,21 @@ export class VideoClock {
     const wanted = Math.max(0, Math.min(this.#end, time));
     const picture = this.#picture;
 
-    if (picture > 0 && wanted > picture) {
+    if (picture <= 0 || wanted > picture) {
       /*
-       * Past the last frame. The picture holds where it ran out rather than
-       * going blank, because the frame it stopped on is the one the tail is
-       * still ringing over, and a black stage says "nothing loaded" when
-       * something very much is.
+       * Past the last frame, or with no frames at all.
+       *
+       * Where there is a picture it holds where it ran out rather than going
+       * blank, because the frame it stopped on is the one the tail is still
+       * ringing over, and a black stage says "nothing loaded" when something
+       * very much is. Where there is no picture there is nothing to hold, and
+       * the position is the audio clock's from the start -- the same case
+       * arrived at from the other end.
        */
-      this.#video.currentTime = picture;
-      this.#video.pause();
+      if (picture > 0) {
+        this.#video.currentTime = picture;
+        this.#video.pause();
+      }
       this.#beyondAt = wanted;
       this.#beyondCtx = this.#engine.context?.currentTime ?? 0;
     } else {

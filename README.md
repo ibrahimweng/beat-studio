@@ -161,6 +161,22 @@ What is not tested yet: the mixer and the master chain end to end — what
 `chain.ts` and `master.ts` do to a signal is exercised by the render tests only
 as far as "something came out".
 
+## Working without a video
+
+A piece has a length of its own, so a video is where this app usually starts
+rather than something it requires. Open it, place sounds on the timeline, play
+them, and export — a sting, a title card, a logo has no picture to be against
+and never needed one. A new piece opens thirty seconds long, which a loaded
+clip replaces outright.
+
+This did not work for a while and looked as though it did, which is worth
+writing down: the play button was live, `video.play()` was refused on an
+element with no source, the refusal was swallowed as though a browser had
+blocked autoplay, and the playhead sat at zero with nothing on screen saying
+why. The machinery to fix it already existed — the position runs off the audio
+clock past the end of a clip, and no clip at all is the same case reached from
+the other end.
+
 ## Deploying
 
 The site is static, so any host that serves files will do. The settings for

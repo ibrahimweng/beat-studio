@@ -201,3 +201,63 @@ test.describe('while the clip is still being measured', () => {
     await expect(page.locator('.play-btn')).toHaveClass(/is-playing/);
   });
 });
+
+/**
+ * Making sound with no picture at all.
+ *
+ * Every other test in this file loads a clip first, because that is the
+ * ordinary way in. This is the way in that was broken: a piece has a length
+ * of its own, so you can place sounds and hear them without a video — and
+ * that was true of everything except hearing them. The play button was live
+ * and did nothing, and nothing said why.
+ *
+ * Here rather than in the clock's own tests because the clock is only half of
+ * it: the transport was greyed out on "is there a clip" rather than "is there
+ * a piece", so even a working clock would have been unreachable.
+ */
+test.describe('with no clip loaded', () => {
+  test.beforeEach(async ({ page }) => {
+    await open(page);
+  });
+
+  test('a new piece already has a length to work in', async ({ page }) => {
+    await expect(total(page)).not.toHaveText('00:00:00:00');
+    expect(seconds(await total(page).innerText()), 'long enough to put something on')
+      .toBeGreaterThan(5);
+  });
+
+  test('the transport is live, not greyed out', async ({ page }) => {
+    for (const title of [/^Stop/, /^Play or pause/]) {
+      await expect(page.getByTitle(title).first()).toBeEnabled();
+    }
+  });
+
+  test('a sound can be placed and played', async ({ page }) => {
+    const lane = page.locator('.tl__lane').first();
+    const box = (await lane.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.2, box.y + box.height / 2);
+    await expect(page.locator('.cue')).toHaveCount(1);
+
+    await page.getByTitle('Play or pause (Space)').click();
+    await expect(page.locator('.play-btn')).toHaveClass(/is-playing/);
+    await expect
+      .poll(async () => seconds(await clock(page).innerText()), {
+        message: 'the playhead ran with no picture to follow',
+      })
+      .toBeGreaterThan(0.5);
+  });
+
+  test('and pausing holds where it stopped', async ({ page }) => {
+    await page.getByTitle('Play or pause (Space)').click();
+    await expect
+      .poll(async () => seconds(await clock(page).innerText()))
+      .toBeGreaterThan(0.5);
+
+    await page.getByTitle('Play or pause (Space)').click();
+    await expect(page.locator('.play-btn')).not.toHaveClass(/is-playing/);
+    const stopped = seconds(await clock(page).innerText());
+    await expect
+      .poll(async () => seconds(await clock(page).innerText()), { message: 'it stayed put' })
+      .toBeCloseTo(stopped, 2);
+  });
+});
