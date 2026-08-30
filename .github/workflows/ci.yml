@@ -39,3 +39,45 @@ jobs:
 
       - name: Check the build produced an entry point
         run: test -f dist/index.html
+
+  # The same app, driven in a real browser.
+  #
+  # Once rather than per Node version: what this checks is what the browser
+  # does with the built site, and that does not vary with the Node that built
+  # it. The build above already covers both.
+  browser:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Only Chromium, and only what it needs to start. The suite has one
+      # browser project, so fetching the other two is a minute of download
+      # for nothing.
+      - name: Get the browser
+        run: npx playwright install --with-deps chromium
+
+      # This builds the site and serves it before running; see
+      # playwright.config.ts, which tests what ships rather than the dev
+      # server.
+      - name: Browser tests
+        run: npm run test:browser
+
+      # Traces and screenshots for whatever failed, which is the only way to
+      # see what a headless run on somebody else's machine actually did.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

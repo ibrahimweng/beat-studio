@@ -1160,9 +1160,24 @@ export class SoundDesignSession {
       await video.play();
       const fps = await estimateFps(video);
       video.pause();
-      video.currentTime = 0;
       // Measuring the rate is not an edit, so it is not something to undo.
       this.#setProject({ ...this.project, fps }, '', false);
+
+      /*
+       * Unless somebody started playing while this was going on.
+       *
+       * The clip is announced as ready before the rate is measured, and the
+       * transport comes alive with it, so pressing play inside that half
+       * second is a fair thing to do. It was answered by this method finishing
+       * a moment later, stopping the clip and putting it back to the start --
+       * a play that turned into a jump to zero with nothing said about why.
+       * Whoever is driving wins.
+       */
+      if (this.playing) {
+        void video.play().catch(() => {});
+        return;
+      }
+      video.currentTime = 0;
       this.effects.onTime(0);
     } catch {
       // Leave the default rate in place; it can be set by hand.

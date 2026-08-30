@@ -1912,23 +1912,30 @@
  * are the controls a hand rests on, and putting them in the same line as the
  * scan settings and the zoom would make one long row of unrelated things,
  * which is what the top of the window used to be.
+ *
+ * It wraps rather than hiding its right hand end. It used to scroll sideways
+ * with the scrollbar switched off, which is the same trap the panel tabs were
+ * in: at 1440 the help dot and part of the reference switch sat past the edge,
+ * and at 1280 the last three controls -- the video window toggle, the
+ * reference switch and help -- were off it entirely, with nothing on screen
+ * saying they existed or that the strip could be dragged. Three controls you
+ * cannot see and cannot reach is worse than a transport an inch taller.
+ *
+ * `min-height` rather than `height`, so a row that fits looks exactly as it
+ * did and one that does not grows instead of swallowing whatever is on the
+ * end.
  */
 .transport-row {
   flex: 0 0 auto;
-  height: 46px;
+  min-height: 46px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: center;
   gap: 6px;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.transport-row::-webkit-scrollbar {
-  display: none;
 }
 
 .transport__time {
