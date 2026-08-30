@@ -225,10 +225,35 @@ describe('the same sound twice', () => {
     const again = (await render(one)).parts[0].buffer.getChannelData(0);
 
     expect(again.length).toBe(first.length);
+
+    /*
+     * Where and how much, not just how much.
+     *
+     * This failed once on a CI runner by 0.87 — the size of a different
+     * sound, not of arithmetic — and could not be reproduced in twenty
+     * renders here or on the other Node in the same run. A bare number gives
+     * the next occurrence nothing to go on. Whether the difference sits on
+     * the transient or out in the reverb tail says whether to suspect the
+     * voice or the convolver, and the peaks say whether one render simply
+     * came out silent.
+     */
     let worst = 0;
+    let worstAt = -1;
+    let differing = 0;
     for (let at = 0; at < first.length; at += 1) {
-      worst = Math.max(worst, Math.abs(first[at] - again[at]));
+      const apart = Math.abs(first[at] - again[at]);
+      if (apart > 1e-9) differing += 1;
+      if (apart > worst) {
+        worst = apart;
+        worstAt = at;
+      }
     }
+    const loudest = (samples: Float32Array): number =>
+      samples.reduce((most, one) => Math.max(most, Math.abs(one)), 0);
+    const where =
+      `worst ${worst.toExponential(2)} at ${(worstAt / RATE).toFixed(3)}s ` +
+      `(the cue is at 0.5s), ${differing} samples apart, ` +
+      `peaks ${loudest(first).toFixed(3)} and ${loudest(again).toFixed(3)}`;
 
     /*
      * Not bit-for-bit, which was the first thing this asked for and was wrong
@@ -247,7 +272,8 @@ describe('the same sound twice', () => {
      * voice drawing fresh noise rather than from the cue's id — moves samples
      * by tenths, so there is no risk of it slipping under.
      */
-    expect(worst, 'the same sound, to well below anything audible').toBeLessThan(1e-9);
+    expect(worst, `the same sound, to well below anything audible — ${where}`)
+      .toBeLessThan(1e-9);
   });
 
   /*

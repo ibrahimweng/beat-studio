@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { currentTool, cursorOver, loadClip, open, placeSound } from './app.ts';
+import { currentTool, cursorOver, loadClip, open, placeSound, zoomIn } from './app.ts';
 
 /**
  * Where each tool applies, and where it deliberately does not.
@@ -72,9 +72,7 @@ test.describe('the curve lanes', () => {
 
   test('the hand pans across a curve lane instead of drawing on it', async ({ page }) => {
     const lane = await openCurve(page);
-    for (let i = 0; i < 3; i += 1) {
-      await page.getByRole('button', { name: '+', exact: true }).click();
-    }
+    await zoomIn(page, 3);
     await page.keyboard.press('h');
 
     const box = (await lane.boundingBox())!;

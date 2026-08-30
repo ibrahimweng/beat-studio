@@ -16,7 +16,23 @@ import { helpButton } from '../help.ts';
 import { MOD, openMenu, type MenuItem } from '../menu.ts';
 import { createMotionStrip } from './motion-strip.ts';
 
-const MIN_PX_PER_SEC = 8;
+/**
+ * The scale used when there is no piece to measure against.
+ *
+ * It used to be the floor for every piece, and that was wrong at both ends.
+ * A ten minute piece could not be fitted at all: Fit works out the scale that
+ * would show the whole thing, eight pixels a second clamped it, and you were
+ * left looking at a fifth of your work with a button that had promised the
+ * whole of it and said nothing about failing. A five second piece had the
+ * opposite problem -- zooming out squeezed all five seconds into the leftmost
+ * forty pixels of an eight hundred pixel timeline and kept offering to go
+ * further.
+ *
+ * Both are the same mistake: a fixed number cannot know how long the piece
+ * is. The bound is worked out from the piece now, and this is only what
+ * stands in before there is one.
+ */
+const NO_PIECE_PX_PER_SEC = 8;
 const MAX_PX_PER_SEC = 600;
 
 /** Height of an open lane, matching --tl-auto in the stylesheet. */
@@ -207,7 +223,7 @@ export function createTimeline(
 
   const zoomOut = button({ class: 'chip chip--sm', title: 'Zoom out', on: { click: () => setZoom(pxPerSec / 1.6) } }, ['−']);
   const zoomIn = button({ class: 'chip chip--sm', title: 'Zoom in', on: { click: () => setZoom(pxPerSec * 1.6) } }, ['+']);
-  const zoomFit = button({ class: 'chip chip--sm', title: 'Fit the whole video', on: { click: fit } }, ['Fit']);
+  const zoomFit = button({ class: 'chip chip--sm', title: 'Fit the whole piece', on: { click: fit } }, ['Fit']);
 
   const root = el('section', { class: 'tl' }, [
     ...(options.transport ? [options.transport] : []),
@@ -236,18 +252,70 @@ export function createTimeline(
     el('div', { class: 'tl__body' }, [gutter, viewport]),
   ]);
 
+  /**
+   * The scale at which the whole piece exactly fills the window.
+   *
+   * This is both what Fit sets and how far out you may zoom, which are the
+   * same thing said twice: there is nothing past the end of the piece to
+   * look at, so going further out only shrinks the work into a corner.
+   */
+  function wholePiece(): number {
+    const duration = session.project.duration;
+    if (duration <= 0) return NO_PIECE_PX_PER_SEC;
+    // A floor on the room, so a column dragged almost shut cannot ask for a
+    // scale of nearly nothing.
+    const room = Math.max(120, (viewport.clientWidth || 800) - 24);
+    return room / duration;
+  }
+
+  /** As far out as the piece allows, which on a short one is quite far in. */
+  function outermost(): number {
+    return Math.min(MAX_PX_PER_SEC, wholePiece());
+  }
+
+  /**
+   * Say which way the zoom can still go.
+   *
+   * Apart from `setZoom` because the bounds move without the scale moving: a
+   * longer piece can be zoomed out of when a moment ago it could not. Left
+   * inside the setter, the buttons kept whatever they were told last —
+   * greyed out on a ten minute piece with nine tenths of it off screen, which
+   * is precisely when you want to zoom out.
+   */
+  function showZoomLimits(): void {
+    const floor = outermost();
+    zoomOut.disabled = pxPerSec <= floor + 1e-6;
+    zoomIn.disabled = pxPerSec >= MAX_PX_PER_SEC - 1e-6;
+  }
+
   function setZoom(value: number): void {
-    pxPerSec = Math.max(MIN_PX_PER_SEC, Math.min(MAX_PX_PER_SEC, value));
+    pxPerSec = Math.max(outermost(), Math.min(MAX_PX_PER_SEC, value));
     paint(session.project, true);
     strip.draw(session.store.state, pxPerSec);
+    // Said rather than left to be discovered by pressing a button and
+    // watching nothing happen, which is what both of these used to do.
+    showZoomLimits();
   }
 
   function fit(): void {
-    const duration = session.project.duration;
-    if (duration <= 0) return;
-    const width = viewport.clientWidth || 800;
-    setZoom((width - 24) / duration);
+    setZoom(wholePiece());
   }
+
+  /**
+   * Pull the scale back inside its bounds, if something else moved them.
+   *
+   * The bounds depend on the piece and on the room there is to draw it in,
+   * and both change without anybody touching the zoom -- a length typed into
+   * the transport, a panel dragged wider. Only when it is actually out of
+   * bounds, since this repaints.
+   */
+  function keepInBounds(): void {
+    if (pxPerSec < outermost() - 1e-6) setZoom(outermost());
+    else showZoomLimits();
+  }
+
+  /** The length last drawn, to notice it changing. */
+  let lastDuration = session.project.duration;
 
   // Framing the whole clip on load is almost always what you want first.
   session.onVideoLoaded = () => window.setTimeout(fit, 0);
@@ -1791,6 +1859,12 @@ export function createTimeline(
 
     update(state: AppState) {
       paint(state.project);
+      // Setting a shorter length raises the scale the whole piece needs, the
+      // same way a narrower window does.
+      if (state.project.duration !== lastDuration) {
+        lastDuration = state.project.duration;
+        keepInBounds();
+      }
       undo.disabled = !session.canUndo;
       redo.disabled = !session.canRedo;
 
@@ -1857,6 +1931,15 @@ export function createTimeline(
       // A shorter panel may have scrolled the lanes out of reach.
       viewport.scrollTop = Math.min(viewport.scrollTop, viewport.scrollHeight);
       gutterRows.style.transform = `translateY(${-viewport.scrollTop}px)`;
+      /*
+       * More room means the whole piece needs more pixels a second to fill
+       * it, so the scale that was as far out as the piece allowed is now
+       * further out than it allows -- and a view fitted before a panel was
+       * closed would otherwise sit in the left of the window with a margin
+       * beside it. Narrowing needs nothing: fewer pixels a second still fit,
+       * so you simply see less, which is what a smaller window means.
+       */
+      keepInBounds();
     },
 
     setTime(time: number) {

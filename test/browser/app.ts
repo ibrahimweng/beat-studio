@@ -173,6 +173,23 @@ export async function pointOn(
   return { x: from + width * along, y: box.y + box.height / 2, width };
 }
 
+/**
+ * Zoom in, as far as asked or as far as the timeline allows.
+ *
+ * The buttons grey out at their limits — all the way in, or far enough out
+ * that the whole piece is showing — so pressing one blindly the moment it has
+ * nothing left to do is a click that waits forever. Tests that want "well
+ * zoomed in" want exactly this: as far as it goes, up to the number asked
+ * for.
+ */
+export async function zoomIn(page: Page, times: number): Promise<void> {
+  const button = page.getByRole('button', { name: '+', exact: true });
+  for (let i = 0; i < times; i += 1) {
+    if (!(await button.isEnabled())) return;
+    await button.click();
+  }
+}
+
 /** Which tool is currently held, by the name on its button. */
 export async function currentTool(page: Page): Promise<string | null> {
   return page.locator('.rail__tool.is-on').getAttribute('aria-label');

@@ -161,6 +161,21 @@ What is not tested yet: the mixer and the master chain end to end — what
 `chain.ts` and `master.ts` do to a signal is exercised by the render tests only
 as far as "something came out".
 
+## How far the timeline zooms
+
+As far out as the whole piece and no further, since there is nothing past the
+end of a piece to look at. Fit sets exactly that, and the zoom buttons grey out
+when there is nowhere left to go that way.
+
+This was a constant — eight pixels a second, whatever the piece — and a fixed
+number cannot know how long a piece is. It was wrong at both ends. Anything
+longer than about a minute and three quarters could not be fitted at all: Fit
+worked out the scale that would show the whole thing, the floor clamped it, and
+you were left looking at a fifth of a ten minute piece with a button that had
+promised the whole of it and said nothing about failing. A five second piece had
+the opposite problem, zooming out until all five seconds sat in the leftmost
+forty pixels of an eight hundred pixel timeline, still offering to go further.
+
 ## Working without a video
 
 A piece has a length of its own, so a video is where this app usually starts

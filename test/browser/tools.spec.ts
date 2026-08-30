@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { cursorOver, currentTool, loadClip, open, placeSound, pointOn } from './app.ts';
+import { cursorOver, currentTool, loadClip, open, placeSound, pointOn, zoomIn } from './app.ts';
 
 /**
  * The tools: what they say they are, and what they do.
@@ -128,7 +128,7 @@ test.describe('the tools', () => {
     await loadClip(page);
     await placeSound(page);
     // Zoomed in, so there is somewhere to pan to.
-    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: '+', exact: true }).click();
+    await zoomIn(page, 3);
 
     const cues = await page.locator('.cue').count();
     const lane = (await page.locator('.tl__lane').first().boundingBox())!;
@@ -156,7 +156,7 @@ test.describe('the tools', () => {
   test('the blade cuts a sound short where it is clicked', async ({ page }) => {
     await loadClip(page);
     await placeSound(page, 0.05);
-    for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: '+', exact: true }).click();
+    await zoomIn(page, 4);
     await page.locator('.tl__viewport').evaluate((n) => { n.scrollLeft = 0; });
 
     const cue = page.locator('.cue').first();
