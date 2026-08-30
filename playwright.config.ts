@@ -82,11 +82,26 @@ export default defineConfig({
    * `vite preview` refuses to start without a build, so the command does
    * both. Reused when it is already up, so running these repeatedly while
    * working on one does not rebuild the site every time.
+   *
+   * `--host 127.0.0.1` names the interface rather than leaving it to be
+   * worked out. Vite asks Node not to reorder what a name resolves to, so
+   * `localhost` binds to whichever address the machine's hosts file happens
+   * to list first: on a machine that has only `127.0.0.1 localhost` that is
+   * IPv4 and everything works, and on one that also has `::1 localhost` --
+   * which is the Ubuntu default, and so what CI runs on -- it binds to IPv6
+   * alone and nothing ever answers here. That cost a CI run that timed out
+   * after two minutes without starting a single test.
+   *
+   * Its output is passed through for the same reason: when the server does
+   * not come up, the timeout says only that it did not, and whatever the
+   * build or the server said about why is thrown away.
    */
   webServer: {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
+    command: 'npm run build && npx vite preview --port 4173 --strictPort --host 127.0.0.1',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });
