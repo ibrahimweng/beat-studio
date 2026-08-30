@@ -479,6 +479,25 @@ export function createTimeline(
 
   viewport.addEventListener('pointerdown', toolPress, true);
 
+  /*
+   * Alt, watched only so the zoom tool can say which way it will go.
+   *
+   * On the window rather than the panel because a modifier held down before
+   * the pointer arrives is the common case, and an element only hears about
+   * keys while it has focus. Both edges are needed: releasing alt somewhere
+   * else would otherwise leave the cursor promising a zoom out that is no
+   * longer what a click does. Blur clears it for the same reason -- alt is
+   * often what took the window away.
+   */
+  const readAlt = (event: KeyboardEvent): void => {
+    root.classList.toggle('is-alt', event.altKey);
+  };
+  const clearAlt = (): void => root.classList.remove('is-alt');
+  window.addEventListener('keydown', readAlt);
+  window.addEventListener('keyup', readAlt);
+  window.addEventListener('blur', clearAlt);
+
+
   /* ---------- what you can do with the thing under the pointer ---------- */
 
   /**
