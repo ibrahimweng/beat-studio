@@ -185,7 +185,7 @@ const SECTIONS: readonly Section[] = [
       ['Press that handle', 'Holds instead: the value stays put and steps across on arrival, for a cut.'],
       ['A lane name', 'Opens it, or shuts it again. A shut one still shows its shape, small.'],
       ['Pan', 'Where a whole layer sits between the speakers. Up is right, down is left.'],
-      ['Fit', 'Frame the whole clip in the timeline.'],
+      ['Fit', 'Frame the whole piece in the timeline, however long it is. Zooming out stops there too — there is nothing past the end of a piece to look at.'],
     ],
   },
   {
