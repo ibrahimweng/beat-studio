@@ -158,6 +158,16 @@ export interface Detection {
   status: 'idle' | 'scanning' | 'pinning' | 'ready';
   /** 0 to 1 while working. */
   progress: number;
+  /**
+   * Roughly how many seconds are left, or null before there is enough to say.
+   *
+   * A percentage on its own does not answer the question somebody actually
+   * has, which is whether to wait or go and do something else. Reading runs at
+   * a steady rate — about half the length of the clip, every time — so a few
+   * seconds in there is a real answer available, and it costs nothing to work
+   * out.
+   */
+  secondsLeft: number | null;
   /** Every measurement taken, used for the strip under the ruler. */
   samples: MotionSample[];
   /** Every moment found, before the sensitivity is applied. */
@@ -188,6 +198,7 @@ export function emptyDetection(): Detection {
   return {
     status: 'idle',
     progress: 0,
+    secondsLeft: null,
     samples: [],
     candidates: [],
     peaks: [],

@@ -928,6 +928,16 @@
 }
 
 /*
+ * The read button while it is reading.
+ *
+ * Marked rather than greyed out, since it is live: it is the way to stop.
+ */
+.chip.is-working {
+  border-color: var(--ac-line);
+  color: var(--ac);
+}
+
+/*
  * Asking something, over the top of the work.
  *
  * The same dimmed backdrop as the help panel, because it is the same idea —

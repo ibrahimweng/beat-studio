@@ -17,6 +17,16 @@ export interface AnalyseOptions {
   onProgress?(fraction: number): void;
   /** Frames per second, used to decide how finely to sample. */
   fps: number;
+  /**
+   * Give up early, for somebody who did not mean to start.
+   *
+   * Reading takes about half the length of the clip, so a ten minute video is
+   * five minutes of waiting, and there was no way out of it: the button that
+   * starts the read is the one that shows the progress, and it was disabled
+   * for the duration. Loading the wrong file meant waiting it out or
+   * reloading the page.
+   */
+  signal?: AbortSignal;
 }
 
 /** Width the picture is reduced to before comparing. Height follows the shape. */
@@ -80,6 +90,27 @@ export async function analyseMotion(
         stall = window.setTimeout(() => resolve(), STALL_MS);
       };
 
+      /*
+       * Stopping is resolving rather than throwing.
+       *
+       * What has been read so far is real, and the caller decides what to do
+       * with it. An error here would make "I have changed my mind" arrive at
+       * the same place as "this file cannot be read", which are not the same
+       * thing to say to somebody.
+       */
+      if (options.signal) {
+        if (options.signal.aborted) {
+          window.clearTimeout(stall);
+          resolve();
+          return;
+        }
+        options.signal.addEventListener('abort', () => {
+          window.clearTimeout(stall);
+          video.pause();
+          resolve();
+        }, { once: true });
+      }
+
       const onFrame: VideoFrameRequestCallback = (_now, metadata) => {
         bump();
         ctx.drawImage(video, 0, 0, SAMPLE_WIDTH, height);
@@ -89,7 +120,7 @@ export async function analyseMotion(
         }
         previous = frame;
         options.onProgress?.(duration ? Math.min(1, metadata.mediaTime / duration) : 0);
-        if (!video.ended) video.requestVideoFrameCallback(onFrame);
+        if (!video.ended && !options.signal?.aborted) video.requestVideoFrameCallback(onFrame);
       };
 
       video.addEventListener('ended', () => {

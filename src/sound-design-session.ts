@@ -2028,6 +2028,9 @@ export class SoundDesignSession {
     this.pause();
     const project = this.project;
     const frame = frameDuration(project);
+    this.#reading = new AbortController();
+    const reading = this.#reading;
+    this.#readingFrom = performance.now();
     this.#store.set({
       detect: { ...emptyDetection(), status: 'scanning', sensitivity: this.#store.state.detect.sensitivity },
       status: 'reading the video…',
@@ -2038,6 +2041,7 @@ export class SoundDesignSession {
       samples = await analyseMotion(url, {
         fps: project.fps,
         onProgress: (fraction) => this.#progress('scanning', fraction),
+        signal: reading.signal,
       });
     } catch (error) {
       this.#store.set({
@@ -2046,6 +2050,14 @@ export class SoundDesignSession {
       });
       return;
     }
+
+    /*
+     * Called off part way. What was read is thrown away rather than half
+     * offered: a pass over the first third of a clip would suggest sounds for
+     * the first third and say nothing about the rest, which reads as the app
+     * having found nothing there.
+     */
+    if (reading.signal.aborted) return;
 
     if (!samples.length) {
       this.#store.set({ detect: emptyDetection(), status: 'nothing found in that video' });
@@ -2080,6 +2092,7 @@ export class SoundDesignSession {
       detect: {
         status: 'ready',
         progress: 1,
+        secondsLeft: null,
         samples,
         candidates,
         peaks,
@@ -2092,11 +2105,45 @@ export class SoundDesignSession {
     });
   }
 
+  /** When the current read began, so how long is left can be worked out. */
+  #readingFrom = 0;
+
   #progress(status: 'scanning' | 'pinning', progress: number): void {
     const detect = this.#store.state.detect;
     if (detect.status !== status) return;
-    this.#store.set({ detect: { ...detect, progress } });
+
+    /*
+     * How long is left, from the rate so far rather than from a guess.
+     *
+     * Nothing is said until a twentieth of the way in, because before that
+     * the rate is mostly the cost of starting and the answer swings about by
+     * minutes. Rounded up to whole seconds, since a number that changes
+     * several times a second is a number nobody can read.
+     */
+    const gone = (performance.now() - this.#readingFrom) / 1000;
+    const secondsLeft =
+      progress > 0.05 && gone > 0.5 ? Math.ceil((gone / progress) * (1 - progress)) : null;
+
+    this.#store.set({ detect: { ...detect, progress, secondsLeft } });
   }
+
+  /**
+   * Stop a read that is going, keeping nothing.
+   *
+   * Reading takes about half the length of the clip, so a ten minute video is
+   * five minutes, and there was no way out of it: the button that starts the
+   * read is the one that shows the progress, and it was greyed out for the
+   * duration. Loading the wrong file meant waiting it out.
+   */
+  stopFindingHits(): void {
+    const { status } = this.#store.state.detect;
+    if (status !== 'scanning' && status !== 'pinning') return;
+    this.#reading?.abort();
+    this.#store.set({ detect: emptyDetection(), status: 'stopped reading the video' });
+  }
+
+  /** How to call off the read that is going, if one is. */
+  #reading: AbortController | null = null;
 
   /** Show more or fewer of what was already found. Does not read the video. */
   setSensitivity(sensitivity: number): void {

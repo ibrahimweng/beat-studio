@@ -157,14 +157,46 @@ export function createTimeline(
   }, [content]);
 
   // ---------- finding hits ----------
+  /**
+   * One button for starting the read and for calling it off.
+   *
+   * It used to grey itself out for the duration and show a percentage, which
+   * is the worst of both: a read takes about half the length of the clip, so
+   * a ten minute video is five minutes with no way out of it and no way to
+   * know how much of that was left. The same button is the way out, because
+   * that is where somebody is already looking.
+   */
   const findButton = button(
     {
       class: 'chip chip--sm',
       title: 'Read the video and suggest where sounds belong',
-      on: { click: () => void session.findHits() },
+      on: {
+        click: () => {
+          const { status } = session.store.state.detect;
+          if (status === 'scanning' || status === 'pinning') session.stopFindingHits();
+          else void session.findHits();
+        },
+      },
     },
     ['Find hits'],
   );
+
+  /**
+   * What the button says while it works.
+   *
+   * How long is left rather than how far through, because that is the
+   * question somebody actually has: whether to wait or go and do something
+   * else. A percentage answers a different one. It falls back to the
+   * percentage for the first fraction of a second, before there is a rate to
+   * work an answer out from, and for the pinning pass, which is short.
+   */
+  function readingLabel(detect: AppState['detect']): string {
+    const what = detect.status === 'scanning' ? 'Reading' : 'Pinning';
+    const left = detect.secondsLeft;
+    if (left === null) return `${what} ${Math.round(detect.progress * 100)}%`;
+    if (left >= 90) return `${what} · ${Math.round(left / 60)} min left`;
+    return `${what} · ${left}s left`;
+  }
 
   const sensitivity = el('input', {
     class: 'range strip__sensitivity',
@@ -1907,13 +1939,13 @@ export function createTimeline(
 
       const { detect } = state;
       const working = detect.status === 'scanning' || detect.status === 'pinning';
-      findButton.disabled = working || !state.videoReady;
-      setText(
-        findButton,
-        working
-          ? `${detect.status === 'scanning' ? 'Reading' : 'Pinning'} ${Math.round(detect.progress * 100)}%`
-          : 'Find hits',
-      );
+      // Live while it works, because it is the way to stop it.
+      findButton.disabled = !working && !state.videoReady;
+      toggleClass(findButton, 'is-working', working);
+      findButton.title = working
+        ? 'Stop reading. Nothing is kept.'
+        : 'Read the video and suggest where sounds belong';
+      setText(findButton, working ? readingLabel(detect) : 'Find hits');
 
       const ready = detect.status === 'ready';
       detectGroup.classList.toggle('is-ready', ready);
