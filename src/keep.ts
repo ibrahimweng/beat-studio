@@ -170,10 +170,6 @@ export function takeOverKeeping(project: Project): void {
   }
 }
 
-/** Whether this tab is the one writing things down. */
-export function isKeeping(): boolean {
-  return holding;
-}
 
 /**
  * Let go, so the next tab picks it up without waiting out the stale window.

@@ -9,9 +9,6 @@ const FINISHES: Record<Finish, string> = {
 
 const DEFAULT_ACCENT = '#0c8ce9';
 
-/** Accents the design ships with; any valid hex is accepted too. */
-export const ACCENT_PRESETS = ['#0c8ce9', '#70b0fa', '#9149f5', '#ea733a'] as const;
-
 export interface ThemeOptions {
   accent?: string;
   finish?: Finish;
@@ -62,20 +59,4 @@ export function themeFromUrl(search = window.location.search): ThemeOptions {
   if (finish && isFinish(finish)) options.finish = finish;
 
   return options;
-}
-
-/** Convert a hex colour to an `rgba(...)` string at the given alpha. */
-export function rgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '');
-  const full =
-    clean.length === 3
-      ? clean
-          .split('')
-          .map((c) => c + c)
-          .join('')
-      : clean;
-  const r = parseInt(full.slice(0, 2), 16) || 0;
-  const g = parseInt(full.slice(2, 4), 16) || 0;
-  const b = parseInt(full.slice(4, 6), 16) || 0;
-  return `rgba(${r},${g},${b},${alpha})`;
 }
