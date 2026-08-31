@@ -166,7 +166,7 @@ const MIN_DURATION = 1;
 const MIN_GAP = 0.08;
 /** Candidates are gathered generously, then narrowed by the sensitivity. */
 const WIDE_SENSITIVITY = 0.92;
-/** An upper bound, so a noisy clip cannot start thousands of seeks. */
+/** An upper bound, so a noisy clip cannot start hundreds of stretches. */
 const MAX_CANDIDATES = 160;
 
 /**
@@ -2114,12 +2114,28 @@ export class SoundDesignSession {
 
     let candidates;
     try {
-      candidates = await refinePeaks(url, wide, frame, window, (fraction) =>
-        this.#progress('pinning', fraction),
+      candidates = await refinePeaks(
+        url,
+        wide,
+        frame,
+        window,
+        (fraction) => this.#progress('pinning', fraction),
+        reading.signal,
       );
     } catch {
       candidates = wide;
     }
+
+    /*
+     * Stopping during the second pass is stopping.
+     *
+     * Pressing stop while it was pinning cleared the screen and said so, and
+     * then the pass nobody had told carried on to the end and put its results
+     * up anyway -- moments appearing out of nowhere some minutes after
+     * somebody asked for none. The first pass has always been told; this one
+     * was reached by a signal it did not take.
+     */
+    if (reading.signal.aborted) return;
 
     const sensitivity = this.#store.state.detect.sensitivity;
     const peaks = filterPeaks(candidates, samples, sensitivity, MIN_GAP);
