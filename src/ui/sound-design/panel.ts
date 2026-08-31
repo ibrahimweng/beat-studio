@@ -2102,7 +2102,22 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       selected = all[0] ?? null;
       const has = selected !== null;
       cueBody.style.opacity = has ? '1' : '0.5';
-      cueBody.style.pointerEvents = has ? '' : 'none';
+      /*
+       * Out of reach entirely, not just out of reach of the mouse.
+       *
+       * This turned pointer events off, which does stop a click landing --
+       * measured, the click does not land and nothing is destroyed. What it
+       * does not stop is the keyboard: sixteen of the seventeen controls in
+       * here stayed in the tab order while dimmed and inert, so tabbing
+       * across the panel with nothing selected went through sixteen stops
+       * that look available, read as available to anything speaking the page
+       * aloud, and do nothing.
+       *
+       * `inert` is the one thing that says all of it at once: no pointer, no
+       * focus, and hidden from assistive technology, which is what "nothing
+       * is selected" already means on screen.
+       */
+      cueBody.inert = !has;
 
       if (selected) {
         const on = selected.source.with ?? [];
