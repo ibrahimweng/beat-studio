@@ -86,8 +86,12 @@ const level = (value: number): number => Math.round(value * 1000) / 1000;
  * rendering of the same voice. `tools/README.md` says how to run it again.
  *
  * Across all 37 the middle score is 0.987 and levels land within a tenth.
- * Only the voices below come out under 0.93, and they are listed with the
- * reason, because a number on its own does not tell you what to expect.
+ * Everything that comes out under 0.93 is listed here with the reason,
+ * because a number on its own does not tell you what to expect. `reverse` is
+ * listed in spite of scoring well, because what it does there is not what it
+ * does here: a buffer read backwards has no expression in that format at all,
+ * so it is rewritten rather than approximated, and somebody ought to know
+ * that whatever the score says.
  *
  * Two limits account for nearly all of it. That format has no way to say a
  * level that rises exponentially, only one that rises in a straight line,
@@ -326,6 +330,18 @@ function slug(label: string): string {
 }
 
 /**
+ * One arrangement of the voices that draw from noise, so the file is the same
+ * file every time it is written.
+ *
+ * `glitch` scatters its bursts at random, which is right when it is played
+ * and wrong when it is written down: without this, exporting the palette
+ * twice gave two different files, and anybody keeping one under version
+ * control got a diff for having pressed the button. The number itself means
+ * nothing beyond being fixed.
+ */
+const WRITTEN = 0x9e3779b9;
+
+/**
  * Every voice in the palette, at the length and pitch it is offered at.
  *
  * Length and pitch are the starting points rather than the whole story: a
@@ -337,7 +353,7 @@ export function buildPatch(): Patch {
 
   for (const name of DESIGN_NAMES) {
     sounds[name] = toPatchSound(
-      DESIGN_SPECS[name]({ length: DESIGN_DEFAULT_LENGTH[name], tune: 0, gain: 1 }),
+      DESIGN_SPECS[name]({ length: DESIGN_DEFAULT_LENGTH[name], tune: 0, gain: 1, seed: WRITTEN }),
     );
   }
 
