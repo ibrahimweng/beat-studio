@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimecode, timecode } from './project.ts';
+import { frameAt, parseTimecode, timecode } from './project.ts';
 
 /*
  * The format is the whole point of these.
@@ -105,5 +105,87 @@ describe('parseTimecode', () => {
 
   it('falls back to a sane rate rather than dividing by nothing', () => {
     expect(parseTimecode('00:00:01:15', 0)).toBeCloseTo(1.5, 6);
+  });
+});
+
+/*
+ * The frame a time is actually on.
+ *
+ * These are the ones that were wrong. `timecode` used to take the fraction of
+ * a second first and multiply that by the rate, which asks binary floating
+ * point for numbers it does not hold: 2.3 minus 2 is 0.2999999999999998, and
+ * thirty of those floor to 8. Nearly half of every frame position at 30fps
+ * came out a frame early, and it went unnoticed because a frame is a
+ * thirtieth of a second and the readout looked plausible either way.
+ *
+ * The app's whole job is landing a sound on the frame a cut happens on, so
+ * the sweep is the test that matters: not a handful of cases someone thought
+ * to write down, but every frame position over ten minutes at each rate.
+ */
+describe('frameAt', () => {
+  it('puts every frame-snapped time on its own frame', () => {
+    for (const fps of [24, 25, 30, 48, 50, 60]) {
+      const wrong: number[] = [];
+      for (let frame = 0; frame < fps * 600; frame++) {
+        if (frameAt(frame / fps, fps) !== frame) wrong.push(frame);
+      }
+      expect(wrong.slice(0, 8), `${fps}fps, ${wrong.length} wrong of ${fps * 600}`).toEqual([]);
+    }
+  });
+
+  it('does not round up to a frame that has not started', () => {
+    // Two thirds of the way through frame 68 is still frame 68.
+    expect(frameAt(68.67 / 30, 30)).toBe(68);
+    expect(frameAt(0.999, 30)).toBe(29);
+  });
+
+  it('treats a time before the start as the start', () => {
+    expect(frameAt(-10, 30)).toBe(0);
+  });
+});
+
+describe('timecode and frameAt agree', () => {
+  /*
+   * The two used to be worked out separately, and the marker list wrote both
+   * on the same row: a sound at 2.3 seconds was frame 69 in one column and
+   * 00:00:02:08 -- frame 68 -- in the next.
+   */
+  it('names the same frame, over ten minutes', () => {
+    const fps = 30;
+    const wrong: string[] = [];
+    for (let frame = 0; frame < fps * 600; frame++) {
+      const at = frame / fps;
+      const shown = Number(timecode(at, fps).split(':')[3]);
+      if (shown !== frameAt(at, fps) % fps) wrong.push(`${frame}: ${timecode(at, fps)}`);
+    }
+    expect(wrong.slice(0, 8), `${wrong.length} rows disagreed`).toEqual([]);
+  });
+
+  it('the case that was wrong on screen', () => {
+    expect(timecode(2.3, 30)).toBe('00:00:02:09');
+    expect(timecode(7.3, 30)).toBe('00:00:07:09');
+    expect(frameAt(2.3, 30)).toBe(69);
+  });
+});
+
+/*
+ * Rates that are not whole numbers still have to print two digits.
+ *
+ * 29.97 fills thirty frame slots and takes 1.001 seconds over it, which is
+ * what non-drop timecode is. Taking the remainder against 29.97 itself prints
+ * a fraction of a frame, which no edit suite can read.
+ */
+describe('timecode at broadcast rates', () => {
+  it('writes whole frames, never a fraction of one', () => {
+    for (const fps of [23.976, 29.97, 59.94]) {
+      for (const at of [0, 0.5, 1, 61, 3600]) {
+        expect(timecode(at, fps), `${at}s at ${fps}`).toMatch(/^\d\d:\d\d:\d\d:\d\d$/);
+      }
+    }
+  });
+
+  it('counts thirty slots at 29.97, not 29.97 of them', () => {
+    expect(timecode(29 / 29.97, 29.97)).toBe('00:00:00:29');
+    expect(timecode(30 / 29.97, 29.97)).toBe('00:00:01:00');
   });
 });

@@ -174,13 +174,53 @@ function applySnap(time: number, snap: SnapMode, project: Project): number {
  * and it costs three characters.
  */
 export function timecode(time: number, fps: number): string {
-  const safe = Math.max(0, time);
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  const seconds = Math.floor(safe % 60);
-  const frames = Math.floor((safe % 1) * (fps || DEFAULT_FPS));
+  const rate = fps || DEFAULT_FPS;
+  /*
+   * Frames are counted in whole slots even when the rate is not whole.
+   *
+   * 29.97 fills thirty slots and takes 1.001 seconds to do it, so its
+   * timecode drifts from the wall clock by about two seconds an hour. That
+   * drift is what non-drop timecode is, and it is what an edit suite shows,
+   * so following it is the point rather than a rounding convenience. Taking
+   * the remainder against 29.97 itself would print a fraction of a frame,
+   * which is not a thing any of them can read.
+   */
+  const slots = Math.max(1, Math.round(rate));
+  const frames = frameAt(time, rate);
+  const whole = Math.floor(frames / slots);
   const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
+  return [
+    pad(Math.floor(whole / 3600)),
+    pad(Math.floor((whole % 3600) / 60)),
+    pad(whole % 60),
+    pad(frames % slots),
+  ].join(':');
+}
+
+/**
+ * Which frame a time falls on.
+ *
+ * Counted from the start rather than from the second it sits in, which is the
+ * whole of the fix this replaced. Taking the fraction first — `(time % 1) *
+ * fps` — asks binary floating point for a number it does not hold: two point
+ * three minus two is 0.2999999999999998, and thirty of those floor to frame
+ * 8 rather than 9. Nearly half of every frame position at 30fps came out a
+ * frame early that way, and the marker list disagreed with itself, its
+ * timecode column saying 00:00:02:08 on the same row its frame column said
+ * 69.
+ *
+ * The tolerance is what makes a snapped time land on its own frame. A cue at
+ * frame 41 is held as 41/30 seconds, which multiplies back to 41.00000000004
+ * on a good day and 40.99999999999 on a bad one, and flooring the second of
+ * those loses the frame again. A millionth of a frame is 33 nanoseconds at
+ * 30fps — far below anything the app can place — so it can absorb the error
+ * without reaching a real difference.
+ *
+ * Flooring rather than rounding, because this also reads a playhead that is
+ * still moving: two thirds of the way through frame 68 is frame 68, not 69.
+ */
+export function frameAt(time: number, fps: number): number {
+  return Math.floor(Math.max(0, time) * (fps || DEFAULT_FPS) + 1e-6);
 }
 
 /**
