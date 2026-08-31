@@ -121,17 +121,6 @@
   margin-bottom: 8px;
 }
 
-.rail__logo {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-8);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  display: grid;
-  place-items: center;
-  margin-bottom: 12px;
-}
-
 .rail__btn {
   position: relative;
   width: 40px;
@@ -148,48 +137,6 @@
 
 .rail__btn:hover {
   color: var(--txt);
-}
-
-.rail__btn.is-active {
-  color: var(--txt);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-}
-
-/* Accent tick that marks the selected instrument */
-.rail__btn.is-active[data-marker]::before {
-  content: '';
-  position: absolute;
-  left: -15px;
-  top: 10px;
-  width: 2px;
-  height: 18px;
-  border-radius: 0 2px 2px 0;
-  background: var(--ac);
-  pointer-events: none;
-}
-
-.rail__divider {
-  width: 22px;
-  height: 1px;
-  background: var(--line);
-  margin: 9px 0;
-}
-
-.rail__badge {
-  position: absolute;
-  top: 5px;
-  right: 4px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 4px;
-  border-radius: var(--r-8);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: #0b0d10;
-  background: var(--ac);
 }
 
 .rail__spacer {
@@ -222,14 +169,6 @@
   overflow: hidden;
 }
 
-.topbar__title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
 .topbar__spacer {
   flex: 1 1 auto;
 }
@@ -239,12 +178,6 @@
   height: 22px;
   background: var(--line);
   margin: 0 4px;
-}
-
-.topbar__transport {
-  display: flex;
-  align-items: center;
-  gap: 7px;
 }
 
 /* ---------- stage ---------- */
