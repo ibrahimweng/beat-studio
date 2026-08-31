@@ -176,26 +176,34 @@ function applySnap(time: number, snap: SnapMode, project: Project): number {
 export function timecode(time: number, fps: number): string {
   const rate = fps || DEFAULT_FPS;
   /*
-   * Frames are counted in whole slots even when the rate is not whole.
+   * The clock comes from the time, and only the frames come from counting.
    *
-   * 29.97 fills thirty slots and takes 1.001 seconds to do it, so its
-   * timecode drifts from the wall clock by about two seconds an hour. That
-   * drift is what non-drop timecode is, and it is what an edit suite shows,
-   * so following it is the point rather than a rounding convenience. Taking
-   * the remainder against 29.97 itself would print a fraction of a frame,
-   * which is not a thing any of them can read.
+   * This read the whole thing off the frame count for a while, dividing it by
+   * the nominal rate to get the seconds, which is what non-drop timecode does
+   * and is right for a rate somebody chose. It is wrong for this one. The rate
+   * here is measured off the clip that was loaded, so it lands on 29.95 as
+   * readily as on 30 -- and at 29.95 a piece set to exactly twenty seconds
+   * counts 599 frames, which divided by thirty is nineteen. Someone who typed
+   * twenty seconds was shown 00:00:19:29.
+   *
+   * So the seconds are the seconds. What the frame count is still needed for
+   * is the frames field, as the difference between this moment and the start
+   * of its second -- which is the same subtraction the fraction-first version
+   * did, done in whole frames where it cannot lose one.
    */
   const slots = Math.max(1, Math.round(rate));
-  const frames = frameAt(time, rate);
-  const whole = Math.floor(frames / slots);
+  const safe = Math.max(0, time);
+  const whole = Math.floor(safe);
+  const within = Math.min(slots - 1, Math.max(0, frameAt(safe, rate) - frameAt(whole, rate)));
   const pad = (value: number): string => String(value).padStart(2, '0');
   return [
     pad(Math.floor(whole / 3600)),
     pad(Math.floor((whole % 3600) / 60)),
     pad(whole % 60),
-    pad(frames % slots),
+    pad(within),
   ].join(':');
 }
+
 
 /**
  * Which frame a time falls on.
