@@ -1410,26 +1410,6 @@
   margin-top: 6px;
 }
 
-/* ---------- sounds found online ---------- */
-
-.found__panel {
-  margin-top: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-8);
-  background: var(--panel);
-}
-
-.found__panel audio {
-  display: none;
-}
-
-.found__note {
-  padding: 4px 2px;
-  font-size: 11px;
-  color: var(--txt-3);
-}
-
 .found {
   max-height: 320px;
   overflow-y: auto;
@@ -1623,78 +1603,10 @@
   border-bottom: 1px solid var(--line);
 }
 
-.panel-tab {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--txt-3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-
-.panel-tab:hover {
-  color: var(--txt-2);
-}
-
-.panel-tab.is-on {
-  color: var(--txt);
-  font-weight: 600;
-  border-bottom-color: var(--ac);
-}
-
-.panel-tab__count {
-  min-width: 16px;
-  height: 15px;
-  padding: 0 4px;
-  border-radius: var(--r-8);
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  color: #0b0d10;
-  background: var(--ac);
-}
-
-/*
- * Takes its content's height, rather than a share of the panel's.
- *
- * The inspector is the thing that scrolls, and it scrolls as one column. A
- * body set to grow and shrink inside it gets squeezed to whatever is left
- * over, and then a list of forty moments paints straight over the export
- * buttons underneath, which are still where the layout thinks they are and
- * still take the clicks.
- */
-.panel-body {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-}
-
 .panel-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-/* Under whichever tab is up, and far enough from it to read as separate. */
-.panel-tail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 6px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
 }
 
 /* ---------- the moments ---------- */
@@ -1762,17 +1674,6 @@
 .moment.is-placed {
   border-color: var(--ac-line);
   background: var(--ac-soft);
-}
-
-/*
- * Passed over, and still readable.
- *
- * Not hidden, because a decision you cannot see is a decision you cannot
- * change, and somebody learning this will pass over a moment and then want to
- * know what it was going to say.
- */
-.moment.is-skipped {
-  opacity: 0.5;
 }
 
 .moment__top {
@@ -1972,8 +1873,6 @@
   line-height: 1.45;
   text-wrap: pretty;
 }
-
-
 
 /* ---------- the app bar, and the transport that left it ---------- */
 
@@ -2304,7 +2203,6 @@
   cursor: pointer;
 }
 
-
 /* ---------- context menus ---------- */
 
 /*
@@ -2410,7 +2308,6 @@
 .app[data-tool='pen'] .tl__viewport * {
   cursor: url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2222%22%20height=%2222%22%20viewBox=%220%200%2022%2022%22%3E%3Cpath%20d=%22M15.4%202.2%2019%205.8%208.2%2016.6l-4.6%201%201-4.6z%22%20fill=%22white%22%20stroke=%22black%22%20stroke-width=%221.2%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M12.6%205%2016.2%208.6%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%221.1%22/%3E%3C/svg%3E') 3 19, crosshair;
 }
-
 
 /* ---------- docks ---------- */
 

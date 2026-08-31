@@ -23,14 +23,6 @@
   color: var(--txt);
 }
 
-.chip__caret {
-  width: 0;
-  height: 0;
-  border-left: 3.5px solid transparent;
-  border-right: 3.5px solid transparent;
-  border-top: 4px solid var(--txt-3);
-}
-
 /* Small chip used across the dock bar */
 .chip--sm {
   height: 28px;
@@ -75,36 +67,6 @@
 .btn-accent:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-/* Download glyph: a stem with a chevron under it */
-.icon-download {
-  position: relative;
-  width: 11px;
-  height: 12px;
-}
-
-.icon-download::before {
-  content: '';
-  position: absolute;
-  left: 4.5px;
-  top: 0;
-  width: 2px;
-  height: 7px;
-  background: #fff;
-  border-radius: 1px;
-}
-
-.icon-download::after {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 4px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(45deg);
 }
 
 /* Round transport buttons */
@@ -164,29 +126,6 @@
   color: var(--rec);
 }
 
-.round-btn__stop {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-2);
-  background: var(--txt-2);
-}
-
-.round-btn__rec {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--rec);
-}
-
-.round-btn.is-recording::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 50%;
-  border: 1px solid var(--rec);
-  pointer-events: none;
-}
-
 .play-btn {
   position: relative;
   width: 38px;
@@ -216,77 +155,6 @@
   margin-left: 2px;
 }
 
-/* Stepper: minus / value / plus in one bordered group */
-.stepper {
-  display: flex;
-  align-items: center;
-  height: 32px;
-  border-radius: var(--r-8);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  overflow: hidden;
-}
-
-.stepper--sm {
-  height: 26px;
-  border-radius: var(--r-6);
-  background: var(--panel-2);
-}
-
-.stepper__btn {
-  width: 28px;
-  height: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: var(--txt-2);
-  font: inherit;
-  font-size: 14px;
-}
-
-.stepper--sm .stepper__btn {
-  width: 24px;
-  font-size: 13px;
-}
-
-.stepper__btn:hover {
-  color: var(--txt);
-  background: var(--panel-2);
-}
-
-.stepper--sm .stepper__btn:hover {
-  background: transparent;
-}
-
-.stepper__readout {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 0 4px;
-}
-
-.stepper__value {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.stepper__unit {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--txt-3);
-  letter-spacing: 0.06em;
-}
-
-.stepper__lcd {
-  min-width: 34px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 /* ---------- selectable cells (banks, loop lengths, dock tabs) ---------- */
 
 .cell {
@@ -304,14 +172,6 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--txt-2);
-}
-
-.cell--loop {
-  width: 30px;
-  min-width: 30px;
-  font-size: 11px;
-  font-weight: 500;
-  background: var(--panel-2);
 }
 
 .cell.is-on {
@@ -430,11 +290,6 @@
   height: 8px;
 }
 
-.led--md {
-  width: 6px;
-  height: 6px;
-}
-
 /* ---------- meters ---------- */
 
 .meter {
@@ -445,27 +300,6 @@
   background: color-mix(in oklab, var(--tc-fg) 6%, transparent);
   border: 1px solid var(--line-soft);
   overflow: hidden;
-}
-
-.meter__fill {
-  height: 100%;
-  width: 0%;
-  background: var(--ac);
-  transition: width 0.06s linear;
-}
-
-.meter__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.meter__db {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--txt-2);
-  width: 42px;
-  text-align: right;
 }
 
 /* Buttons inherit nothing useful by default; normalise the ones we style. */
