@@ -1,4 +1,4 @@
-import { audibleCues, cueLength, cueStart } from '../timeline/project.ts';
+import { audibleCues, cueLength, cueStart, frameAt, timecode } from '../timeline/project.ts';
 import type { Project } from '../timeline/types.ts';
 
 /**
@@ -22,11 +22,22 @@ export function markerCsv(project: Project): string {
   const cues = [...audibleCues(project)].sort((a, b) => a.time - b.time);
 
   for (const cue of cues) {
+    /*
+     * One frame number, written twice.
+     *
+     * The two columns used to be worked out separately -- the frame rounded
+     * from the time, the timecode floored from the fraction of a second --
+     * and disagreed whenever floating point put those on either side of a
+     * boundary. A sound at 2.3 seconds was written as frame 69 on the same
+     * row that its timecode called 00:00:02:08, which is frame 68. Somebody
+     * laying that up has to pick one and has no way to tell which.
+     */
+    const frame = frameAt(cue.time, project.fps);
     rows.push(
       [
-        smpte(cue.time, project.fps),
+        timecode(cue.time, project.fps),
         cue.time.toFixed(3),
-        String(Math.round(cue.time * project.fps)),
+        String(frame),
         csv(String(cue.source.name)),
         csv(layers.get(cue.layerId) ?? cue.layerId),
         // Where the marker is relative to the sound, which is the difference
@@ -42,25 +53,11 @@ export function markerCsv(project: Project): string {
   // file up knows whether anything is still ringing past the end of the video.
   const last = cues.reduce((max, cue) => Math.max(max, cueStart(cue) + cueLength(cue)), 0);
   rows.push(
-    [smpte(last, project.fps), last.toFixed(3), String(Math.round(last * project.fps)),
+    [timecode(last, project.fps), last.toFixed(3), String(frameAt(last, project.fps)),
      'end of sound', '', '', '', ''].join(','),
   );
 
   return `${rows.join('\n')}\n`;
-}
-
-/** Hours, minutes, seconds and frames, which is the form editors read. */
-function smpte(time: number, fps: number): string {
-  const rate = fps || 30;
-  const safe = Math.max(0, time);
-  const whole = Math.floor(safe);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return [
-    pad(Math.floor(whole / 3600)),
-    pad(Math.floor((whole % 3600) / 60)),
-    pad(whole % 60),
-    pad(Math.floor((safe - whole) * rate)),
-  ].join(':');
 }
 
 /** Quote a field only where it would otherwise break the row. */
