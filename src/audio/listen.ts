@@ -137,10 +137,26 @@ export function fft(re: Float64Array, im: Float64Array): void {
         im[i + k] = ui + vi;
         re[i + k + len / 2] = ur - vr;
         im[i + k + len / 2] = ui - vi;
+        /*
+         * Turned once per butterfly, which is the whole of the transform.
+         *
+         * This sat outside the loop, so every butterfly in a block used the
+         * same angle -- which is to say no angle at all, since it starts at
+         * one and nothing had turned it yet. What that computes is a
+         * Walsh-Hadamard transform rather than a Fourier one: a pure tone
+         * came out spread across every odd bin instead of standing in its
+         * own, and a five cycle cosine peaked in bin fifteen.
+         *
+         * Nothing above noticed, because everything here compares one
+         * fingerprint against another and both were scrambled the same way.
+         * Two takes of one sound still matched. What was lost was every
+         * comparison between sounds that are not the same, which is what
+         * this file is for.
+         */
+        const nr = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = nr;
       }
-      const nr = cr * wr - ci * wi;
-      ci = cr * wi + ci * wr;
-      cr = nr;
     }
   }
 }
