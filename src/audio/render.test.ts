@@ -221,21 +221,43 @@ describe('the same sound twice', () => {
    */
   it('renders identically from the same project', async () => {
     const one = project(3, [cue({ id: 'fixed', time: 0.5, layerId: LAYERS[0], vary: 0.8 })]);
-    const first = (await render(one)).parts[0].buffer.getChannelData(0);
-    const again = (await render(one)).parts[0].buffer.getChannelData(0);
+    /*
+     * Copied out, and that is the whole of it.
+     *
+     * `getChannelData` here is a view onto memory the Rust binding owns, not
+     * a JS array of its own, and it stays valid only while its AudioBuffer
+     * is alive. Written as one expression the buffer is unreachable the
+     * instant the view exists, so the next render is free to have its
+     * allocation, and the view then reads whatever is in that memory now:
+     * zeros, or the odd 7.6e+26 that is nothing but uninitialised bytes read
+     * as floats.
+     *
+     * That is what the failure below used to be. It was seen once on CI as a
+     * difference of 0.87, filed as unexplained, and never reproduced --
+     * because it needs allocation pressure, so it turns up about one full
+     * suite run in six and never when this file is run on its own. 0.87 is
+     * not a coincidence: the sound peaks at 0.873, and the render it was
+     * compared against had gone to zeros.
+     *
+     * A browser has no such hazard, which is why this is only ever a fault
+     * here. `Float32Array.from` takes the samples into JS memory while they
+     * are still there, and it was the copy in the experiment that settled
+     * this: born 0.873, the same view later 0.000, the copy still 0.873.
+     */
+    const first = Float32Array.from((await render(one)).parts[0].buffer.getChannelData(0));
+    const again = Float32Array.from((await render(one)).parts[0].buffer.getChannelData(0));
 
     expect(again.length).toBe(first.length);
 
     /*
      * Where and how much, not just how much.
      *
-     * This failed once on a CI runner by 0.87 — the size of a different
-     * sound, not of arithmetic — and could not be reproduced in twenty
-     * renders here or on the other Node in the same run. A bare number gives
-     * the next occurrence nothing to go on. Whether the difference sits on
-     * the transient or out in the reverb tail says whether to suspect the
-     * voice or the convolver, and the peaks say whether one render simply
-     * came out silent.
+     * Kept, though the failure it was written for is fixed above. It is what
+     * found that fault: `peaks 0.000 and 0.873` said plainly that one render
+     * had come out silent rather than slightly different, which is not
+     * something a bare number would ever have said. Whether a difference
+     * sits on the transient or out in the reverb tail is the same kind of
+     * question, and the next one will want the same answer.
      */
     let worst = 0;
     let worstAt = -1;
@@ -327,10 +349,14 @@ describe('stems', () => {
       /*
        * Read once per channel, not once per sample.
        *
-       * `getChannelData` hands back a copy here rather than a view onto the
-       * buffer, so calling it inside the loop turned a sum over a few hundred
-       * thousand samples into a minute of copying. Cheap in a browser, not
-       * cheap everywhere.
+       * Every call crosses into the Rust binding and builds a fresh view, so
+       * calling it inside the loop turned a sum over a few hundred thousand
+       * samples into a minute of overhead. Cheap in a browser, not cheap
+       * everywhere.
+       *
+       * Safe to hold onto here, unlike in the determinism test above, because
+       * `mixed` and `stems` stay referenced for as long as the views are
+       * read. A view outlives nothing.
        */
       const each = stems.map((stem) => stem.buffer.getChannelData(channel));
       let worst = 0;
