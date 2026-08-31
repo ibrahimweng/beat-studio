@@ -1,4 +1,4 @@
-/* Shared control grammar: chips, buttons, toggles, knobs, sliders, cards. */
+/* Shared control grammar: chips, buttons, toggles, cards. */
 
 /* ---------- buttons and chips ---------- */
 
@@ -389,162 +389,6 @@
   transform: translateX(12px);
 }
 
-/* ---------- knob ---------- */
-
-.knob {
-  position: relative;
-  width: 100%;
-  max-width: 70px;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  cursor: ns-resize;
-  touch-action: none;
-}
-
-.knob__rotor {
-  position: absolute;
-  inset: 0;
-  /* Set from script: -135deg at 0, +135deg at 1 */
-  transform: rotate(-135deg);
-}
-
-.knob__pointer {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  translate: -50% -100%;
-  width: 1.5px;
-  height: 34%;
-  background: var(--txt);
-  border-radius: 1px;
-}
-
-.knob__dot {
-  position: absolute;
-  left: 50%;
-  top: -5px;
-  translate: -50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--ac);
-}
-
-.knob__value {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--txt-2);
-  margin-top: 10px;
-}
-
-/* ---------- sliders ---------- */
-
-/* Horizontal master volume, with hover markers along the track */
-.slider-h {
-  position: relative;
-  flex: 1 1 auto;
-  height: 18px;
-  cursor: ew-resize;
-  touch-action: none;
-}
-
-.slider-h__track,
-.slider-h__fill {
-  position: absolute;
-  top: 8.5px;
-  height: 1px;
-  border-radius: 999px;
-  pointer-events: none;
-}
-
-.slider-h__track {
-  left: 0;
-  right: 0;
-  background: color-mix(in oklab, var(--txt) 20%, transparent);
-}
-
-.slider-h__fill {
-  left: 0;
-  width: 0;
-  background: var(--ac);
-}
-
-.slider-h__ticks {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  top: 6px;
-  bottom: 6px;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  align-items: center;
-  pointer-events: none;
-}
-
-.slider-h__ticks i {
-  height: 6px;
-  width: 1px;
-  background: color-mix(in oklab, var(--txt) 14%, transparent);
-  margin: 0 auto;
-}
-
-/* 9px square accent thumb, per the Toolcraft slider spec */
-.slider-h__thumb {
-  position: absolute;
-  top: 4.5px;
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-2);
-  background: var(--ac);
-  left: 0;
-  pointer-events: none;
-}
-
-/* Vertical EQ band */
-.slider-v {
-  position: relative;
-  width: 18px;
-  height: 88px;
-  margin: 0 auto;
-  cursor: ns-resize;
-  touch-action: none;
-}
-
-.slider-v__track {
-  position: absolute;
-  left: 8.5px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--txt) 20%, transparent);
-  pointer-events: none;
-}
-
-.slider-v__centre {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  top: 50%;
-  height: 1px;
-  background: color-mix(in oklab, var(--txt) 14%, transparent);
-  pointer-events: none;
-}
-
-.slider-v__thumb {
-  position: absolute;
-  left: 4.5px;
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-2);
-  background: var(--ac);
-  top: 40px;
-  pointer-events: none;
-}
-
 /* ---------- surfaces and text ---------- */
 
 .card {
@@ -673,15 +517,6 @@ button {
  * a handful of its rules, so they are here rather than in a file that is
  * otherwise about parts of the app that no longer exist.
  */
-.knob-card {
-  border-radius: var(--r-12);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 16px;
-  display: grid;
-  place-items: center;
-}
-
 .rule {
   height: 1px;
   background: var(--line-soft);

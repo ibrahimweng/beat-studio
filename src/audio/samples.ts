@@ -174,10 +174,6 @@ export function sampleById(id: string): Sample | null {
   return held.find((s) => s.id === id) ?? null;
 }
 
-/** The decoded audio for a recording, or null if it has not been decoded yet. */
-export function sampleBuffer(id: string): AudioBuffer | null {
-  return audio.get(id) ?? null;
-}
 
 /**
  * Take on a recording.
