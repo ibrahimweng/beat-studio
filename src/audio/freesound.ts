@@ -89,15 +89,19 @@ export const LICENCES = {
 
 export type LicenceName = keyof typeof LICENCES;
 
+/*
+ * One option, because one is all that travels.
+ *
+ * There were four. A length cap, a page number and a page size sat here as
+ * well, and none of them reached anything: `searchUrl` never wrote them, the
+ * proxy never read them, and nothing ever passed one. How long a sound may be
+ * and how many come back are fixed on the server -- `duration:[0 TO 30]` and
+ * twenty four -- so a caller asking for fifty per page got twenty four and no
+ * way to tell it had been ignored.
+ */
 export interface SearchOptions {
   /** Only this licence. Left out, everything comes back. */
   licence?: LicenceName;
-  /** Seconds. A sound design palette wants short things. */
-  maxSeconds?: number;
-  /** Which page, from 1. */
-  page?: number;
-  /** How many per page. */
-  perPage?: number;
 }
 
 /**
