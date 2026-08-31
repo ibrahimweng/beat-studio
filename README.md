@@ -990,13 +990,12 @@ it again.
 
 ## Options
 
-You can set three things in the address bar.
+You can set two things in the address bar.
 
 - `?accent=%239149f5` changes the accent colour. The value must be a hex colour.
   Remember that `#` is written as `%23` in a web address.
 - `?finish=slate` changes the background. The choices are `black`, `dark` and
   `slate`.
-- `?samples=off` turns off the sampled instruments described below.
 
 ## How the sound is made
 
@@ -1014,22 +1013,14 @@ The signal passes through a three band equaliser, a reverb and a master volume
 control. The reverb uses an impulse response that the app generates when it
 starts, so there is no file to load.
 
-Notes are scheduled ahead of the audio clock rather than played the moment a
-timer fires. A timer on its own drifts, and you would hear the timing slip. The
-scheduler runs every 25 milliseconds and queues every step due in the next 140
-milliseconds.
+Every sound is described before it is made. A voice is a `VoiceSpec` — plain
+data saying what oscillators and noise it is built from — and one piece of code
+turns a spec into audio, live and offline alike. That is why auditioning a
+sound, playing the timeline and exporting the file cannot disagree about what
+it sounds like, and why a sound can also be written to a patch file or saved as
+one of your own.
 
-### Sampled instruments
-
-When the audio engine starts, Beat Studio tries to load General MIDI samples for
-the piano and the guitar using the `smplr` library. These samples come from a
-server run by someone else, at `gleitz.github.io`. If that request fails, or you
-are offline, the app uses the built-in synthesised voices instead and everything
-keeps working. The Engine panel on the right tells you which set of sounds is in
-use.
-
-If you would rather the app never contacted another server, add `?samples=off`
-to the address.
+Nothing is fetched from anywhere. Every sound the app can make, it makes.
 
 ## How the code is organised
 

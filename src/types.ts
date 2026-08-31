@@ -33,18 +33,3 @@ export interface NoteEvent {
 export type KnobName = 'reverb' | 'tone';
 export type SliderName = 'vol' | 'low' | 'mid' | 'high';
 
-/** Which instrument voice a note should be played with. */
-export type NoteKind = 'piano' | 'guitar';
-
-/**
- * A sounding synth voice that can be released on key-up.
- *
- * One level per layer rather than one for the voice, because a voice is built
- * from its layers and each carries its own. Letting go of a note means letting
- * go of all of them together.
- */
-export interface Voice {
-  gains: GainNode[];
-  dur: number;
-}
-

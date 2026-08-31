@@ -1,4 +1,4 @@
-/* Application shell: rail | (topbar / stage / dock / mixer) | inspector */
+/* Application shell: rail | (topbar / stage / dock) | panel */
 
 /*
  * Everything, with room above it for a notice when there is one.
@@ -276,19 +276,6 @@
   flex: 1 1 auto;
 }
 
-/* ---------- mixer strip ---------- */
-
-.mixer {
-  flex: 0 0 auto;
-  height: 58px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 0 16px;
-  background: var(--bg);
-  overflow: hidden;
-}
-
 /* ---------- inspector ---------- */
 
 .inspector {
@@ -316,20 +303,17 @@
 /*
  * Narrow windows.
  *
- * The instrument inspector is supporting detail — the engine light, the reverb
- * and tilt knobs, the EQ — so it goes first and nothing is lost but a glance.
+ * The panel narrows rather than going away. It is where a sound is chosen,
+ * described, stacked, edited and exported, and hiding it leaves a timeline
+ * you can drop sounds onto and nothing else: no way to say which sound, no
+ * way to get a file out. Measured at 880px, that screen was a dead end.
  *
- * The sound design panel is not. It is where a sound is chosen, described,
- * stacked, edited and exported, and hiding it leaves a timeline you can drop
- * sounds onto and nothing else: no way to say which sound, no way to get a
- * file out. Measured at 880px, that screen was a dead end. So it narrows
- * instead, and keeps narrowing, but it never goes away.
+ * There used to be a second panel here — the instrument inspector, with the
+ * engine light and the reverb and EQ knobs — and this rule hid it first, on
+ * the grounds that it was a thing you glance at. It went when mixing moved
+ * onto the layers, so there is nothing left to hide.
  */
 @media (max-width: 900px) {
-  .inspector:not(.inspector--work) {
-    display: none;
-  }
-
   .inspector--work {
     flex: 0 1 292px;
     min-width: 244px;
