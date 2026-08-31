@@ -76,6 +76,7 @@ import type { Moment } from './video/moments.ts';
 import { suggestFor } from './audio/suggest.ts';
 import type { Suggested } from './audio/suggest.ts';
 import { VideoClock } from './video/clock.ts';
+import { isAnimatedImage, videoFromAnimated } from './video/animated.ts';
 import { estimateFps, loadVideoFile } from './video/loader.ts';
 import { listen } from './audio/listen.ts';
 
@@ -1006,12 +1007,41 @@ export class SoundDesignSession {
 
   // ---------- video ----------
 
-  async loadVideo(file: File): Promise<void> {
+  async loadVideo(given: File): Promise<void> {
     const video = this.#video;
     if (!video) return;
 
     if (this.#objectUrl) URL.revokeObjectURL(this.#objectUrl);
-    this.#store.set({ status: `loading ${file.name}…` });
+    this.#store.set({ status: `loading ${given.name}…` });
+
+    /*
+     * A moving picture becomes a video before anything else looks at it.
+     *
+     * A GIF cannot go in a video element at all, and nor can an animated PNG
+     * or WebP. Converting here rather than teaching the rest of the app about
+     * a second kind of clip means the scan, the playhead, the scrubbing and
+     * the export never learn one was involved.
+     *
+     * It runs in the file's own time -- see `animated.ts` -- so it says how
+     * far along it is rather than looking as though nothing is happening.
+     */
+    let file = given;
+    /** What the frames add up to, when the recorder will not say. */
+    let trueSeconds: number | null = null;
+    if (isAnimatedImage(given)) {
+      try {
+        const made = await videoFromAnimated(given, (fraction) => {
+          this.#store.set({ status: `reading ${given.name} · ${Math.round(fraction * 100)}%` });
+        });
+        file = made.file;
+        trueSeconds = made.seconds;
+      } catch (error) {
+        this.#store.set({
+          status: error instanceof Error ? error.message : 'could not read that image',
+        });
+        return;
+      }
+    }
 
     let loaded;
     try {
@@ -1025,7 +1055,13 @@ export class SoundDesignSession {
     // Anything found for the previous clip no longer applies.
     this.#store.set({ detect: emptyDetection() });
     this.#setProject(
-      { ...this.project, duration: loaded.duration, videoName: loaded.name },
+      {
+        ...this.project,
+        // The frames' own timings when there are some, since the recorder
+        // ends a stream-written file at its last frame. See `animated.ts`.
+        duration: trueSeconds ?? loaded.duration,
+        videoName: loaded.name,
+      },
       '',
       false,
     );
