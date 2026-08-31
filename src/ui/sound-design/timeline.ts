@@ -335,6 +335,41 @@ export function createTimeline(
   }
 
   /**
+   * Pinch to zoom, around whatever the pointer is over.
+   *
+   * A trackpad pinch reaches the page as a wheel event with `ctrlKey` set,
+   * which is the only way a browser reports one -- there is no pinch event on
+   * a desktop. Plain two-finger scrolling is left alone, because the viewport
+   * already scrolls both ways on its own and doing it again here would move
+   * it twice.
+   *
+   * The time under the pointer stays under the pointer, which is the whole
+   * point of zooming with a gesture rather than with the buttons: the buttons
+   * zoom around the left edge because they have no pointer to zoom around,
+   * and pinching around the left edge would send whatever you were looking at
+   * off the side of the screen.
+   */
+  viewport.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const box = viewport.getBoundingClientRect();
+      const fromLeft = event.clientX - box.x;
+      const at = (viewport.scrollLeft + fromLeft) / pxPerSec;
+      /*
+       * Exponential, so the gesture is symmetric: pinching out and back in by
+       * the same amount lands where it started. A straight multiplier does
+       * not -- a tenth up and a tenth down is 0.99 of where it began, and a
+       * dozen of those is a visible drift.
+       */
+      setZoom(pxPerSec * Math.exp(-event.deltaY / 180));
+      viewport.scrollLeft = Math.max(0, at * pxPerSec - fromLeft);
+    },
+    { passive: false },
+  );
+
+  /**
    * Pull the scale back inside its bounds, if something else moved them.
    *
    * The bounds depend on the piece and on the room there is to draw it in,

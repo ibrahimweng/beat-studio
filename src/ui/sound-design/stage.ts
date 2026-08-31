@@ -226,6 +226,36 @@ export function createVideoStage(session: SoundDesignSession): VideoStageView {
     session.store.set({ status: `the ${tool} tool works on the timeline, not on the picture` });
   }
 
+  /**
+   * Pinch to zoom the picture, two fingers to move it.
+   *
+   * A trackpad pinch arrives as a wheel event with `ctrlKey` set, which is
+   * the only way a browser reports one. Two fingers without it is a scroll,
+   * and there is nothing to scroll here -- so it moves the picture instead,
+   * which is what two fingers do over a zoomed image everywhere else.
+   *
+   * Neither asks which tool is held. A gesture is not a tool: the hand and
+   * the zoom exist for a mouse, which has no way to say "closer" without
+   * one, and somebody pinching has already said it.
+   */
+  root.addEventListener(
+    'wheel',
+    (event) => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+        // Exponential, so pinching out and back in lands where it started.
+        zoomAround(event.clientX, event.clientY, scale * Math.exp(-event.deltaY / 180));
+        return;
+      }
+      // Nothing to move while the whole picture is showing, so the scroll is
+      // left to whatever is underneath rather than swallowed.
+      if (scale <= 1) return;
+      event.preventDefault();
+      setView(scale, { x: offset.x - event.deltaX, y: offset.y - event.deltaY });
+    },
+    { passive: false },
+  );
+
   root.addEventListener('pointerdown', toolPress, true);
 
   // A stage that changes size changes how far the picture may be moved, and
