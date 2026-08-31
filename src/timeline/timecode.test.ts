@@ -184,8 +184,39 @@ describe('timecode at broadcast rates', () => {
     }
   });
 
-  it('counts thirty slots at 29.97, not 29.97 of them', () => {
-    expect(timecode(29 / 29.97, 29.97)).toBe('00:00:00:29');
-    expect(timecode(30 / 29.97, 29.97)).toBe('00:00:01:00');
+  /*
+   * The seconds are the seconds, whatever the rate is.
+   *
+   * This asked for slot counting at first -- thirty frame slots per second at
+   * 29.97, the way non-drop timecode works -- and that is right for a rate
+   * somebody chose and wrong for one this app measured off a clip. At 29.97 a
+   * piece set to exactly twenty seconds counts 599 frames, and dividing that
+   * by thirty reads as nineteen. CI caught it as a length typed as twenty
+   * seconds coming back as 00:00:19:29.
+   */
+  it('shows the length that was asked for, at any measured rate', () => {
+    for (const fps of [30, 29.97, 29.95, 29.9, 30.03, 25, 24, 23.976, 60]) {
+      expect(timecode(20, fps), `twenty seconds at ${fps}fps`).toBe('00:00:20:00');
+      expect(timecode(90, fps), `a minute and a half at ${fps}fps`).toBe('00:01:30:00');
+    }
+  });
+
+  it('never shows a frame number the rate does not have', () => {
+    const tooHigh: string[] = [];
+    for (const fps of [24, 25, 29.97, 30, 50, 59.94, 60]) {
+      const slots = Math.round(fps);
+      for (let at = 0; at < 400; at += 1) {
+        const shown = Number(timecode(at / 37, fps).split(':')[3]);
+        if (shown >= slots) tooHigh.push(`${(at / 37).toFixed(3)}s at ${fps}fps showed ${shown}`);
+      }
+    }
+    expect(tooHigh.slice(0, 6), `${tooHigh.length} readings ran past the rate`).toEqual([]);
+  });
+
+  it('ticks the second over exactly on the second', () => {
+    for (const fps of [29.97, 30, 23.976]) {
+      expect(timecode(1, fps), `one second at ${fps}fps`).toBe('00:00:01:00');
+      expect(timecode(0.999, fps), `just before it at ${fps}fps`).toMatch(/^00:00:00:/);
+    }
   });
 });
