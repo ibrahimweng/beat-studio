@@ -1,15 +1,16 @@
-import type { PadName, Voice } from '../types.ts';
-import { flat, renderVoice, type Curve, type LayerSpec, type VoiceSpec } from './voice-spec.ts';
+import type { PadName } from '../types.ts';
+import { flat, type Curve, type LayerSpec, type VoiceSpec } from './voice-spec.ts';
 
 /**
- * Voice synthesis. Every function here is pure in the sense that matters: it
- * takes an audio context and a destination, schedules nodes, and touches
- * nothing else. No DOM, no app state.
+ * What the built-in voices are made of. Descriptions rather than sound: each
+ * function here returns a {@link VoiceSpec}, and `voice-spec.ts` is what turns
+ * one into nodes.
  *
- * All timings are absolute context times so the transport can schedule ahead
- * of the clock. The context is a BaseAudioContext rather than an
- * AudioContext, so the same voices render live and offline. Offline rendering
- * is how a cue lands exactly on the frame it was placed on.
+ * That split is the reason a placed sound is the same sound however it is
+ * reached. A spec renders live and offline through the same code, so
+ * auditioning one, playing the timeline and exporting cannot disagree — and a
+ * spec is plain data, so it can also be written to a patch file and saved as
+ * a sound of your own.
  */
 
 /** Convert a MIDI note number to Hz. */
@@ -173,18 +174,6 @@ export function kitSpec(pad: PadName, vel = 1): VoiceSpec {
 }
 
 /** Fire one drum voice at an absolute context time. */
-export function drum(
-  ctx: BaseAudioContext,
-  dest: AudioNode,
-  pad: PadName,
-  t: number,
-  vel = 1,
-  seed?: number,
-): void {
-  const build = KIT_SPECS[pad];
-  if (build) renderVoice(ctx, dest, build(vel), t, seed);
-}
-
 /**
  * The note pitched voices are described at.
  *
@@ -279,44 +268,4 @@ export function guitarSpec(midi: number, vel: number): VoiceSpec {
       },
     ],
   };
-}
-
-/** Play a piano note. Returns the voice so a key-up can release it early. */
-export function pianoSynth(
-  ctx: BaseAudioContext,
-  dest: AudioNode,
-  midi: number,
-  t: number,
-  vel: number,
-  seed?: number,
-): Voice {
-  const spec = pianoSpec(midi, vel);
-  return { gains: renderVoice(ctx, dest, spec, t, seed), dur: spec.duration };
-}
-
-/** Play a plucked note. */
-export function pluck(
-  ctx: BaseAudioContext,
-  dest: AudioNode,
-  midi: number,
-  t: number,
-  vel: number,
-  seed?: number,
-): void {
-  renderVoice(ctx, dest, guitarSpec(midi, vel), t, seed);
-}
-
-/** Metronome click. Routed to the monitor bus so it stays out of recordings. */
-export function click(ctx: BaseAudioContext, dest: AudioNode, t: number, strong: boolean): void {
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'square';
-  osc.frequency.value = strong ? 1750 : 1150;
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(strong ? 0.16 : 0.09, t + 0.002);
-  gain.gain.exponentialRampToValueAtTime(0.0005, t + 0.045);
-  osc.connect(gain);
-  gain.connect(dest);
-  osc.start(t);
-  osc.stop(t + 0.06);
 }

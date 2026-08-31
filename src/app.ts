@@ -1,4 +1,3 @@
-import type { AudioEngineOptions } from './audio/engine.ts';
 import { PAD_KEYS } from './constants.ts';
 import { TOOLS } from './store.ts';
 import { Session } from './session.ts';
@@ -37,8 +36,8 @@ import type { View } from './ui/view.ts';
  * nobody opened this app to do. What those instruments make is still here, in
  * the library, filed under the moment it serves. Returns a teardown function.
  */
-export function mountApp(root: HTMLElement, options: AudioEngineOptions = {}): () => void {
-  const session = new Session(options);
+export function mountApp(root: HTMLElement): () => void {
+  const session = new Session();
   const soundDesign = new SoundDesignSession(session.engine, session.store);
 
   const tour = createTour({

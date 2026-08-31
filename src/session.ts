@@ -1,4 +1,4 @@
-import { AudioEngine, type AudioEngineOptions } from './audio/engine.ts';
+import { AudioEngine } from './audio/engine.ts';
 import { Store, initialState, type TimeRange, type Tool } from './store.ts';
 
 /**
@@ -18,8 +18,8 @@ export class Session {
   readonly store = new Store(initialState());
   readonly engine: AudioEngine;
 
-  constructor(options: AudioEngineOptions = {}) {
-    this.engine = new AudioEngine(options);
+  constructor() {
+    this.engine = new AudioEngine();
   }
 
   get state() {
