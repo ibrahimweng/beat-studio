@@ -35,7 +35,8 @@ export function createVideoStage(session: SoundDesignSession): VideoStageView {
   const picker = el('input', {
     class: 'vstage__file',
     type: 'file',
-    attrs: { accept: 'video/*' },
+    // Moving pictures as well as video: a GIF is converted on the way in.
+    attrs: { accept: 'video/*,image/gif,image/apng,image/webp,image/avif' },
     on: {
       change: (event) => {
         const input = event.currentTarget as HTMLInputElement;
