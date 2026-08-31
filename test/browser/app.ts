@@ -37,15 +37,44 @@ export async function open(page: Page): Promise<void> {
  */
 export async function loadClip(
   page: Page,
-  { seconds = 5, cuts = true, settle = true }: { seconds?: number; cuts?: boolean; settle?: boolean } = {},
+  {
+    seconds = 5,
+    cuts = true,
+    settle = true,
+    width = 320,
+    cutEvery = 0,
+  }: {
+    seconds?: number;
+    cuts?: boolean;
+    settle?: boolean;
+    /**
+     * How wide to make it, for the tests that are about the cost of a frame.
+     *
+     * A seek and a decode scale with the picture, and the faults in the
+     * second pass of the scan only appear once a frame is expensive enough
+     * that a seek does not finish promptly. At 320 wide everything is fast
+     * and nothing shows.
+     */
+    width?: number;
+    /**
+     * A cut every so many seconds instead of the two fixed ones.
+     *
+     * For the tests that need the pinning pass to have real work in it: two
+     * moments are pinned before a test can see that it started.
+     */
+    cutEvery?: number;
+  } = {},
 ): Promise<void> {
   const bytes = await page.evaluate(
-    async ({ seconds, cuts }) => {
+    async ({ seconds, cuts, width, cutEvery }) => {
       const canvas = document.createElement('canvas');
-      canvas.width = 320;
-      canvas.height = 180;
+      canvas.width = width;
+      canvas.height = Math.round((width * 9) / 16);
       const ctx = canvas.getContext('2d')!;
-      const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: 'video/webm' });
+      const rec = new MediaRecorder(canvas.captureStream(30), {
+        mimeType: 'video/webm',
+        videoBitsPerSecond: width > 640 ? 4_000_000 : 1_000_000,
+      });
       const parts: Blob[] = [];
       rec.ondataavailable = (event) => parts.push(event.data);
       rec.start();
@@ -56,12 +85,14 @@ export async function loadClip(
           const at = (performance.now() - began) / 1000;
           if (at > seconds) return done();
           let ground = '#101018';
-          if (cuts && at > 2 && at < 2.25) ground = '#ffffff';
-          if (cuts && at > 4.5 && at < 4.7) ground = '#ff2020';
+          if (cutEvery) ground = Math.floor(at / cutEvery) % 2 ? '#101018' : '#e8e8f0';
+          else if (cuts && at > 2 && at < 2.25) ground = '#ffffff';
+          else if (cuts && at > 4.5 && at < 4.7) ground = '#ff2020';
           ctx.fillStyle = ground;
-          ctx.fillRect(0, 0, 320, 180);
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#88ccff';
-          ctx.fillRect(40 + Math.sin(at * 2) * 30, 60, 60, 60);
+          const unit = canvas.width / 320;
+          ctx.fillRect(unit * (40 + Math.sin(at * 2) * 30), unit * 60, unit * 60, unit * 60);
           requestAnimationFrame(draw);
         };
         draw();
@@ -72,7 +103,7 @@ export async function loadClip(
       const blob = new Blob(parts, { type: 'video/webm' });
       return Array.from(new Uint8Array(await blob.arrayBuffer()));
     },
-    { seconds, cuts },
+    { seconds, cuts, width, cutEvery },
   );
 
   /*
