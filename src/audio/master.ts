@@ -321,6 +321,29 @@ export function applyMaster(
   return out;
 }
 
+/**
+ * The same samples, louder or quieter, and allowed past full scale.
+ *
+ * Not `applyMaster`, which is what this used to call. That clamps to plus or
+ * minus one as a last resort before a file is written, and clamping is exactly
+ * wrong here: this buffer exists to be handed to the limiter so it can work
+ * out how far the peaks have to come down. Handed a clamped copy it saw a peak
+ * of one however loud the mix really was, and asked for the one decibel that
+ * takes one down to the ceiling — so a mix at two and a half times full scale
+ * came back held to nothing and hard clipped instead, with the report claiming
+ * a reduction of exactly 1.00 dB every time, which is the number that gave it
+ * away.
+ */
 function scaled(buffer: AudioBuffer, gain: number): AudioBuffer {
-  return applyMaster(buffer, { gain, envelope: null });
+  const out = new AudioBuffer({
+    numberOfChannels: buffer.numberOfChannels,
+    length: buffer.length,
+    sampleRate: buffer.sampleRate,
+  });
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const from = buffer.getChannelData(c);
+    const to = out.getChannelData(c);
+    for (let i = 0; i < from.length; i++) to[i] = from[i] * gain;
+  }
+  return out;
 }

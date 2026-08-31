@@ -157,9 +157,24 @@ nodes have to be real while the passing of time has to be ours; a live
 of ALSA errors rather than a context. `onCue` reports every cue queued and the
 audio time it was given, which is the claim worth checking.
 
-What is not tested yet: the mixer and the master chain end to end — what
-`chain.ts` and `master.ts` do to a signal is exercised by the render tests only
-as far as "something came out".
+The mixer and the master are in `chain.test.ts`, measured on the way out: the
+level turns the whole thing down and silences it at zero, each of the three
+bands moves its own part of the spectrum and leaves the others, the tone tilts
+the top against the bottom, the send is what puts a tail after a sound, a
+bigger room rings for longer, and the master lands on the loudness it was asked
+for and reports the same number the samples say.
+
+Writing those found a real fault in the export. The limiter was handed a copy
+of the mix that had already been clamped to plus or minus one, so however loud
+the mix really was it saw a peak of one and asked for the single decibel that
+takes one down to the ceiling. A mix at two and a half times full scale came
+back hard clipped — two thousand samples flat against the top at -6 LUFS —
+while the report claimed a reduction of exactly 1.00 dB. It claimed exactly
+1.00 at every target that clipped, which is what gave it away.
+
+What is not tested yet: nothing large. The one thing outstanding is a rare
+non-determinism in rendering, seen once on a CI runner and never reproduced —
+`render.test.ts` reports where and how much when it happens.
 
 ## Asking things
 
