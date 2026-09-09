@@ -354,8 +354,46 @@ export function createSeparateScreen(session: SeparateSession): View {
     const empty = stem.share < 0.001;
     const about = empty ? `${stem.about} — nothing landed here` : stem.about;
 
+    /*
+     * The name is a box you can type in, and it looks like text until you do.
+     *
+     * This is the honest answer to "which instrument is this". The measurements
+     * can say a line is bright and steady between G4 and D5; they cannot say it
+     * is a viola, and no amount of arithmetic here ever will — that needs a model
+     * trained on instruments, which is the one thing this is built not to need.
+     * The person listening knows in a second. So the label is theirs to write,
+     * and what is measured sits under it as the evidence for writing it.
+     *
+     * A box rather than a pencil button next to a label, because a row that
+     * already carries six buttons does not need a seventh, and a name you can
+     * click into is a thing everybody has met before.
+     */
+    const title = el('input', {
+      class: 'sep__title',
+      type: 'text',
+      attrs: {
+        'aria-label': `Name of the ${stem.name} part`,
+        spellcheck: 'false',
+        maxlength: '40',
+      },
+      on: {
+        change: (event) => session.rename(stem.id, (event.currentTarget as HTMLInputElement).value),
+        keydown: (event) => {
+          const key = (event as KeyboardEvent).key;
+          // Enter commits and gives the keyboard back; Escape puts it back as it
+          // was, which is what those two keys do in every other box anywhere.
+          if (key === 'Enter') (event.currentTarget as HTMLInputElement).blur();
+          if (key === 'Escape') {
+            (event.currentTarget as HTMLInputElement).value = stem.name;
+            (event.currentTarget as HTMLInputElement).blur();
+          }
+        },
+      },
+    }) as HTMLInputElement;
+    title.value = stem.name;
+
     const name = el('div', { class: 'sep__name', title: about }, [
-      el('span', { class: 'sep__title', text: stem.name }),
+      title,
       el('span', { class: 'sep__about', text: about }),
     ]);
 
@@ -436,7 +474,8 @@ export function createSeparateScreen(session: SeparateSession): View {
         on: {
           // Clicking the row arms the part, so the next click on a lane places it.
           click: (event) => {
-            if ((event.target as HTMLElement).closest('button')) return;
+            const on = event.target as HTMLElement;
+            if (on.closest('button') || on.closest('input')) return;
             session.choose(stem.id);
           },
         },

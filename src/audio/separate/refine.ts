@@ -491,7 +491,16 @@ export async function refineTonal(
   onStep?: Progress,
 ): Promise<StemPart[]> {
   const channels = Math.min(2, audio.numberOfChannels);
-  const seen = REGISTERS.map(() => ({ frames: 0, low: Infinity, high: 0 }));
+  const seen: Line[] = REGISTERS.map(() => ({
+    frames: 0,
+    low: Infinity,
+    high: 0,
+    bright: 0,
+    weight: 0,
+    turns: 0,
+    last: 0,
+    up: null,
+  }));
 
   const inside = await inBlocks(
     audio,
@@ -516,7 +525,8 @@ export async function refineTonal(
       name: register.name,
       about:
         `Held notes from ${noteFor(held.low)} to ${noteFor(held.high)}, ` +
-        `sounding for ${(held.frames * perFrame).toFixed(1)}s in total`,
+        `sounding for ${(held.frames * perFrame).toFixed(1)}s in total · ` +
+        soundsLike(held, held.frames * perFrame, audio.duration),
       under: part.id,
       audio: inside[at],
       share: shareOf(at),
@@ -535,6 +545,78 @@ export async function refineTonal(
   return parts;
 }
 
+/**
+ * What a line sounds like, said from what was measured of it.
+ *
+ * Not what instrument it is. That needs a model trained on instruments, which is
+ * the one thing this whole folder is built not to need, and a guess dressed up
+ * as a label would be worse than no label — somebody would believe it. What can
+ * be measured honestly is how bright the line is and whether its pitch is
+ * steady, and both are useful for the actual job, which is deciding what to call
+ * it. The name is the person's to give; this is the evidence for giving it.
+ *
+ * Missing on purpose is how each note starts. Struck or plucked against bowed or
+ * blown is the strongest cue of the three, and it cannot be had here: lines are
+ * followed through a window four times the usual length, which puts a frame every
+ * forty three milliseconds, and the difference between a plucked attack and a
+ * bowed one is most of one frame. It would be a coin toss with a confident name
+ * on it.
+ */
+function soundsLike(line: Line, sounding: number, seconds: number): string {
+  const centroid = line.weight > 0 ? line.bright / line.weight : 1;
+  const colour = centroid < WARM ? 'nearly a pure tone' : centroid < BRIGHT ? 'warm' : 'bright';
+
+  /*
+   * A register that sounded for longer than the recording had two lines in it.
+   *
+   * Exact rather than a threshold, which is why it is asked first. Every other
+   * reading here describes one line and none of them mean anything about two: a
+   * pitch jumping between a pair of notes turns round on nearly every frame,
+   * which looks exactly like a very fast waver and is nothing of the kind.
+   *
+   * Measured on a tone with three harmonics, whose second and third were tracked
+   * as lines of their own and landed in the same register: it turned 23 times a
+   * second, against 15.3 for the fastest vibrato anybody plays. Those two are too
+   * close to separate. The sounding time was 8.1 seconds of a four second
+   * recording, which is not close at all.
+   */
+  if (sounding > seconds * MORE_THAN_ONE) return `${colour} — and more than one line at once`;
+
+  const turns = sounding > 0 ? line.turns / sounding : 0;
+  return turns > A_WAVER_A_SECOND ? `${colour}, with a waver in the pitch` : `${colour}, and steady`;
+}
+
+/**
+ * Where the average harmonic has to sit for a line to read as warm, then bright.
+ *
+ * Measured on tones built to be unambiguous: a sine comes out at 1.00, three
+ * harmonics falling as one over h at 1.61, and six of them — which is a sawtooth,
+ * and sounds like one — at 2.41.
+ */
+const WARM = 1.4;
+const BRIGHT = 2.2;
+
+/**
+ * How many times a second a pitch has to turn round to read as a waver.
+ *
+ * Measured: vibrato at five and a half hertz turns 10.4 times a second and at
+ * eight hertz, which is as fast as anybody plays one, 15.3. A melody stepping
+ * every half second turns 0.4 times a second, and a held tone does not turn at
+ * all. Four is in the gap and nowhere near either edge of it.
+ */
+const A_WAVER_A_SECOND = 4;
+
+/**
+ * How much longer than the recording a register can sound before it is two lines.
+ *
+ * Not one, because the blocks overlap by half a second in sixteen and a note
+ * running through a join is counted in both — measured, a single held tone comes
+ * out at 1.03 times the length of the recording. A register holding two lines
+ * came out at 2.03, so anything in between is a line and a half, which is not a
+ * thing that exists.
+ */
+const MORE_THAN_ONE = 1.3;
+
 /** The nearest note name to a frequency, for saying where a line sat. */
 export function noteFor(hz: number): string {
   if (!Number.isFinite(hz) || hz <= 0) return '—';
@@ -549,10 +631,7 @@ export function noteFor(hz: number): string {
  * each file actually holds rather than repeating the boundaries it was defined
  * by.
  */
-function divideByLines(
-  block: Block,
-  seen: { frames: number; low: number; high: number }[],
-): Float32Array[] {
+function divideByLines(block: Block, seen: Line[]): Float32Array[] {
   const { mag, frames, bins, rate, specs } = block;
   const cells = frames * bins;
   const masks = REGISTERS.map(() => new Float32Array(cells));
@@ -593,6 +672,7 @@ function divideByLines(
       note.frames++;
       note.low = Math.min(note.low, hz);
       note.high = Math.max(note.high, hz);
+      wavered(note, hz);
 
       for (let h = 1; h <= HARMONICS; h++) {
         const where = (hz * h * size) / rate;
@@ -605,6 +685,18 @@ function divideByLines(
          */
         const reach = reachFor(where, bins);
         const bin = loudestIn(mag, row, reach.from, reach.to).at;
+        /*
+         * Where the energy sits along the comb, counted while walking it.
+         *
+         * A sine has all of itself on its first harmonic and nothing above; a
+         * reedy or bowed sound has as much on the third and fourth as on the
+         * first. So the average harmonic number, weighted by how loud each one
+         * is, is a plain measure of how bright a line is — one for a pure tone,
+         * and upwards from there. It costs an add per harmonic, because the
+         * loudest bin of each has already been found for other reasons.
+         */
+        note.bright += mag[row + bin] * h;
+        note.weight += mag[row + bin];
         const first = Math.max(0, Math.floor(bin - CLAIM_WIDE));
         const last = Math.min(bins - 1, Math.ceil(bin + CLAIM_WIDE));
         for (let k = first; k <= last; k++) {
@@ -632,6 +724,61 @@ function divideByLines(
   }
 
   return [...masks, rest];
+}
+
+/**
+ * What a register's line turned out to be, gathered as the blocks go past.
+ *
+ * Written into rather than worked out at the end, because the spectrogram it is
+ * read from is thrown away one block at a time and nothing keeps the whole of it.
+ */
+interface Line {
+  frames: number;
+  low: number;
+  high: number;
+  /** Energy weighted by which harmonic it sat on, and the plain total. */
+  bright: number;
+  weight: number;
+  /** How often the pitch turned round, and what it was doing when last seen. */
+  turns: number;
+  last: number;
+  up: boolean | null;
+}
+
+/**
+ * How far the pitch has to move to count as having moved.
+ *
+ * A tenth of a semitone. The pitch of a steady tone still wanders from frame to
+ * frame by a hundredth or two, because it is read from a parabola through three
+ * bins of a spectrum with noise in it, and counting that as movement would make
+ * every held note look like it was wavering.
+ */
+const A_WAVER = 0.1;
+
+/**
+ * Count the times a line's pitch turns round.
+ *
+ * Vibrato and a melody both move; what tells them apart is that vibrato comes
+ * back. A note played with vibrato turns round five or six times a second, and a
+ * melody turns when it changes direction, which is once a bar if that. Counting
+ * turns rather than movement is what separates them, and it needs nothing kept
+ * except which way the line was last going.
+ *
+ * Two notes in the same register in the same frame confuse this, because they
+ * share one counter and each looks to the other like a jump. It is left as it
+ * is: a register holding two lines at once has already lost the thing this would
+ * be describing.
+ */
+function wavered(note: Line, hz: number): void {
+  if (note.last > 0) {
+    const moved = Math.log2(hz / note.last) * PER_OCTAVE;
+    if (Math.abs(moved) > A_WAVER) {
+      const up = moved > 0;
+      if (note.up !== null && note.up !== up) note.turns++;
+      note.up = up;
+    }
+  }
+  note.last = hz;
 }
 
 /** Which register a pitch falls in. */

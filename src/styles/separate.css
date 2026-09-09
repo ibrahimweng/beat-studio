@@ -172,9 +172,35 @@
   gap: 1px;
 }
 
+/*
+ * The name, which is a box you can type in dressed as a line of text.
+ *
+ * No border and no background until it is hovered or focused, because a row of
+ * eight boxes reads as a form and this is a mixer. What it keeps at rest is the
+ * text cursor, which is the one signal that it can be typed into.
+ */
 .sep__title {
+  width: 100%;
+  padding: 1px 4px;
+  margin-left: -4px;
+  font: inherit;
   font-size: 13px;
   color: var(--txt);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-4);
+  text-overflow: ellipsis;
+}
+
+.sep__title:hover {
+  border-color: var(--line);
+}
+
+.sep__title:focus-visible {
+  outline: none;
+  background: var(--panel-2);
+  border-color: var(--ac);
+  text-overflow: clip;
 }
 
 .sep__about {

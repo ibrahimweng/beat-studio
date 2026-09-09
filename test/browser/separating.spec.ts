@@ -156,6 +156,22 @@ function rowButton(
     .getByRole('button', { name, exact: true });
 }
 
+/**
+ * The names on the rows.
+ *
+ * A part's name is a box you can type in rather than a line of text, because it
+ * is the person's to give — so what is on screen is its value and not its
+ * contents, and `allInnerTexts` comes back with a row of empty strings.
+ */
+async function namesShown(
+  page: import('@playwright/test').Page,
+  where: string,
+): Promise<string[]> {
+  return page.locator(where).evaluateAll((boxes) =>
+    boxes.map((box) => (box as HTMLInputElement).value),
+  );
+}
+
 /** How many recordings the picker is showing, or null when it shows none. */
 async function recordingsShown(page: import('@playwright/test').Page): Promise<number | null> {
   await page.locator('.rail__screen[data-screen="design"]').click();
@@ -165,6 +181,64 @@ async function recordingsShown(page: import('@playwright/test').Page): Promise<n
   const said = await group.first().innerText();
   return Number(/Recordings · (\d+)/.exec(said)?.[1] ?? '0');
 }
+
+test.describe('naming a part', () => {
+  /*
+   * The name is the person's to give, because the measurements cannot give it.
+   *
+   * They can say a line is bright and steady between G4 and D5. They cannot say
+   * it is a viola, and no arithmetic here ever will — that needs a model trained
+   * on instruments, which is the one thing this is built not to need. Somebody
+   * listening knows in a second, so the row lets them write it down.
+   */
+  test('takes a name of your own, and the recording takes it too', async ({ page }) => {
+    await takeApart(page);
+    const name = page.locator('.sep__row[data-part="tonal"] .sep__title');
+    await expect(name).toHaveValue('Tonal');
+
+    // Typed rather than filled, one key at a time, because the space bar is the
+    // point: this screen has no transport and used to swallow it.
+    await name.fill('');
+    await name.pressSequentially('Second violins');
+    await name.press('Enter');
+    await expect(name).toHaveValue('Second violins');
+
+    /*
+     * And the recording is called that too.
+     *
+     * A part and the recording it was registered as are the same thing under two
+     * names, so placing it puts this name on a layer — and a layer called
+     * "Tonal" helps nobody. Only the part of the name is renamed; where it came
+     * from stays on the end.
+     */
+    await page.locator('.rail__screen[data-screen="design"]').click();
+    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+    await page.locator('.pick-find--held').fill('Second violins');
+    await expect(page.locator('.pick-group__title', { hasText: 'Recordings' })).toContainText(
+      '1 of 4',
+    );
+  });
+
+  test('puts the old name back on Escape', async ({ page }) => {
+    await takeApart(page);
+    const name = page.locator('.sep__row[data-part="drums"] .sep__title');
+    await name.fill('Kit');
+    await name.press('Escape');
+    await expect(name).toHaveValue('Drums');
+  });
+
+  test('says what each line sounds like, so there is something to name it from', async ({
+    page,
+  }) => {
+    await takeApart(page);
+    await page.locator('.sep__row[data-part="tonal"] button', { hasText: 'Open' }).click();
+    // The lines inside come back described: how bright, and whether the pitch
+    // holds still. Both are measured; neither is a guess at an instrument.
+    await expect(
+      page.locator('.sep__row.is-inside .sep__about').filter({ hasText: /pure tone|warm|bright/ }).first(),
+    ).toBeVisible({ timeout: 60_000 });
+  });
+});
 
 test.describe('taking apart a stretch of it', () => {
   /*
@@ -269,7 +343,7 @@ test.describe('taking a beat apart', () => {
   test('comes back as four parts, and says what it found', async ({ page }) => {
     await takeApart(page);
 
-    const names = await page.locator('.sep__title').allInnerTexts();
+    const names = await namesShown(page, '.sep__title');
     expect(names).toEqual(['Drums', 'Bass', 'Lead', 'Tonal']);
 
     /*
@@ -319,7 +393,7 @@ test.describe('taking a beat apart', () => {
     // More rows than the four, and the new ones sit in from their parent.
     await expect(page.locator('.sep__row')).not.toHaveCount(4, { timeout: 60_000 });
     await expect(page.locator('.sep__row.is-inside').first()).toBeVisible();
-    const inside = await page.locator('.sep__row.is-inside .sep__title').allInnerTexts();
+    const inside = await namesShown(page, '.sep__row.is-inside .sep__title');
     expect(inside).toContain('Kick');
     // What no hit accounted for is a part like the others, because the parts have
     // to add up.

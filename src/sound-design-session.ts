@@ -880,6 +880,27 @@ export class SoundDesignSession {
   }
 
   /**
+   * Give a recording a different name.
+   *
+   * The whole of what naming a separated part comes down to, because a part is a
+   * recording the moment it is made and the name on the row is the name on the
+   * file. Nothing else about it moves: the same id, the same bytes, the same
+   * decoded buffer if there is one.
+   *
+   * A part still on loan stays on loan. Naming something is not using it — it is
+   * how somebody works out whether they want it, and settling a couple of hundred
+   * megabytes because a name was typed would defeat the loan entirely.
+   */
+  renameRecording(id: string, name: string): void {
+    const said = name.trim();
+    const sample = sampleById(id);
+    if (!sample || !said || said === sample.name) return;
+    addSample({ ...sample, name: said }, null);
+    if (!this.#onLoan.has(id)) this.#keepSamples();
+    this.#store.set({ samples: [...samples()] });
+  }
+
+  /**
    * Put each of these recordings on a layer of its own, starting at zero.
    *
    * How a separated beat arrives on the timeline. A layer each, because that is

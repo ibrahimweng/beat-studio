@@ -410,7 +410,11 @@ function attachKeyboard(
      * because that is what somebody pressing it wants, and Escape does too.
      */
     if (session.state.screen !== 'design') {
-      if (event.key === ' ' || event.key === 'Escape') {
+      // Unless something is being typed into, where a space is a space and
+      // Escape belongs to the box. This screen has a name on every row and two
+      // times at the top, and swallowing the space bar in all of them would make
+      // "Second violins" impossible to type.
+      if (!inField(event) && (event.key === ' ' || event.key === 'Escape')) {
         event.preventDefault();
         separate.stop();
       }

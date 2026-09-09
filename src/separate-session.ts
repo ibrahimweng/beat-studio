@@ -275,6 +275,42 @@ export class SeparateSession {
     this.#store.set({ status: `${part.name} came apart into ${made.length} more` });
   }
 
+  /**
+   * Give a part a name of your own.
+   *
+   * The honest answer to "which instrument is this". The measurements can say a
+   * line is bright and steady between G4 and D5, and they cannot say it is a
+   * viola — that needs a model trained on instruments, which is the one thing
+   * this is built not to need. The person listening knows, in a second, and this
+   * is where they write it down.
+   *
+   * It renames the recording too, because the part and the recording are the same
+   * thing under two names — placing it on the timeline puts that name on a layer,
+   * and a layer called "Middle line" helps nobody.
+   */
+  rename(id: string, name: string): void {
+    const said = name.trim().slice(0, NAME_AT_MOST);
+    const stem = this.#stem(id);
+    if (!stem || !said || said === stem.name) return;
+
+    /*
+     * The recording is called "<part> · <where it came from>", and only the part
+     * of that is being renamed. Split on the separator this file put there rather
+     * than assuming the shape of the rest: the tail can be a file name with
+     * anything in it, and a stretch of time after that.
+     */
+    const sample = sampleById(stem.sampleId);
+    const at = sample?.name.indexOf(' · ') ?? -1;
+    const where = sample && at >= 0 ? sample.name.slice(at) : '';
+    this.#design.renameRecording(stem.sampleId, `${said}${where}`);
+
+    const part = this.#held.get(id);
+    if (part) this.#held.set(id, { ...part, name: said });
+    this.#set({
+      stems: this.state.stems.map((one) => (one.id === id ? { ...one, name: said } : one)),
+    });
+  }
+
   /** Fold a part back up. Its files stay in the library; only the rows go. */
   close(id: string): void {
     if (!this.state.opened.includes(id)) return;
@@ -600,3 +636,11 @@ function clock(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
+
+/**
+ * How long a name somebody gives a part can be.
+ *
+ * Long enough for "Second violins, con sordino" and short enough that the row
+ * still has room for what the part is and what can be done with it.
+ */
+const NAME_AT_MOST = 40;

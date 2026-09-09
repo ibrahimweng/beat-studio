@@ -226,6 +226,100 @@ describe('following the lines in what is left', () => {
     expect(parts['tonal.low'].about).toMatch(/sounding for/);
   }, 60_000);
 
+  /*
+   * What a line sounds like, which is not what instrument it is.
+   *
+   * Naming the instrument needs a model trained on instruments, and this whole
+   * folder is built not to need one. What is measured instead is how bright the
+   * line is and whether its pitch holds still — both plain readings of the
+   * spectrum, and both useful for the job somebody is actually doing, which is
+   * deciding what to call it themselves.
+   *
+   * The material is built so each claim has a right answer. A sine is pure by
+   * any definition, a sawtooth is bright by any definition, and a tone bent five
+   * and a half times a second is wavering by any definition.
+   */
+  describe('and saying what each one sounds like', () => {
+    async function line(lane: Float32Array): Promise<string> {
+      const audio = stereo(lane, lane);
+      const part: StemPart = {
+        id: 'tonal',
+        name: 'Tonal',
+        about: '',
+        under: null,
+        audio: fromBuffer(audio),
+        share: 1,
+      };
+      const parts = await refineTonal(part, audio);
+      const found = parts.filter((one) => one.id !== 'tonal.rest');
+      // The one that actually holds the note, when a harmonic was tracked too.
+      return found.sort((a, b) => b.share - a.share)[0]?.about ?? '';
+    }
+
+    /** A tone whose pitch is a function of time, for bending one. */
+    function bent(at: (t: number) => number): Float32Array {
+      const out = new Float32Array(RATE * SECONDS);
+      let phase = 0;
+      for (let i = 0; i < out.length; i++) {
+        phase += (2 * Math.PI * at(i / RATE)) / RATE;
+        out[i] = Math.sin(phase) * 0.4;
+      }
+      return out;
+    }
+
+    /** A tone with `count` harmonics falling as one over h, which is a sawtooth. */
+    function comb(hz: number, count: number): Float32Array {
+      const out = new Float32Array(RATE * SECONDS);
+      for (let h = 1; h <= count; h++) {
+        for (let i = 0; i < out.length; i++) {
+          out[i] += Math.sin((2 * Math.PI * hz * h * i) / RATE) * (0.35 / h);
+        }
+      }
+      return out;
+    }
+
+    it('calls a sine pure and a sawtooth bright', async () => {
+      // Measured: the average harmonic sits at 1.00 for the sine and 2.41 for six
+      // harmonics falling as one over h.
+      expect(await line(bent(() => 300))).toContain('nearly a pure tone');
+      expect(await line(comb(200, 6))).toContain('bright');
+    }, 120_000);
+
+    it('hears a waver, and does not hear one in a melody', async () => {
+      // Measured: 10.4 turns a second for the vibrato, 0.4 for the melody.
+      const wavering = bent((t) => 300 * Math.pow(2, (Math.sin(2 * Math.PI * 5.5 * t) * 0.35) / 12));
+      expect(await line(wavering)).toContain('with a waver');
+
+      const steps = [0, 2, 4, 5, 7, 5, 4, 2];
+      const melody = bent((t) => 220 * Math.pow(2, steps[Math.floor(t * 2) % 8] / 12));
+      expect(await line(melody)).toContain('and steady');
+    }, 120_000);
+
+    /*
+     * A register holding two lines says so rather than describing one.
+     *
+     * It is the case every other reading here is wrong about, and it has an exact
+     * tell: a register cannot sound for longer than the recording unless there
+     * was more than one thing in it. The turns cannot be used for this — two
+     * lines turn 23 times a second and the fastest vibrato anybody plays turns
+     * 15, which is not a gap.
+     */
+    it('says when a register held more than one line at once', async () => {
+      const audio = stereo(comb(300, 3), comb(300, 3));
+      const part: StemPart = {
+        id: 'tonal',
+        name: 'Tonal',
+        about: '',
+        under: null,
+        audio: fromBuffer(audio),
+        share: 1,
+      };
+      const parts = await refineTonal(part, audio);
+      const crowded = parts.filter((one) => one.about.includes('more than one line'));
+      expect(crowded.length, parts.map((one) => one.about).join('\n')).toBeGreaterThan(0);
+    }, 120_000);
+  });
+
   it('adds back up to the part it came out of', async () => {
     const { part, audio } = await held();
     const parts = await refineTonal(part, audio);
