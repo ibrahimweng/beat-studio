@@ -485,7 +485,7 @@ const PEAKS = 700;
  * roughly nothing however loud it is: a drum part drawn from its mean would be a
  * flat line with the odd bump.
  */
-export function peaksOf(buffer: AudioBuffer, count = PEAKS): Float32Array {
+function peaksOf(buffer: AudioBuffer, count = PEAKS): Float32Array {
   const out = new Float32Array(count);
   const lanes: Float32Array[] = [];
   for (let c = 0; c < buffer.numberOfChannels; c++) lanes.push(buffer.getChannelData(c));

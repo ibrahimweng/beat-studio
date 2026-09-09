@@ -58,7 +58,7 @@ import {
  * getting slower, and failing to allocate halfway through loses the work.
  * Refusing up front and saying why is the better of the two.
  */
-export const LONGEST_SECONDS = 8 * 60;
+const LONGEST_SECONDS = 8 * 60;
 
 /** Above this it is worth saying how long it will take before starting. */
 export const LONG_SECONDS = 45;

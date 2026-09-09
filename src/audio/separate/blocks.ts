@@ -35,8 +35,8 @@ import { analyse, HOP, like, magnitudes, maskInto, SIZE, synthesise, type Spectr
  * half second of overlap is a little over twice the reach of the widest median,
  * which is what the crossfade has to cover.
  */
-export const BLOCK_SECONDS = 16;
-export const OVERLAP_SECONDS = 0.5;
+const BLOCK_SECONDS = 16;
+const OVERLAP_SECONDS = 0.5;
 
 /** One block of a recording, measured and ready to be divided. */
 export interface Block {

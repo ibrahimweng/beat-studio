@@ -30,8 +30,8 @@
  */
 
 /** How far each median looks, in frames and in bins. */
-export const OVER_TIME = 17;
-export const OVER_BANDS = 17;
+const OVER_TIME = 17;
+const OVER_BANDS = 17;
 
 /**
  * How hard the two are pulled apart.
@@ -224,6 +224,33 @@ const SPREAD_OVER = Math.pow(2, 1 / 3) - 1;
  *
  * Anybody who disagrees has the Hits and Notes control, which moves the same
  * split without touching this.
+ *
+ * ---
+ *
+ * The textbook improvement on this was tried and is not here, which is worth
+ * writing down so nobody spends the afternoon on it twice.
+ *
+ * A kick drum's body is a low note whose pitch falls from about 110 hertz to
+ * about 45 in a twentieth of a second. Inside a forty three millisecond window
+ * that fall barely happens, so the kick is one narrow line and a narrow line is a
+ * note. Over a window four times longer the same fall is smeared across many bins
+ * inside a single window, so it reads as broadband and broadband is a hit. That
+ * is the published two-window approach, and the reasoning is sound.
+ *
+ * It was built properly: a second transform per block, both medians rescaled so
+ * the two windows ask over the same span of time and the same width of
+ * frequency, the larger answer winning, and a version restricted to below 250
+ * hertz where a kick's fall actually happens. Measured against the one-window
+ * version on a kick, a hat, a snare, a sustained sub and a held pad:
+ *
+ *   kick into the drums   75 per cent  ->  86
+ *   bass into the bass    78 per cent  ->  59
+ *   held pad into drums   32 per cent  ->  38
+ *   time                  0.19x        ->  0.42x
+ *
+ * Eleven points of kick for nineteen points of bass, at twice the time. So it
+ * was taken out. The same eleven points are available from the Hits and Notes
+ * control, which costs nothing and which somebody can move while listening.
  */
 const LEAST_BANDS = 5;
 

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --tc-fg:oklch(0.977 0 0);
+    --tc-border:oklch(0.311 0.013 279.19);
+    --tc-card:oklch(0.205 0 0);
+    --ac:#0c8ce9;
+    --ac-soft:color-mix(in oklab, var(--ac) 14%, transparent);
+    --ac-line:color-mix(in oklab, var(--ac) 34%, transparent);
+    --bg:oklch(0 0 0);
+    --panel:color-mix(in oklab, var(--tc-card) 55%, transparent);
+    --panel-2:color-mix(in oklab, var(--tc-fg) 10%, transparent);
+    --line:color-mix(in oklab, var(--tc-border) 12%, transparent);
+    --txt:var(--tc-fg);
+    --txt-2:color-mix(in oklab, var(--tc-fg) 72%, transparent);
+    --txt-3:color-mix(in oklab, var(--tc-fg) 60%, transparent);
+    --r-4:4px; --r-6:6px; --r-12:12px;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:oklch(0 0 0);}
+  body{font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;color:var(--txt);}
+  .board{width:900px;height:730px;background:var(--bg);padding:24px;display:flex;flex-direction:column;gap:16px;}
+  .h{font-size:14px;font-weight:600;letter-spacing:-0.01em;}
+  .sub{font-size:11px;color:var(--txt-3);line-height:1.55;text-wrap:pretty;max-width:74ch;}
+  .cols{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:22px;min-height:0;}
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0;}
+  .cap{font-size:11px;font-weight:600;color:var(--txt-3);letter-spacing:-0.01em;}
+  .card{border:1px solid var(--line);border-radius:var(--r-12);background:var(--panel);padding:12px 13px;display:flex;gap:12px;align-items:flex-start;}
+  .card__t{font-size:12px;font-weight:500;margin-bottom:3px;}
+  .card__d{font-size:11px;color:var(--txt-3);line-height:1.5;text-wrap:pretty;}
+  .pic{flex:0 0 auto;width:74px;height:46px;border-radius:var(--r-4);background:color-mix(in oklab, var(--tc-fg) 4%, transparent);overflow:hidden;}
+  .parts{display:flex;flex-direction:column;gap:5px;}
+  .part{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:baseline;border:1px solid var(--line);border-radius:var(--r-6);background:var(--panel);padding:8px 10px;}
+  .part__n{font-size:12px;font-weight:500;}
+  .part__f{font-size:11px;color:var(--ac);font-variant-numeric:tabular-nums;}
+  .part__d{grid-column:2;font-size:11px;color:var(--txt-3);line-height:1.45;}
+  .sum{border:1px solid var(--ac-line);border-radius:var(--r-6);background:var(--ac-soft);padding:10px 12px;font-size:11px;color:var(--txt-2);line-height:1.55;text-wrap:pretty;}
+  .sum b{color:var(--txt);font-weight:600;}
+  .tree{display:flex;flex-direction:column;gap:3px;}
+  .tw{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:var(--r-4);background:var(--panel);padding:5px 9px;font-size:11px;}
+  .tw.in{margin-left:22px;background:color-mix(in oklab, var(--panel) 55%, transparent);color:var(--txt-2);}
+  .tw span:last-child{color:var(--txt-3);}
+  .note{font-size:11px;color:var(--txt-3);line-height:1.55;border-top:1px solid var(--line);padding-top:12px;text-wrap:pretty;}
+</style>
+</helmet>
+
+<div class="board">
+  <div>
+    <div class="h">What comes out, and what decides it</div>
+    <div class="sub">Three measurements over one picture of the sound in time and frequency. Between them they answer the only question asked of every moment of the file: which of the four parts does this belong to, and how much of it.</div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="cap">The three measurements</div>
+
+      <div class="card">
+        <div class="pic"><svg viewBox="0 0 74 46" width="74" height="46">
+          <rect width="74" height="46" fill="none"></rect>
+          <rect x="6" y="14" width="60" height="3" rx="1.5" fill="#0c8ce9" opacity="0.8"></rect>
+          <rect x="6" y="21" width="60" height="2" rx="1" fill="#0c8ce9" opacity="0.45"></rect>
+          <rect x="30" y="5" width="3" height="36" rx="1.5" fill="#0c8ce9" opacity="0.8"></rect>
+          <rect x="52" y="5" width="3" height="36" rx="1.5" fill="#0c8ce9" opacity="0.8"></rect>
+        </svg></div>
+        <div>
+          <div class="card__t">A hit, or a note</div>
+          <div class="card__d">A held note is a horizontal line: the same few frequencies, frame after frame. A drum is a vertical one: every frequency at once, for a moment. A median along each axis tells them apart without being told what is playing.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="pic"><svg viewBox="0 0 74 46" width="74" height="46">
+          <rect x="6" y="9" width="62" height="10" rx="5" fill="#ffffff" opacity="0.08"></rect>
+          <rect x="6" y="27" width="62" height="10" rx="5" fill="#ffffff" opacity="0.08"></rect>
+          <circle cx="37" cy="14" r="5" fill="#0c8ce9"></circle>
+          <circle cx="37" cy="32" r="5" fill="#0c8ce9"></circle>
+          <circle cx="16" cy="14" r="4" fill="#0c8ce9" opacity="0.35"></circle>
+        </svg></div>
+        <div>
+          <div class="card__t">Where it sits</div>
+          <div class="card__d">Two channels that agree in level and in timing carry one sound in the middle of the mix, which is usually the lead. Two that disagree are either two sounds or one pushed to a side.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="pic"><svg viewBox="0 0 74 46" width="74" height="46">
+          <g fill="#0c8ce9">
+            <rect x="7" y="16" width="3" height="14" rx="1.5"></rect><rect x="14" y="21" width="3" height="9" rx="1.5" opacity="0.6"></rect>
+            <rect x="26" y="16" width="3" height="14" rx="1.5"></rect><rect x="33" y="21" width="3" height="9" rx="1.5" opacity="0.6"></rect>
+            <rect x="45" y="16" width="3" height="14" rx="1.5"></rect><rect x="52" y="21" width="3" height="9" rx="1.5" opacity="0.6"></rect>
+          </g>
+          <path d="M7 36 L7 39 L48 39 L48 36" fill="none" stroke="#0c8ce9" stroke-width="1.2" opacity="0.7"></path>
+          <path d="M60 12 C64 20, 58 26, 64 34" fill="none" stroke="#ffffff" stroke-width="1.4" opacity="0.35"></path>
+        </svg></div>
+        <div>
+          <div class="card__t">Whether it comes round again</div>
+          <div class="card__d">A beat is a loop. Some of a track is the same two or four bars coming back, and some of it is a line that is different every time. The loop's length is found without being told the tempo.</div>
+        </div>
+      </div>
+
+      <div class="note">None of the three recognises an instrument, and nothing here can. Two instruments in the same place and the same range do not come apart by this route, and never will.</div>
+    </div>
+
+    <div class="col">
+      <div class="cap">The four parts</div>
+      <div class="parts">
+        <div class="part"><span class="part__n">Drums</span><span class="part__f">P</span><span class="part__d">Everything that arrives and stops.</span></div>
+        <div class="part"><span class="part__n">Bass</span><span class="part__f">H &times; low</span><span class="part__d">The low end of what is left once the drums are out of it.</span></div>
+        <div class="part"><span class="part__n">Lead</span><span class="part__f">H &times; (1 &minus; low) &times; front</span><span class="part__d">Centred in the mix, and not part of the loop.</span></div>
+        <div class="part"><span class="part__n">Tonal</span><span class="part__f">H &times; (1 &minus; low) &times; (1 &minus; front)</span><span class="part__d">Everything else that is held rather than struck.</span></div>
+      </div>
+
+      <div class="sum"><b>The four add back up to the recording, sample for sample.</b> P and H add to one, low and one minus low add to one, and front and one minus front add to one. So every moment of the file is divided rather than damaged, and there is nowhere for a residue to hide.</div>
+
+      <div class="cap">And each of them opens again</div>
+      <div class="tree">
+        <div class="tw"><span>Drums</span><span>16%</span></div>
+        <div class="tw in"><span>Kick</span><span>8.5%</span></div>
+        <div class="tw in"><span>Snare</span><span>2.1%</span></div>
+        <div class="tw in"><span>Hats</span><span>3.1%</span></div>
+        <div class="tw in"><span>Rest</span><span>0.4%</span></div>
+      </div>
+      <div class="note">Rest is a part like the others, because the parts have to add up. It is what no hit and no line accounted for, and how much is in it is the most honest single number about how well this worked on a particular file.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

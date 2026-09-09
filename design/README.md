@@ -14,6 +14,11 @@ can compare the built app against the design it came from.
   It was produced by the design tool and should not be edited.
 - `sync-notes.md` is the note that came with the design. It lists which parts of
   the Toolcraft starter each part of the screen was taken from.
+- `newcomer/` is the source for the redesign the app is built from: one screen, a
+  panel saying what belongs on each moment, and a library grouped by what is
+  happening on screen. It has a README of its own.
+- `separating/` is the source for the second screen, which reads a recording and
+  divides it into the parts it is made of. It has a README of its own.
 
 ## Viewing them
 

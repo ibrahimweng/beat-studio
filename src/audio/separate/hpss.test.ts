@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { clicks, energy, heldShare, mix, RATE, tone } from '../../../test/mixes.ts';
-import { estimates, median, percussiveMask } from './hpss.ts';
+import { bandSpans, estimates, median, percussiveMask } from './hpss.ts';
 import { analyse, magnitudes, masked, synthesise } from './stft.ts';
 
 /**
@@ -119,6 +119,60 @@ describe('splitting hits from notes', () => {
     const spec = analyse(new Float32Array(RATE));
     const p = percussiveMask(magnitudes(spec), spec.frames, spec.bins);
     for (const value of p) expect(value).toBe(0);
+  });
+});
+
+describe('how wide the frequency median looks', () => {
+  const RATE_HERE = 48_000;
+  const SIZE_HERE = 2048;
+  const bins = SIZE_HERE / 2 + 1;
+  const hz = (bin: number): number => (bin * RATE_HERE) / SIZE_HERE;
+
+  /*
+   * A constant width in octaves, not in hertz.
+   *
+   * This is the single measurement that decides whether a drum part has a kick
+   * in it. A fixed four hundred hertz is a sliver at five kilohertz and two whole
+   * octaves at fifty, so a kick was asked whether it filled a band reaching up to
+   * two hundred and fifty hertz. It does not, so it read as a note and went to
+   * the bass: 18 per cent of the kick in the drums against 77 in the bass. In
+   * octaves the same question becomes the right one, and it comes back as 74 and
+   * 26.
+   */
+  it('looks across about a third of an octave in the middle of the range', () => {
+    const spans = bandSpans(bins, 17);
+    const third = Math.pow(2, 1 / 3) - 1;
+    // Between the floor at the bottom and the cap at the top, which is where the
+    // rule is the thing deciding rather than one of the two limits.
+    for (const at of [300, 450, 600]) {
+      const bin = Math.round((at * SIZE_HERE) / RATE_HERE);
+      const share = (hz(bin + spans[bin] / 2) - hz(bin)) / hz(bin);
+      expect(share, `at ${at}Hz it looked across ${(share * 100).toFixed(0)}%`)
+        .toBeGreaterThan(third * 0.6);
+      expect(share).toBeLessThan(third * 1.4);
+    }
+  });
+
+  /*
+   * A floor at the bottom and a cap at the top, and both do real work.
+   *
+   * A third of an octave at fifty hertz is two bins, and a median of two of
+   * anything says very little. Past about seven hundred and seventy hertz it is
+   * wider than the band anything useful occupies, so widening it further only
+   * costs time. Between them the rule decides; outside them a limit does, and
+   * saying which is which is the point of this.
+   */
+  it('is held to a floor low down and to a cap high up', () => {
+    const spans = bandSpans(bins, 17);
+    const at = (frequency: number): number =>
+      spans[Math.round((frequency * SIZE_HERE) / RATE_HERE)];
+    expect(at(50)).toBe(5);
+    expect(at(2000)).toBe(17);
+    expect(at(10_000)).toBe(17);
+  });
+
+  it('always has a middle value to take', () => {
+    for (const wide of bandSpans(bins, 17)) expect(wide % 2).toBe(1);
   });
 });
 

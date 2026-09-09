@@ -1049,10 +1049,35 @@ body is a low tone that lasts a third of a second — longer than the window use
 to tell a held note from a hit — so everything about it says "note" except the
 way it starts. It is asked whether it fills the third of an octave around it,
 which a kick does and a bass note does not, and that is what keeps it in the
-drums: measured on a kick over a sustained bass, 74 per cent of the kick lands
-in the drums and 82 per cent of the bass lands in the bass. The eighteen per
-cent of the bass that goes with the drums is bleed at the moments the kick is
-masking it anyway, and Hits and Notes moves the trade either way.
+drums.
+
+Where the line sits between them is what Hits and Notes moves, and the trade is
+worth seeing rather than describing. Measured on a kick, a hat, a snare, a
+sustained sub and a held pad, all playing together:
+
+| Hits and Notes | Kick into drums | Bass into bass | Held pad into drums | Hat into drums |
+|---|---|---|---|---|
+| Far towards Notes | 35% | 98% | 4% | 108% |
+| Towards Notes | 58% | 92% | 14% | 108% |
+| The middle | 75% | 78% | 32% | 108% |
+| Towards Hits | 88% | 55% | 57% | 108% |
+
+Read it as one dial with drums at one end and everything held at the other. Move
+it towards Hits if the kick is missing from the drums, and towards Notes if the
+bass or a pad is bleeding into them. The hats do not move at all, because
+nothing about a hat is ambiguous.
+
+The hats reading over a hundred is not a rounding error. The measure asks how
+strongly the hat that was played is present in the part, not what fraction of
+the part is hat, and the drums also carry the snare's top end and the kick's
+beater click — both land on the same bins at the same moments, so they count as
+a little more hat than there was. It is the right way round for the question
+being asked here, which is what each part loses.
+
+The published way to improve both ends at once is to measure the recording twice
+at two window lengths and combine them. That was built and measured, and it is
+not in the app: it bought eleven points on the kick, cost nineteen on the bass,
+and doubled the time. The numbers are in `src/audio/separate/hpss.ts`.
 
 A centred lead comes out usable on a stereo mix. On a mono file there is no
 position to read, and if nothing repeats either then there is no basis at all

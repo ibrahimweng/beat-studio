@@ -337,6 +337,28 @@ where the trade lives and it was swept rather than argued: at three bins the
 drums hold 85 per cent of the kick and the bass loses 42 per cent of itself
 into them; at five, 74 and 18; at seven, 51 and 6; at nine, 42 and 3.
 
+The published improvement on that was tried afterwards and is not in the app.
+A kick's pitch falls fast, so over a window four times longer the fall is
+smeared across many bins and reads as broadband, which is what a hit looks like.
+It was built properly, with both medians rescaled so the two windows ask over the
+same span of time and the same width of frequency, and with a version restricted
+to below 250 hertz where a kick's fall happens. Measured against the one-window
+version, the kick went from 75 to 86 per cent into the drums, the bass fell from
+78 to 59 per cent into the bass, a held pad went from 32 to 38 per cent into the
+drums, and the whole separation went from a fifth of the recording's length to
+nearly half. Eleven points of kick for nineteen points of bass at twice the
+time, so it was taken out. The same eleven points are available from the Hits
+and Notes control, which costs nothing.
+
+That control is worth measuring rather than describing, and this page prints the
+table. On a kick, a hat, a snare, a sustained sub and a held pad together, the
+kick goes into the drums 35, 58, 75 and 88 per cent of the time as the control
+moves from one end to the other, while the bass stays in the bass 98, 92, 78 and
+55 per cent of the time. The hats read a little over the whole of themselves at
+every setting and do not move, because nothing about a hat is ambiguous — the
+measure asks how strongly the hat played is present in the part, and the snare's
+top end and the kick's beater click land on the same bins at the same moments.
+
 The other two that mattered are in `repeat.ts` and `hits.ts`.
 
 The loop finder was comparing each lag against the average of the whole
