@@ -166,7 +166,7 @@ const SECTIONS: readonly Section[] = [
     title: 'Taking a beat apart',
     rows: [
       ['What it does', 'Reads a track and divides it into the drums, the bass, whatever is in front, and everything else. Nothing is uploaded and nothing is downloaded — it is all worked out here.'],
-      ['They add back up', 'The parts sum to the recording exactly. Every moment of it is divided between them, so nothing is lost and nothing is counted twice.'],
+      ['They add back up', 'Every moment of the recording is divided between the parts by shares that add to one, so nothing is lost and nothing is counted twice. Each part is a 24-bit file like everything else here, so the four are within half a step of exact — a hundred and thirty decibels below the mix.'],
       ['Open', 'Takes a part further. The drums come apart into the kick, the snare, the toms, the hats and the cymbals; what is left comes apart into the lines that are held, by register.'],
       ['Rest', 'What no hit and no line accounted for. It is a part like the others because the parts have to add up, and how much is in it is the most honest number about how well this worked.'],
       ['Hits and Notes', 'Which way the next separation leans. A compressed mix has its drums smeared until they look like notes; an acoustic recording has a piano attack that looks like a drum.'],
@@ -176,7 +176,10 @@ const SECTIONS: readonly Section[] = [
       ['Hits', 'Finds every hit in a part and puts the sound you have chosen on each one. The same idea as reading the hits out of a picture, with a beat instead.'],
       ['Write the files', 'Each part as a WAV. All the same length and all starting at zero, so they sit on separate tracks and stay in sync.'],
       ['What it cannot do', 'It reads the recording rather than recognising instruments. Drums come out well. Two instruments in the same place and the same register will not come apart, and a violin out from under a viola is not something this can do.'],
-      ['How long it takes', 'About a fifth of the length of the track. Eight minutes is as much as a browser can hold at once, and it says so rather than failing partway.'],
+      ['How long it takes', 'About a fifth of the length of the track. Sixteen minutes is as much as a browser can hold at once, and it says so rather than failing partway.'],
+      ['Take apart this stretch', 'Reads the same file again between two times. For a track too long to take whole, and for the verse of a song — everything that decides the split is measured over all of what it is given, so a chorus halfway through moves the lot.'],
+      ['The name of a part', 'Yours to give. Type into it. What is measured says how bright a line is and whether its pitch holds still; it cannot say the line is a viola, and you can. The recording is renamed with it, so a layer made from it says so too.'],
+      ['Keep for next time', 'Writes these parts down so this screen is here on your next visit. Without it they go when you leave, and only the ones you used are kept — four parts of a three minute track is a couple of hundred megabytes, which is not worth writing on the chance you wanted it.'],
     ],
   },
   {

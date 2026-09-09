@@ -295,12 +295,15 @@ http://localhost:5173/tools/listen-check.html
 Checks taking a beat apart. Three different kinds of claim, and they are not
 equally checkable, so the page is in three parts.
 
-The first is exact. Every moment of the recording is divided between the four
-parts by shares that add to one, the transform that puts them back together
-loses nothing, and the blocks are joined by two ramps that add to one — so the
-parts sum to the recording sample for sample, not nearly. That is the one thing
-this feature can promise and the page checks it on every level: the four
-against the mix, and the parts of the drums against the drums.
+The first is exact, to the depth the parts are written at. Every moment of the
+recording is divided between the four by shares that add to one, the transform
+that puts them back together loses nothing, and the blocks are joined by two
+ramps that add to one. The division is exact; what is written down is written at
+twenty four bits like every other file this app makes, so each part is within
+half a step of the number the arithmetic produced and the four together are
+within about two ten-millionths — a hundred and thirty decibels under the mix.
+That is the one thing this feature can promise and the page checks it on every
+level: the four against the mix, and the parts of the drums against the drums.
 
 The second is against ground truth, because the mix is built here out of parts
 that are known: a kit pattern, a low sub under it, a held drone in the middle,
@@ -336,6 +339,28 @@ narrow line, does not. It comes back as 74 and 26. The floor on that width is
 where the trade lives and it was swept rather than argued: at three bins the
 drums hold 85 per cent of the kick and the bass loses 42 per cent of itself
 into them; at five, 74 and 18; at seven, 51 and 6; at nine, 42 and 3.
+
+The published improvement on that was tried afterwards and is not in the app.
+A kick's pitch falls fast, so over a window four times longer the fall is
+smeared across many bins and reads as broadband, which is what a hit looks like.
+It was built properly, with both medians rescaled so the two windows ask over the
+same span of time and the same width of frequency, and with a version restricted
+to below 250 hertz where a kick's fall happens. Measured against the one-window
+version, the kick went from 75 to 86 per cent into the drums, the bass fell from
+78 to 59 per cent into the bass, a held pad went from 32 to 38 per cent into the
+drums, and the whole separation went from a fifth of the recording's length to
+nearly half. Eleven points of kick for nineteen points of bass at twice the
+time, so it was taken out. The same eleven points are available from the Hits
+and Notes control, which costs nothing.
+
+That control is worth measuring rather than describing, and this page prints the
+table. On a kick, a hat, a snare, a sustained sub and a held pad together, the
+kick goes into the drums 35, 58, 75 and 88 per cent of the time as the control
+moves from one end to the other, while the bass stays in the bass 98, 92, 78 and
+55 per cent of the time. The hats read a little over the whole of themselves at
+every setting and do not move, because nothing about a hat is ambiguous — the
+measure asks how strongly the hat played is present in the part, and the snare's
+top end and the kick's beater click land on the same bins at the same moments.
 
 The other two that mattered are in `repeat.ts` and `hits.ts`.
 

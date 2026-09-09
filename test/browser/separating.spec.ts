@@ -55,14 +55,14 @@ function held(into: Float32Array, hz: number, gain: number): void {
   for (let i = 0; i < into.length; i++) into[i] += Math.sin((2 * Math.PI * hz * i) / RATE) * gain;
 }
 
-/** A four second beat as a 16-bit stereo WAV. */
-function beatWav(): Buffer {
-  const frames = RATE * 4;
+/** A beat as a 16-bit stereo WAV, as long as it is asked for. */
+function beatWav(seconds = 4): Buffer {
+  const frames = RATE * seconds;
   const left = new Float32Array(frames);
   const right = new Float32Array(frames);
 
   for (const [into, other] of [[left, right] as const]) {
-    for (let beat = 0; beat < 8; beat++) {
+    for (let beat = 0; beat * 0.5 < seconds - 0.5; beat++) {
       // Kick on every beat, hat on every half beat, both dead centre.
       if (beat % 2 === 0) {
         kick(into, 0.25 + beat * 0.5);
@@ -110,7 +110,10 @@ function beatWav(): Buffer {
 }
 
 /** Open the app on the screen that takes recordings apart, with a beat in it. */
-async function takeApart(page: import('@playwright/test').Page): Promise<void> {
+async function takeApart(
+  page: import('@playwright/test').Page,
+  seconds = 4,
+): Promise<void> {
   await open(page);
   await page.locator('.rail__screen[data-screen="separate"]').click();
   await expect(page.locator('.sep')).toBeVisible();
@@ -118,18 +121,352 @@ async function takeApart(page: import('@playwright/test').Page): Promise<void> {
   await page.setInputFiles('.sep input[type=file]', {
     name: 'beat.wav',
     mimeType: 'audio/wav',
-    buffer: beatWav(),
+    buffer: beatWav(seconds),
   });
   // The rows are the app itself saying it is done, rather than a guess at how
   // long the work takes.
   await expect(page.locator('.sep__row')).toHaveCount(4, { timeout: 60_000 });
 }
 
+/**
+ * Wait for the app to be back after a reload.
+ *
+ * The walkthrough is marked as seen by the first visit, so it does not come back.
+ * The tools appearing is the app saying it is up, which is the same thing `open`
+ * waits for on a first visit.
+ */
+async function settled(page: import('@playwright/test').Page): Promise<void> {
+  await expect(page.locator('.rail__tool').first()).toBeVisible();
+}
+
+/**
+ * One row's button, by the word on it.
+ *
+ * Matched exactly. Asking for the button whose text contains "S" also finds
+ * "Hits", which is the kind of thing that makes a test click the wrong control
+ * and then fail somewhere else entirely.
+ */
+function rowButton(
+  page: import('@playwright/test').Page,
+  part: string,
+  name: string,
+): import('@playwright/test').Locator {
+  return page
+    .locator(`.sep__row[data-part="${part}"]`)
+    .getByRole('button', { name, exact: true });
+}
+
+/**
+ * The names on the rows.
+ *
+ * A part's name is a box you can type in rather than a line of text, because it
+ * is the person's to give — so what is on screen is its value and not its
+ * contents, and `allInnerTexts` comes back with a row of empty strings.
+ */
+async function namesShown(
+  page: import('@playwright/test').Page,
+  where: string,
+): Promise<string[]> {
+  return page.locator(where).evaluateAll((boxes) =>
+    boxes.map((box) => (box as HTMLInputElement).value),
+  );
+}
+
+/**
+ * How many recordings the picker is showing, or null when it shows none.
+ *
+ * One read, taken now. That is the right question for asking whether something
+ * is absent and the wrong one for asking whether it has arrived — use
+ * {@link recordingsSettle} for that.
+ */
+async function recordingsShown(page: import('@playwright/test').Page): Promise<number | null> {
+  await page.locator('.rail__screen[data-screen="design"]').click();
+  await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+  const group = page.locator('.pick-group__title', { hasText: 'Recordings' });
+  if (!(await group.count())) return null;
+  const said = await group.first().innerText();
+  return Number(/Recordings · (\d+)/.exec(said)?.[1] ?? '0');
+}
+
+/**
+ * Wait until the picker is showing this many recordings.
+ *
+ * Recordings come back from the browser's database, and nothing on screen says
+ * when that has finished: the app is up, drawn and usable well before they land.
+ * So a single read after a reload is a race — one this machine won every time
+ * and a loaded CI runner lost, which is how it was found. Waiting for the number
+ * to arrive is the only honest way to ask.
+ *
+ * There is no matching wait for "none", because absence cannot be waited for:
+ * the tests that check a part was *not* kept read once and are checked instead
+ * by removing the thing that forgets it and watching them fail.
+ */
+async function recordingsSettle(page: import('@playwright/test').Page, many: number): Promise<void> {
+  await expect.poll(() => recordingsShown(page), { timeout: 20_000 }).toBe(many);
+}
+
+/**
+ * Press Keep, and wait until it has actually happened.
+ *
+ * The recordings go into the browser's database, which is not instant, and the
+ * button saying "Kept" is the app's own word for that having finished — it does
+ * not change until the write comes back. Reloading before then is reloading
+ * mid-write, which is how two of these tests found a real bug: the write used
+ * to be started and forgotten, so the screen was recorded pointing at
+ * recordings that never landed.
+ */
+async function keepThem(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByRole('button', { name: 'Keep for next time' }).click();
+  await expect(page.getByRole('button', { name: 'Kept for next time' })).toBeDisabled();
+}
+
+test.describe('keeping them for next time', () => {
+  /*
+   * Off by default, and the reason is size.
+   *
+   * Four parts of a three minute track is a couple of hundred megabytes, and
+   * writing that into the browser's store because somebody happened to take a
+   * beat apart is not a decision to make for them — it is the same reason the
+   * parts are on loan until one is used. So the screen is empty next visit
+   * unless it was asked not to be, and this is the pair of tests that says both
+   * halves of that are true.
+   */
+  test('is empty next visit when nothing was kept', async ({ page }) => {
+    await takeApart(page);
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(0);
+  });
+
+  test('brings the parts back next visit once they are kept', async ({ page }) => {
+    await takeApart(page);
+    await keepThem(page);
+
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+    expect(await namesShown(page, '.sep__title')).toContain('Drums');
+    // And what was measured comes back with them, not just the names.
+    await expect(page.locator('.sep__notes')).toContainText('loop');
+  });
+
+  /*
+   * The recordings are kept too, which is the half that is easy to get wrong.
+   *
+   * What is written down is a list of ids. Keeping the screen without settling
+   * the loans behind it would come back as four rows that draw perfectly and
+   * cannot be played — so a part missing its recording drops the whole
+   * separation rather than showing half of one, and this plays one to prove the
+   * recordings actually survived.
+   */
+  test('keeps the recordings behind them, so a part brought back can be played', async ({
+    page,
+  }) => {
+    await takeApart(page);
+    await keepThem(page);
+    await page.reload();
+    await settled(page);
+
+    await recordingsSettle(page, 4);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await rowButton(page, 'drums', '▶').click();
+    await expect(rowButton(page, 'drums', '■')).toBeVisible();
+  });
+
+  /*
+   * The stretch boxes do not come back, and that is on purpose.
+   *
+   * Choosing a stretch needs the file, which is on somebody's disk and not in
+   * this browser. Two boxes and a button that quietly did nothing would be worse
+   * than no boxes; picking the file again brings them back.
+   */
+  test('does not offer a stretch of a file it no longer has', async ({ page }) => {
+    await takeApart(page);
+    await keepThem(page);
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+    await expect(page.locator('.sep__span')).toBeHidden();
+  });
+
+  test('forgets them when the screen is cleared', async ({ page }) => {
+    await takeApart(page);
+    await keepThem(page);
+    await page.getByRole('button', { name: 'Forget' }).click();
+
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(0);
+  });
+});
+
+test.describe('naming a part', () => {
+  /*
+   * The name is the person's to give, because the measurements cannot give it.
+   *
+   * They can say a line is bright and steady between G4 and D5. They cannot say
+   * it is a viola, and no arithmetic here ever will — that needs a model trained
+   * on instruments, which is the one thing this is built not to need. Somebody
+   * listening knows in a second, so the row lets them write it down.
+   */
+  test('takes a name of your own, and the recording takes it too', async ({ page }) => {
+    await takeApart(page);
+    const name = page.locator('.sep__row[data-part="tonal"] .sep__title');
+    await expect(name).toHaveValue('Tonal');
+
+    // Typed rather than filled, one key at a time, because the space bar is the
+    // point: this screen has no transport and used to swallow it.
+    await name.fill('');
+    await name.pressSequentially('Second violins');
+    await name.press('Enter');
+    await expect(name).toHaveValue('Second violins');
+
+    /*
+     * And the recording is called that too.
+     *
+     * A part and the recording it was registered as are the same thing under two
+     * names, so placing it puts this name on a layer — and a layer called
+     * "Tonal" helps nobody. Only the part of the name is renamed; where it came
+     * from stays on the end.
+     */
+    await page.locator('.rail__screen[data-screen="design"]').click();
+    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+    await page.locator('.pick-find--held').fill('Second violins');
+    await expect(page.locator('.pick-group__title', { hasText: 'Recordings' })).toContainText(
+      '1 of 4',
+    );
+  });
+
+  test('puts the old name back on Escape', async ({ page }) => {
+    await takeApart(page);
+    const name = page.locator('.sep__row[data-part="drums"] .sep__title');
+    await name.fill('Kit');
+    await name.press('Escape');
+    await expect(name).toHaveValue('Drums');
+  });
+
+  test('says what each line sounds like, so there is something to name it from', async ({
+    page,
+  }) => {
+    await takeApart(page);
+    await page.locator('.sep__row[data-part="tonal"] button', { hasText: 'Open' }).click();
+    // The lines inside come back described: how bright, and whether the pitch
+    // holds still. Both are measured; neither is a guess at an instrument.
+    await expect(
+      page.locator('.sep__row.is-inside .sep__about').filter({ hasText: /pure tone|warm|bright/ }).first(),
+    ).toBeVisible({ timeout: 60_000 });
+  });
+});
+
+test.describe('taking apart a stretch of it', () => {
+  /*
+   * The stretch appears after the first separation, not before it.
+   *
+   * Dropping a file in and getting the parts back is what the screen is for, so
+   * the stretch is the second question rather than a form in front of the first.
+   * By the time it is asked there is a length to choose from and a file still in
+   * hand, which is why the boxes can be filled in with the whole recording.
+   */
+  test('offers the whole recording once there is one', async ({ page }) => {
+    await takeApart(page, 8);
+    await expect(page.locator('.sep__span')).toBeVisible();
+    await expect(page.locator('.sep__time').first()).toHaveValue('0:00');
+    await expect(page.locator('.sep__time').nth(1)).toHaveValue('0:08');
+    await expect(page.locator('.sep__of')).toHaveText('of 0:08');
+    // Nothing to go back to yet, so there is nothing offering to.
+    await expect(page.getByRole('button', { name: 'All of it' })).toBeDisabled();
+  });
+
+  test('takes apart only the stretch it is given', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+
+    await expect(page.locator('.sep__row')).toHaveCount(4, { timeout: 60_000 });
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:02–0:06');
+  });
+
+  /*
+   * The parts say which stretch they came out of.
+   *
+   * They are registered as recordings the moment they exist, and a library with
+   * two separations of the same track in it is unreadable if every part is
+   * called "Drums · beat.wav". The stretch is the only thing that tells them
+   * apart, so it goes in the name.
+   */
+  test('names the parts after the stretch they came from', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+    await expect(page.locator('.sep__row')).toHaveCount(4, { timeout: 60_000 });
+
+    /*
+     * Found by searching for the stretch, which is the way somebody would.
+     *
+     * The picker only draws the first dozen of a library, so looking for a name
+     * among the buttons finds whichever twelve happened to be drawn. The search
+     * counts all of them, and the count in the group's title is the answer.
+     */
+    await page.locator('.rail__screen[data-screen="design"]').click();
+    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+
+    const recordings = page.locator('.pick-group__title', { hasText: 'Recordings' });
+    await page.locator('.pick-find--held').fill('0:02–0:06');
+    await expect(recordings).toContainText('Recordings · 4');
+    // And a stretch that was never taken apart finds none of them, which is
+    // what makes the first half of this a claim rather than a coincidence.
+    await page.locator('.pick-find--held').fill('7:31–9:02');
+    await expect(recordings).toContainText('0 of 4');
+  });
+
+  test('goes back to all of it', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:02–0:06', {
+      timeout: 60_000,
+    });
+
+    await page.getByRole('button', { name: 'All of it' }).click();
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:08', {
+      timeout: 60_000,
+    });
+    await expect(page.locator('.sep__time').first()).toHaveValue('0:00');
+    await expect(page.locator('.sep__time').nth(1)).toHaveValue('0:08');
+  });
+
+  /*
+   * A stretch too short to mean anything is refused rather than attempted.
+   *
+   * Half a second is very nearly all edge — the widest median reaches a fifth of
+   * a second either way — so it would come back looking broken rather than
+   * looking short, and nobody asks for it on purpose.
+   */
+  test('refuses a stretch that is only edges', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:02');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+
+    await expect(page.locator('.sep__said')).toContainText('at least 1 seconds');
+    // And the parts that were already there are still there.
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+  });
+});
+
 test.describe('taking a beat apart', () => {
   test('comes back as four parts, and says what it found', async ({ page }) => {
     await takeApart(page);
 
-    const names = await page.locator('.sep__title').allInnerTexts();
+    const names = await namesShown(page, '.sep__title');
     expect(names).toEqual(['Drums', 'Bass', 'Lead', 'Tonal']);
 
     /*
@@ -179,7 +516,7 @@ test.describe('taking a beat apart', () => {
     // More rows than the four, and the new ones sit in from their parent.
     await expect(page.locator('.sep__row')).not.toHaveCount(4, { timeout: 60_000 });
     await expect(page.locator('.sep__row.is-inside').first()).toBeVisible();
-    const inside = await page.locator('.sep__row.is-inside .sep__title').allInnerTexts();
+    const inside = await namesShown(page, '.sep__row.is-inside .sep__title');
     expect(inside).toContain('Kick');
     // What no hit accounted for is a part like the others, because the parts have
     // to add up.
@@ -225,4 +562,166 @@ test.describe('taking a beat apart', () => {
     await page.locator('.rail__screen[data-screen="design"]').click();
     await expect(page.locator('.rail__tool').first()).toBeEnabled();
   });
+
+  /*
+   * Hearing one part against the others, which is what the screen is for.
+   *
+   * Its own playback path rather than the timeline's, because these are not on
+   * the timeline. What is checked is the state the screen reports, not the sound:
+   * a headless browser has no speakers, and whether a buffer source was started
+   * is not something a test can hear.
+   */
+  test('plays one part on its own, and stops', async ({ page }) => {
+    await takeApart(page);
+    const play = rowButton(page, 'drums', '▶');
+    await play.click();
+    await expect(rowButton(page, 'drums', '■')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(rowButton(page, 'drums', '▶')).toBeVisible();
+  });
+
+  /*
+   * Holding a part down, and hearing one on its own.
+   *
+   * Solo has to quieten the others rather than only mark itself, or the screen
+   * says one thing and the playback does another.
+   */
+  test('holds a part down and hears one on its own', async ({ page }) => {
+    await takeApart(page);
+    const drums = page.locator('.sep__row[data-part="drums"]');
+    const bass = page.locator('.sep__row[data-part="bass"]');
+
+    await rowButton(page, 'drums', 'M').click();
+    await expect(drums).toHaveClass(/is-quiet/);
+    await expect(bass).not.toHaveClass(/is-quiet/);
+    await rowButton(page, 'drums', 'M').click();
+    await expect(drums).not.toHaveClass(/is-quiet/);
+
+    await rowButton(page, 'bass', 'S').click();
+    await expect(bass).toHaveClass(/is-solo/);
+    await expect(drums).toHaveClass(/is-quiet/);
+  });
+
+  /*
+   * Reading a part back into the palette.
+   *
+   * The hand-off this feature exists for, and the one that never worked on a
+   * whole mix: the finder hears one sound where a kick and a hat played together,
+   * and the rebuild then searches for a single voice that is both. A short beat
+   * is used because rebuilding is a search of forty voices per sound found, and
+   * this is checking the wiring rather than the search.
+   */
+  test('reads a part back into the palette', async ({ page }) => {
+    await takeApart(page, 2);
+    await rowButton(page, 'drums', 'Rebuild').click();
+
+    // It goes back to the timeline, because that is where the rebuilt sounds
+    // are of any use.
+    await expect(page.locator('.sep')).toBeHidden();
+    await expect(page.locator('.heard-row').first()).toBeVisible({ timeout: 120_000 });
+    // Every one offers ways of making it rather than one answer, because the app
+    // cannot tell which is right.
+    await expect(page.locator('.heard-row').first().locator('.heard-way__match').first())
+      .toBeVisible();
+  });
+
+  /*
+   * Putting the chosen sound on every hit in a part.
+   *
+   * The same idea as reading the hits out of a picture, with a beat instead. The
+   * sound placed is whatever is armed in the library, which is why this does not
+   * click a row first: clicking one would arm that part and place the recording
+   * on top of itself.
+   */
+  test('puts the chosen sound on every hit in a part', async ({ page }) => {
+    await takeApart(page, 2);
+    expect(await page.locator('.cue').count()).toBe(0);
+
+    await rowButton(page, 'drums', 'Hits').click();
+    await expect(page.locator('.sep')).toBeHidden();
+    await expect(page.locator('.cue').first()).toBeVisible({ timeout: 120_000 });
+    expect(await page.locator('.cue').count()).toBeGreaterThan(1);
+  });
+
+  /*
+   * Writing the parts out.
+   *
+   * One file per part, and the names carry the part they came from so a folder of
+   * them can be read without opening any.
+   */
+  test('writes every part out as a file', async ({ page }) => {
+    await takeApart(page);
+    const saved: string[] = [];
+    page.on('download', (file) => saved.push(file.suggestedFilename()));
+
+    await page.getByRole('button', { name: 'Write the files' }).click();
+    await expect.poll(() => saved.length, { timeout: 30_000 }).toBe(4);
+    expect(saved.every((name) => name.endsWith('.wav'))).toBe(true);
+    expect(saved.some((name) => name.includes('drums'))).toBe(true);
+  });
 });
+
+/*
+ * What is kept, and what is not.
+ *
+ * A separated part is registered as a recording straight away, so it is in the
+ * picker and can be placed. It is not written into the browser's own store until
+ * one is used. Four parts of a three minute track is a couple of hundred
+ * megabytes, and putting all of that away before anybody has said they want any
+ * of it would be slow and mostly wasted.
+ *
+ * Both halves of that fail silently, which is why they are tested. If the first
+ * broke, a part somebody placed would be gone after a reload. If the second
+ * broke, every track ever separated would stay in storage forever. Only a browser
+ * can answer either, because both are about what a reload finds.
+ */
+test.describe('keeping the parts', () => {
+  test('shows the parts in the picker as soon as they exist', async ({ page }) => {
+    await takeApart(page);
+    expect(await recordingsShown(page)).toBe(4);
+  });
+
+  test('forgets the parts nobody used', async ({ page }) => {
+    await takeApart(page);
+    expect(await recordingsShown(page)).toBe(4);
+
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await page.getByRole('button', { name: 'Forget' }).click();
+    await expect(page.locator('.sep__row')).toHaveCount(0);
+
+    expect(await recordingsShown(page)).toBeNull();
+  });
+
+  test('does not write down a part nobody used', async ({ page }) => {
+    await takeApart(page);
+    expect(await recordingsShown(page)).toBe(4);
+
+    await page.reload();
+    await settled(page);
+    expect(await recordingsShown(page)).toBeNull();
+  });
+
+  /*
+   * And keeps the ones that were used.
+   *
+   * Placing a part on the timeline is what says you want it. From then on it is a
+   * recording like any other, so it survives a reload along with the piece that
+   * uses it.
+   */
+  test('keeps a part once it is placed', async ({ page }) => {
+    await takeApart(page);
+    await page.getByRole('button', { name: 'Place on the timeline' }).click();
+    await expect(page.locator('.cue')).toHaveCount(4);
+
+    await page.reload();
+    await settled(page);
+    // The piece comes back with its sounds on it, and the recordings they name
+    // come back with it. Waited for rather than read once: the piece is restored
+    // from local storage and the recordings from the database, so the cues being
+    // back says nothing about whether the recordings are.
+    await expect(page.locator('.cue')).toHaveCount(4);
+    await recordingsSettle(page, 4);
+  });
+});
+

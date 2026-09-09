@@ -16,6 +16,8 @@
  * highest.
  */
 
+import type { PartAudio } from '../src/audio/separate/types.ts';
+
 export const RATE = 48_000;
 
 /** A steady tone. Harmonic by any definition: one bin, every frame. */
@@ -176,4 +178,19 @@ export function heldShare(stem: Float32Array, part: Float32Array): number {
     own += part[i] * part[i];
   }
   return own > 1e-20 ? dot / own : 0;
+}
+
+/**
+ * One channel of a separated part, copied out.
+ *
+ * A part is written as a file rather than kept as samples, so reading one back
+ * allocates a buffer — and `getChannelData` gives back a window onto memory the
+ * audio implementation owns, valid only while that buffer is alive. A part read
+ * and dropped inside one expression comes back holding numbers like 3.3e+63.
+ * So the buffer is held in a variable and the samples are copied out of it.
+ * `render.test.ts` documents the same hazard from the other direction.
+ */
+export function laneOf(audio: PartAudio, channel = 0): Float32Array {
+  const buffer = audio.samples();
+  return Float32Array.from(buffer.getChannelData(channel));
 }

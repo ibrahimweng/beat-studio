@@ -101,6 +101,34 @@ export interface Separation {
   hearing: string | null;
   /** Which way the split was asked to lean, nought for notes and one for hits. */
   lean: number;
+  /**
+   * How long the file is, which is not how long what came out of it is.
+   *
+   * Nought when there is no file in hand. `seconds` is the stretch that was
+   * actually taken apart; this is what there is to choose from, and the two
+   * differ whenever somebody has asked for part of a recording rather than all
+   * of it.
+   */
+  whole: number;
+  /**
+   * The stretch of the file that was taken apart, in seconds, or null for all
+   * of it.
+   *
+   * Kept as state rather than read back off the parts, because it is also what
+   * the boxes on screen are showing while somebody is still typing a new one.
+   */
+  span: { from: number; to: number } | null;
+  /**
+   * Whether these parts are being kept for next time.
+   *
+   * Off by default, and the reason is size. Four parts of a three minute track
+   * is a couple of hundred megabytes, and writing that into the browser's store
+   * because somebody happened to take a beat apart is not a decision to make on
+   * their behalf. So it is a button, and pressing it settles every part's loan
+   * as well as writing the screen down — ids pointing at recordings nobody kept
+   * would come back as rows that cannot be played.
+   */
+  kept: boolean;
 }
 
 export function emptySeparation(): Separation {
@@ -118,6 +146,9 @@ export function emptySeparation(): Separation {
     chosen: null,
     hearing: null,
     lean: 0.5,
+    whole: 0,
+    span: null,
+    kept: false,
   };
 }
 

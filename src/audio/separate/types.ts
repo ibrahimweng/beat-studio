@@ -18,6 +18,46 @@ export const PARTS = ['drums', 'bass', 'lead', 'tonal'] as const;
 export type PartId = (typeof PARTS)[number];
 
 /**
+ * A separated part's audio, which is a file before it is ever samples.
+ *
+ * Not an AudioBuffer, and the reason is arithmetic rather than taste. Four
+ * parts of a recording held as floating point are four times the size of the
+ * recording, and the encoded files are three quarters of that again on top,
+ * because both exist at once while the parts are being written out. Held this
+ * way there is one copy of each part and the working set is one block wide,
+ * which is what decides how long a recording can be taken apart at all.
+ *
+ * A separator that produced whole buffers can satisfy this by wrapping them.
+ * The one here does not have to: it writes each stretch as it becomes final.
+ */
+export interface PartAudio {
+  readonly rate: number;
+  readonly channels: number;
+  /** In samples. */
+  readonly length: number;
+  readonly duration: number;
+  /**
+   * Total energy, which is what every share a part reports is a share of.
+   *
+   * Counted as the part is written rather than measured afterwards, because
+   * measuring it afterwards means reading every sample back.
+   */
+  readonly energy: number;
+  /** The loudest sample in each slice of it, for drawing. */
+  readonly peaks: Float32Array;
+  /** The part as a file, which is how it reaches everything else in the app. */
+  wav(): Blob;
+  /**
+   * The samples, read back out.
+   *
+   * Allocates the whole part, so it is a method and not a field, and an
+   * implementation is allowed to refuse once {@link wav} has taken the bytes.
+   * Nothing on the screen calls it.
+   */
+  samples(): AudioBuffer;
+}
+
+/**
  * One separated part of a recording.
  *
  * Every part is exactly as long as the recording and at the same rate, so they
@@ -32,7 +72,7 @@ export interface StemPart {
   about: string;
   /** The part this came out of, or null for one of the four. */
   under: string | null;
-  audio: AudioBuffer;
+  audio: PartAudio;
   /**
    * How much of the recording's energy it holds, nought to one.
    *
@@ -107,6 +147,20 @@ export interface SeparateOptions {
 export type Progress = (done: number, of: number, what: string) => void;
 
 /**
+ * What going deeper into a part needs to know about it.
+ *
+ * Less than a whole {@link StemPart}, on purpose. The id says which of the four
+ * it is and what to call the pieces; the share is what the pieces' own shares
+ * are shares of. Nothing else is used, and asking for less means a part read
+ * back out of last week's separation — which has a name and a waveform and no
+ * samples at all — can be taken further like any other.
+ */
+export interface Refinable {
+  id: string;
+  share: number;
+}
+
+/**
  * Something that can take a recording apart.
  *
  * `refine` is optional and is what makes the tree two deep: given one of the
@@ -127,8 +181,16 @@ export interface Separator {
     onStep?: Progress,
   ): Promise<Separation>;
   refine?(
-    part: StemPart,
-    rate: number,
+    part: Refinable,
+    /**
+     * The part's samples, decoded by the caller.
+     *
+     * Passed in rather than read off `part`, because by the time anybody asks
+     * to go deeper the part has been handed over as a file and its samples with
+     * it. The caller has to decode one part; this would otherwise have to hold
+     * all four.
+     */
+    audio: AudioBuffer,
     options?: SeparateOptions,
     onStep?: Progress,
   ): Promise<StemPart[]>;

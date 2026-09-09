@@ -880,6 +880,45 @@ export class SoundDesignSession {
   }
 
   /**
+   * Write these recordings down, so they are here next time.
+   *
+   * What placing one does, done deliberately and for several at once. Keeping a
+   * separation means keeping the parts it points at — a screen of rows whose
+   * recordings were never written is a screen of rows that cannot be played —
+   * and this is how that is said without pretending each one was placed.
+   */
+  async keepRecordings(ids: readonly string[]): Promise<boolean> {
+    for (const id of ids) this.#onLoan.delete(id);
+    // Waited for, and unconditional. The caller is about to write down
+    // something that names these, so what it needs is not "were any of them on
+    // loan" but "are all of them on disk now".
+    const onDisk = await this.#writeSamples();
+    this.#store.set({ samples: [...samples()] });
+    return onDisk;
+  }
+
+  /**
+   * Give a recording a different name.
+   *
+   * The whole of what naming a separated part comes down to, because a part is a
+   * recording the moment it is made and the name on the row is the name on the
+   * file. Nothing else about it moves: the same id, the same bytes, the same
+   * decoded buffer if there is one.
+   *
+   * A part still on loan stays on loan. Naming something is not using it — it is
+   * how somebody works out whether they want it, and settling a couple of hundred
+   * megabytes because a name was typed would defeat the loan entirely.
+   */
+  renameRecording(id: string, name: string): void {
+    const said = name.trim();
+    const sample = sampleById(id);
+    if (!sample || !said || said === sample.name) return;
+    addSample({ ...sample, name: said }, null);
+    if (!this.#onLoan.has(id)) this.#keepSamples();
+    this.#store.set({ samples: [...samples()] });
+  }
+
+  /**
    * Put each of these recordings on a layer of its own, starting at zero.
    *
    * How a separated beat arrives on the timeline. A layer each, because that is
@@ -949,7 +988,16 @@ export class SoundDesignSession {
     this.#store.set({ samples: [...samples()], status: `${sample.name} removed` });
   }
 
-  #keepSamples(): void {
+  /**
+   * The recordings, written down, with a promise that says when they are.
+   *
+   * Separate from {@link #keepSamples} because most callers write as a side
+   * effect of doing something else and have nothing to wait for. Keeping a
+   * separation is the exception: it writes down a screen that names these
+   * recordings, and doing that before they exist leaves a screen pointing at
+   * nothing.
+   */
+  #writeSamples(): Promise<boolean> {
     /*
      * Everything but the decoded audio.
      *
@@ -959,13 +1007,17 @@ export class SoundDesignSession {
      * any of it. Spreading and removing what cannot be written is the shape
      * that does not go wrong when the sample gains a field.
      */
-    void keepSamples(
+    return keepSamples(
       samples()
         // Anything still on loan was fetched to be heard and has not been
         // used, so it is not part of the library yet. See #onLoan.
         .filter((sample) => !this.#onLoan.has(sample.id))
         .map(({ ...rest }) => rest),
     );
+  }
+
+  #keepSamples(): void {
+    void this.#writeSamples();
   }
 
   /**

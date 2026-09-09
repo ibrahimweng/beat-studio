@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { energy, heldShare, mix, RATE, stereo, tone } from '../../../test/mixes.ts';
+import { energy, heldShare, laneOf, mix, RATE, stereo, tone } from '../../../test/mixes.ts';
 import { renderVoice, seedFrom } from '../voice-spec.ts';
 import { kitSpec } from '../voices.ts';
 import { noteFor, refineDrums, refineTonal } from './refine.ts';
 import type { StemPart } from './types.ts';
+import { fromBuffer } from './written.ts';
 
 /**
  * Taking a part further: dividing it between the things found in it.
@@ -19,6 +20,19 @@ import type { StemPart } from './types.ts';
  */
 
 const SECONDS = 4;
+
+/**
+ * How loud the fixture is played, and why it is not simply full.
+ *
+ * Three drums at their own level sum past full scale — measured, this pattern
+ * peaks at 1.39 — and a part is written as a 24-bit file, which cannot hold
+ * more than full scale any more than a recording can. So the parts of a mix
+ * that is itself over the top cannot add back up to it, and a test saying they
+ * do would be asking for something no file could contain. Real recordings fit.
+ * This one is made to fit, by the same amount everywhere, so that every share
+ * measured below is exactly what it was.
+ */
+const HEADROOM = 0.7;
 
 /** One kit voice at a list of times, as a signal. */
 async function played(pad: string, at: readonly number[]): Promise<Float32Array> {
@@ -40,12 +54,15 @@ async function played(pad: string, at: readonly number[]): Promise<Float32Array>
    * alongside another that also renders. `render.test.ts` has the long version
    * of this note and the same trap.
    */
-  return Float32Array.from((await ctx.startRendering()).getChannelData(0));
+  const lane = Float32Array.from((await ctx.startRendering()).getChannelData(0));
+  for (let i = 0; i < lane.length; i++) lane[i] *= HEADROOM;
+  return lane;
 }
 
 /** Somebody's idea of a beat: kick on the beat, snare between, hats throughout. */
 async function beat(): Promise<{
   part: StemPart;
+  audio: AudioBuffer;
   kicks: Float32Array;
   snares: Float32Array;
   hats: Float32Array;
@@ -55,16 +72,26 @@ async function beat(): Promise<{
   const hats = await played('hhc', [0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
   const both = mix(kicks, snares, hats);
 
+  /*
+   * The samples are handed back beside the part, not read off it.
+   *
+   * A part carries its audio as a file rather than as samples, which is what
+   * lets four of them exist at once for a long recording. Going deeper into one
+   * takes the samples as an argument, and the app decodes them from the file it
+   * registered — here they are simply the ones the fixture already had.
+   */
+  const audio = stereo(both, both);
   return {
     kicks,
     snares,
     hats,
+    audio,
     part: {
       id: 'drums',
       name: 'Drums',
       about: '',
       under: null,
-      audio: stereo(both, both),
+      audio: fromBuffer(audio),
       share: 1,
     },
   };
@@ -79,8 +106,8 @@ function byName(parts: readonly StemPart[]): Record<string, StemPart> {
 
 describe('splitting a drum part', () => {
   it('finds the kick, the snare and the hats and nothing else', async () => {
-    const { part } = await beat();
-    const parts = await refineDrums(part, RATE);
+    const { part, audio } = await beat();
+    const parts = await refineDrums(part, audio);
     const ids = parts.map((one) => one.id).sort();
     expect(ids).toEqual(['drums.hat', 'drums.kick', 'drums.rest', 'drums.snare']);
     for (const one of parts) expect(one.under).toBe('drums');
@@ -97,12 +124,12 @@ describe('splitting a drum part', () => {
    * for a residue to go missing.
    */
   it('adds back up to the part it came out of', async () => {
-    const { part } = await beat();
-    const parts = await refineDrums(part, RATE);
-    const was = part.audio.getChannelData(0);
-    // Taken hold of once. `getChannelData` crosses into the audio
+    const { part, audio } = await beat();
+    const parts = await refineDrums(part, audio);
+    const was = audio.getChannelData(0);
+    // Read back and copied out once. `getChannelData` crosses into the audio
     // implementation on every call, and asking inside the loop costs minutes.
-    const lanes = parts.map((one) => one.audio.getChannelData(0));
+    const lanes = parts.map((one) => laneOf(one.audio));
     let worst = 0;
     for (let i = 0; i < was.length; i++) {
       let sum = 0;
@@ -113,10 +140,9 @@ describe('splitting a drum part', () => {
   }, 60_000);
 
   it('puts each drum in its own part', async () => {
-    const { part, kicks, snares, hats } = await beat();
-    const parts = byName(await refineDrums(part, RATE));
-    const held = (id: string, of: Float32Array): number =>
-      heldShare(parts[id].audio.getChannelData(0), of);
+    const { part, audio, kicks, snares, hats } = await beat();
+    const parts = byName(await refineDrums(part, audio));
+    const held = (id: string, of: Float32Array): number => heldShare(laneOf(parts[id].audio), of);
 
     // Measured: 0.97, 0.93 and 0.92 of each drum in its own file.
     expect(held('drums.kick', kicks)).toBeGreaterThan(0.9);
@@ -131,74 +157,176 @@ describe('splitting a drum part', () => {
   }, 60_000);
 
   it('says how many hits went into each part', async () => {
-    const { part } = await beat();
-    const parts = byName(await refineDrums(part, RATE));
+    const { part, audio } = await beat();
+    const parts = byName(await refineDrums(part, audio));
     expect(parts['drums.kick'].about).toMatch(/4 hits/);
     expect(parts['drums.hat'].about).toMatch(/7 hits/);
   }, 60_000);
 
   it('gives back nothing for a part with no hits in it', async () => {
     const quiet = new Float32Array(RATE * 2);
+    const audio = stereo(quiet, quiet);
     const part: StemPart = {
       id: 'drums',
       name: 'Drums',
       about: '',
       under: null,
-      audio: stereo(quiet, quiet),
+      audio: fromBuffer(audio),
       share: 0,
     };
-    expect(await refineDrums(part, RATE)).toEqual([]);
+    expect(await refineDrums(part, audio)).toEqual([]);
   });
 });
 
 describe('following the lines in what is left', () => {
   /** Two held notes, an octave and a half apart, both running the whole time. */
-  async function held(): Promise<{ part: StemPart; low: Float32Array; high: Float32Array }> {
+  async function held(): Promise<{
+    part: StemPart;
+    audio: AudioBuffer;
+    low: Float32Array;
+    high: Float32Array;
+  }> {
     // Two harmonics each, so there is a comb to find rather than a single bin.
     const low = mix(tone(150, SECONDS, 0.3), tone(300, SECONDS, 0.15));
     const high = mix(tone(900, SECONDS, 0.3), tone(1800, SECONDS, 0.15));
     const both = mix(low, high);
+    const audio = stereo(both, both);
     return {
       low,
       high,
+      audio,
       part: {
         id: 'tonal',
         name: 'Tonal',
         about: '',
         under: null,
-        audio: stereo(both, both),
+        audio: fromBuffer(audio),
         share: 1,
       },
     };
   }
 
   it('puts two notes in two registers', async () => {
-    const { part, low, high } = await held();
-    const parts = byName(await refineTonal(part));
+    const { part, audio, low, high } = await held();
+    const parts = byName(await refineTonal(part, audio));
     expect(parts['tonal.low']).toBeDefined();
     expect(parts['tonal.high']).toBeDefined();
 
-    const lowLine = parts['tonal.low'].audio.getChannelData(0);
-    const highLine = parts['tonal.high'].audio.getChannelData(0);
+    const lowLine = laneOf(parts['tonal.low'].audio);
+    const highLine = laneOf(parts['tonal.high'].audio);
     expect(heldShare(lowLine, low)).toBeGreaterThan(heldShare(lowLine, high));
     expect(heldShare(highLine, high)).toBeGreaterThan(heldShare(highLine, low));
   }, 60_000);
 
   it('says where each line actually sat, rather than where the register ends', async () => {
-    const { part } = await held();
-    const parts = byName(await refineTonal(part));
+    const { part, audio } = await held();
+    const parts = byName(await refineTonal(part, audio));
     // D3 is 146.8 hertz and the note is at 150, so the nearest name to it.
     expect(parts['tonal.low'].about).toMatch(/D3/);
     expect(parts['tonal.low'].about).toMatch(/sounding for/);
   }, 60_000);
 
+  /*
+   * What a line sounds like, which is not what instrument it is.
+   *
+   * Naming the instrument needs a model trained on instruments, and this whole
+   * folder is built not to need one. What is measured instead is how bright the
+   * line is and whether its pitch holds still — both plain readings of the
+   * spectrum, and both useful for the job somebody is actually doing, which is
+   * deciding what to call it themselves.
+   *
+   * The material is built so each claim has a right answer. A sine is pure by
+   * any definition, a sawtooth is bright by any definition, and a tone bent five
+   * and a half times a second is wavering by any definition.
+   */
+  describe('and saying what each one sounds like', () => {
+    async function line(lane: Float32Array): Promise<string> {
+      const audio = stereo(lane, lane);
+      const part: StemPart = {
+        id: 'tonal',
+        name: 'Tonal',
+        about: '',
+        under: null,
+        audio: fromBuffer(audio),
+        share: 1,
+      };
+      const parts = await refineTonal(part, audio);
+      const found = parts.filter((one) => one.id !== 'tonal.rest');
+      // The one that actually holds the note, when a harmonic was tracked too.
+      return found.sort((a, b) => b.share - a.share)[0]?.about ?? '';
+    }
+
+    /** A tone whose pitch is a function of time, for bending one. */
+    function bent(at: (t: number) => number): Float32Array {
+      const out = new Float32Array(RATE * SECONDS);
+      let phase = 0;
+      for (let i = 0; i < out.length; i++) {
+        phase += (2 * Math.PI * at(i / RATE)) / RATE;
+        out[i] = Math.sin(phase) * 0.4;
+      }
+      return out;
+    }
+
+    /** A tone with `count` harmonics falling as one over h, which is a sawtooth. */
+    function comb(hz: number, count: number): Float32Array {
+      const out = new Float32Array(RATE * SECONDS);
+      for (let h = 1; h <= count; h++) {
+        for (let i = 0; i < out.length; i++) {
+          out[i] += Math.sin((2 * Math.PI * hz * h * i) / RATE) * (0.35 / h);
+        }
+      }
+      return out;
+    }
+
+    it('calls a sine pure and a sawtooth bright', async () => {
+      // Measured: the average harmonic sits at 1.00 for the sine and 2.41 for six
+      // harmonics falling as one over h.
+      expect(await line(bent(() => 300))).toContain('nearly a pure tone');
+      expect(await line(comb(200, 6))).toContain('bright');
+    }, 120_000);
+
+    it('hears a waver, and does not hear one in a melody', async () => {
+      // Measured: 10.4 turns a second for the vibrato, 0.4 for the melody.
+      const wavering = bent((t) => 300 * Math.pow(2, (Math.sin(2 * Math.PI * 5.5 * t) * 0.35) / 12));
+      expect(await line(wavering)).toContain('with a waver');
+
+      const steps = [0, 2, 4, 5, 7, 5, 4, 2];
+      const melody = bent((t) => 220 * Math.pow(2, steps[Math.floor(t * 2) % 8] / 12));
+      expect(await line(melody)).toContain('and steady');
+    }, 120_000);
+
+    /*
+     * A register holding two lines says so rather than describing one.
+     *
+     * It is the case every other reading here is wrong about, and it has an exact
+     * tell: a register cannot sound for longer than the recording unless there
+     * was more than one thing in it. The turns cannot be used for this — two
+     * lines turn 23 times a second and the fastest vibrato anybody plays turns
+     * 15, which is not a gap.
+     */
+    it('says when a register held more than one line at once', async () => {
+      const audio = stereo(comb(300, 3), comb(300, 3));
+      const part: StemPart = {
+        id: 'tonal',
+        name: 'Tonal',
+        about: '',
+        under: null,
+        audio: fromBuffer(audio),
+        share: 1,
+      };
+      const parts = await refineTonal(part, audio);
+      const crowded = parts.filter((one) => one.about.includes('more than one line'));
+      expect(crowded.length, parts.map((one) => one.about).join('\n')).toBeGreaterThan(0);
+    }, 120_000);
+  });
+
   it('adds back up to the part it came out of', async () => {
-    const { part } = await held();
-    const parts = await refineTonal(part);
-    const was = part.audio.getChannelData(0);
-    // Taken hold of once. `getChannelData` crosses into the audio
+    const { part, audio } = await held();
+    const parts = await refineTonal(part, audio);
+    const was = audio.getChannelData(0);
+    // Read back and copied out once. `getChannelData` crosses into the audio
     // implementation on every call, and asking inside the loop costs minutes.
-    const lanes = parts.map((one) => one.audio.getChannelData(0));
+    const lanes = parts.map((one) => laneOf(one.audio));
     let worst = 0;
     for (let i = 0; i < was.length; i++) {
       let sum = 0;
@@ -223,22 +351,23 @@ describe('following the lines in what is left', () => {
       state = (state * 1103515245 + 12345) & 0x7fffffff;
       hiss[i] = (state / 0x3fffffff - 1) * 0.3;
     }
+    const audio = stereo(hiss, hiss);
     const part: StemPart = {
       id: 'tonal',
       name: 'Tonal',
       about: '',
       under: null,
-      audio: stereo(hiss, hiss),
+      audio: fromBuffer(audio),
       share: 1,
     };
-    const parts = byName(await refineTonal(part));
+    const parts = byName(await refineTonal(part, audio));
+    const rest = energy(laneOf(parts['tonal.rest'].audio));
     const lines = Object.keys(parts).filter((id) => id !== 'tonal.rest');
     for (const id of lines) {
       // Whatever registers do come back must be a sliver next to the rest.
-      expect(
-        energy(parts[id].audio.getChannelData(0)),
-        `${id} took too much of the noise`,
-      ).toBeLessThan(energy(parts['tonal.rest'].audio.getChannelData(0)) * 0.25);
+      expect(energy(laneOf(parts[id].audio)), `${id} took too much of the noise`).toBeLessThan(
+        rest * 0.25,
+      );
     }
   }, 60_000);
 });

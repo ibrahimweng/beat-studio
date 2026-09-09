@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { clicks, energy, glide, heldShare, kicks, mix, RATE, stereo, tone } from '../../../test/mixes.ts';
+import {
+  clicks,
+  energy,
+  glide,
+  heldShare,
+  kicks,
+  laneOf,
+  mix,
+  RATE,
+  stereo,
+  tone,
+} from '../../../test/mixes.ts';
 import { lowWeights, measured } from './dsp.ts';
 import { PARTS } from './types.ts';
 
@@ -40,17 +51,17 @@ function material(): {
   return { input: stereo(left, right), loop, bass, lead, aside };
 }
 
-/** Every part by name, for reading a claim without counting positions. */
-async function apart(input: AudioBuffer): Promise<Record<string, AudioBuffer>> {
+/** Channel zero of every part by name, for reading a claim without counting positions. */
+async function apart(input: AudioBuffer): Promise<Record<string, Float32Array>> {
   const done = await measured.separate(input);
-  const out: Record<string, AudioBuffer> = {};
-  for (const part of done.parts) out[part.id] = part.audio;
+  const out: Record<string, Float32Array> = {};
+  for (const part of done.parts) out[part.id] = laneOf(part.audio);
   return out;
 }
 
 describe('taking a mix into four', () => {
   /*
-   * The four add back up to the recording, sample for sample.
+   * The four add back up to the recording.
    *
    * Not nearly, and not once a fade at each end is allowed for. Three separate
    * things have to be true at once for this to hold: every cell is divided by
@@ -64,17 +75,20 @@ describe('taking a mix into four', () => {
     const done = await measured.separate(input);
     expect(done.parts).toHaveLength(PARTS.length);
 
+    /*
+     * Every part is read back once, and the buffers are held while it happens.
+     *
+     * Read back, because a part is written as a file: this is the sum of what
+     * was actually written, quantised, and not of some tidier thing kept beside
+     * it. And held, because `getChannelData` crosses into the Web Audio
+     * implementation on every call — asking for it inside the sample loop is
+     * two and a quarter million crossings, a hundred and thirty nine seconds
+     * against a fraction of one, and the test was right and unusable.
+     */
+    const read = done.parts.map((part) => part.audio.samples());
     for (let c = 0; c < input.numberOfChannels; c++) {
       const was = input.getChannelData(c);
-      /*
-       * The channels are taken hold of once rather than per sample.
-       *
-       * `getChannelData` crosses into the Web Audio implementation on every
-       * call, and asking for it inside the loop is two and a quarter million
-       * crossings — a hundred and thirty nine seconds, against a fraction of one.
-       * The test was right and unusable.
-       */
-      const lanes = done.parts.map((part) => part.audio.getChannelData(c));
+      const lanes = read.map((one) => one.getChannelData(c));
       let worst = 0;
       for (let i = 0; i < was.length; i++) {
         let sum = 0;
@@ -90,23 +104,23 @@ describe('taking a mix into four', () => {
     const done = await measured.separate(input);
     for (const part of done.parts) {
       expect(part.audio.length).toBe(input.length);
-      expect(part.audio.sampleRate).toBe(input.sampleRate);
-      expect(part.audio.numberOfChannels).toBe(2);
+      expect(part.audio.rate).toBe(input.sampleRate);
+      expect(part.audio.channels).toBe(2);
     }
   });
 
   it('puts the loop in the drums', async () => {
     const { input, loop } = material();
     const parts = await apart(input);
-    expect(heldShare(parts.drums.getChannelData(0), loop)).toBeGreaterThan(0.7);
+    expect(heldShare(parts.drums, loop)).toBeGreaterThan(0.7);
   });
 
   it('puts the low tone in the bass', async () => {
     const { input, bass } = material();
     const parts = await apart(input);
-    expect(heldShare(parts.bass.getChannelData(0), bass)).toBeGreaterThan(0.7);
+    expect(heldShare(parts.bass, bass)).toBeGreaterThan(0.7);
     // And nowhere else, since the low crossover is the only thing dividing them.
-    expect(heldShare(parts.tonal.getChannelData(0), bass)).toBeLessThan(0.2);
+    expect(heldShare(parts.tonal, bass)).toBeLessThan(0.2);
   });
 
   /*
@@ -120,10 +134,10 @@ describe('taking a mix into four', () => {
   it('tells a centred line from one pushed aside', async () => {
     const { input, lead, aside } = material();
     const parts = await apart(input);
-    const leadInLead = heldShare(parts.lead.getChannelData(0), lead);
-    const leadInTonal = heldShare(parts.tonal.getChannelData(0), lead);
-    const asideInTonal = heldShare(parts.tonal.getChannelData(0), aside);
-    const asideInLead = heldShare(parts.lead.getChannelData(0), aside);
+    const leadInLead = heldShare(parts.lead, lead);
+    const leadInTonal = heldShare(parts.tonal, lead);
+    const asideInTonal = heldShare(parts.tonal, aside);
+    const asideInLead = heldShare(parts.lead, aside);
 
     expect(leadInLead).toBeGreaterThan(leadInTonal);
     expect(asideInTonal).toBeGreaterThan(asideInLead);
@@ -169,7 +183,7 @@ describe('taking a mix into four', () => {
     const lead = done.parts.find((part) => part.id === 'lead');
     expect(done.notes.stereo).toBe(false);
     expect(done.notes.loop).toBeNull();
-    expect(energy(lead?.audio.getChannelData(0) as Float32Array)).toBe(0);
+    expect(energy(laneOf(lead!.audio))).toBe(0);
   });
 
   it('reports how far along it is', async () => {
@@ -184,15 +198,15 @@ describe('taking a mix into four', () => {
   });
 
   it('refuses a recording longer than it can hold, and says why', async () => {
-    // Nine minutes, made without allocating nine minutes of samples.
+    // Twenty five minutes, made without allocating twenty five minutes of samples.
     const huge = {
-      duration: 9 * 60,
-      length: 9 * 60 * RATE,
+      duration: 25 * 60,
+      length: 25 * 60 * RATE,
       sampleRate: RATE,
       numberOfChannels: 2,
       getChannelData: () => new Float32Array(0),
     } as unknown as AudioBuffer;
-    await expect(measured.separate(huge)).rejects.toThrow(/9 minutes long/);
+    await expect(measured.separate(huge)).rejects.toThrow(/25 minutes long/);
   });
 });
 
@@ -219,15 +233,15 @@ describe('a kick under a bass line', () => {
     const lane = mix(beat, under);
     const parts = await apart(stereo(lane, lane));
 
-    const inDrums = heldShare(parts.drums.getChannelData(0), beat);
-    const inBass = heldShare(parts.bass.getChannelData(0), beat);
+    const inDrums = heldShare(parts.drums, beat);
+    const inBass = heldShare(parts.bass, beat);
     expect(inDrums, `only ${(inDrums * 100).toFixed(0)}% of the kick reached the drums`)
       .toBeGreaterThan(0.6);
     expect(inDrums).toBeGreaterThan(inBass);
 
     // And the bass line is still mostly the bass part's, which is the other half
     // of the trade: making the drums greedier costs the bass something.
-    expect(heldShare(parts.bass.getChannelData(0), under)).toBeGreaterThan(0.7);
+    expect(heldShare(parts.bass, under)).toBeGreaterThan(0.7);
   });
 });
 

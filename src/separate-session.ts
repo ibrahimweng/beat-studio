@@ -3,9 +3,14 @@ import { mono } from './audio/listen.ts';
 import { bufferAt, decodeSample, sampleById } from './audio/samples.ts';
 import { expectedSeconds, LONG_SECONDS, measured } from './audio/separate/dsp.ts';
 import { drumHits } from './audio/separate/hits.ts';
-import type { Separation, Separator, StemPart } from './audio/separate/types.ts';
-import { encodeWav } from './export/wav.ts';
+import type {
+  Separation,
+  SeparationNotes,
+  Separator,
+  StemPart,
+} from './audio/separate/types.ts';
 import { fileStem, saveBlob } from './export/save.ts';
+import { heldParts, keepParts as writeDownParts } from './keep.ts';
 import type { SoundDesignSession } from './sound-design-session.ts';
 import { emptySeparation, type Separation as SeparationState, type Stem, type Store } from './store.ts';
 
@@ -46,16 +51,15 @@ export class SeparateSession {
   #separator: Separator = measured;
 
   /**
-   * The parts as the separator gave them, with their audio, for taking further.
+   * The file the parts came out of, kept so a stretch of it can be asked for.
    *
-   * Held only while a separation is on screen, and only for the four: opening one
-   * needs its samples again, and going back to the file to decode them would be
-   * a second decode of something that was in hand a moment ago. Cleared with
-   * everything else, because four AudioBuffers is the largest thing this app
-   * holds and holding them for a separation nobody is looking at is how a tab
-   * runs out of room.
+   * The file and not the samples. A decoded recording is four bytes a sample of
+   * something already read, and holding it against the chance that somebody
+   * narrows the range would put the length this screen can take straight back
+   * where it was. A File is a handle to bytes on disk, and reading it a second
+   * time costs a second at the front of work that takes a minute.
    */
-  #held = new Map<string, StemPart>();
+  #file: File | null = null;
 
   /** What is sounding on this screen, so it can be stopped. */
   #playing: AudioBufferSourceNode[] = [];
@@ -89,13 +93,74 @@ export class SeparateSession {
     this.clear();
     this.#set({ busy: 'reading the file…', from: file.name });
 
-    const buffer = await this.#decode(file);
-    if (!buffer) {
+    const whole = await this.#decode(file);
+    if (!whole) {
       this.#set({ busy: null, from: null });
       this.#store.set({ status: `${file.name} could not be read as sound` });
       return;
     }
 
+    this.#file = file;
+    this.#set({ whole: whole.duration, span: null });
+    await this.#take(whole, null);
+  }
+
+  /**
+   * Take the same recording apart again, between two times.
+   *
+   * The reason to want this is rarely tidiness. A recording longer than this can
+   * hold at once is still one somebody wants the drums out of, and eight bars is
+   * the part they were going to use anyway — so the length limit stops being a
+   * limit on what can be worked with and becomes a limit on how much at a time.
+   *
+   * And a stretch often separates better than the whole. The measurements that
+   * decide the split are made over everything they are given: what repeats, and
+   * what sits in the middle. A chorus arriving halfway through a song moves all
+   * of them, and the verse on its own is the cleaner question to ask.
+   *
+   * The file is read again rather than the recording being held. See {@link #file}.
+   */
+  async takeSpan(from: number, to: number): Promise<void> {
+    const file = this.#file;
+    if (!file) return;
+    const was = this.state.whole;
+    const start = Math.max(0, Math.min(from, was));
+    const end = Math.max(start, Math.min(to, was));
+    if (end - start < LEAST_SPAN) {
+      this.#store.set({ status: `a stretch has to be at least ${LEAST_SPAN} seconds long` });
+      return;
+    }
+
+    this.#engine.start();
+    this.#store.set({ ready: true });
+
+    // Asking for all of it is asking for no stretch at all, however it was said.
+    const span = start <= 0 && end >= was ? null : { from: start, to: end };
+
+    // The rows go, but the file does not: this is the same recording, read again.
+    this.clear();
+    this.#file = file;
+    this.#set({ busy: 'reading the file…', from: file.name, whole: was, span });
+
+    const whole = await this.#decode(file);
+    if (!whole) {
+      this.#set({ busy: null, from: null });
+      this.#store.set({ status: `${file.name} could not be read as sound` });
+      return;
+    }
+    await this.#take(span ? cut(whole, start, end) : whole, span);
+  }
+
+  /**
+   * Separate what has been decoded and cut, and adopt what comes back.
+   *
+   * The half of taking a recording apart that does not care where the samples
+   * came from, which is what lets the whole file and a stretch of it share it.
+   */
+  async #take(input: AudioBuffer, span: { from: number; to: number } | null): Promise<void> {
+    const file = this.#file;
+    if (!file) return;
+    let buffer: AudioBuffer | null = input;
     const seconds = buffer.duration;
     const expected = expectedSeconds(seconds);
     this.#set({
@@ -127,7 +192,20 @@ export class SeparateSession {
       return;
     }
 
-    const stems = this.#adopt(done.parts, file.name);
+    /*
+     * The recording is let go of before the parts are handed over as files.
+     *
+     * Handing over means a Blob is built beside the bytes it is built from, for
+     * as long as that takes, and the recording is four bytes a sample of
+     * something nothing needs any more. Dropping it first keeps that moment
+     * below the peak the separation itself already reached, so the length this
+     * will take on is decided by one number rather than two.
+     */
+    buffer = null;
+    const stems = this.#adopt(
+      done.parts,
+      span ? `${file.name} ${clock(span.from)}–${clock(span.to)}` : file.name,
+    );
     this.#set({
       busy: null,
       progress: 1,
@@ -147,7 +225,7 @@ export class SeparateSession {
   /** Take one of the parts further, into what is inside it. */
   async open(id: string): Promise<void> {
     if (this.state.opened.includes(id)) return;
-    const part = this.#held.get(id);
+    const part = this.#stem(id);
     if (!part) return;
     if (!this.#separator.refine) {
       this.#store.set({ status: 'this separator cannot go any deeper' });
@@ -157,9 +235,23 @@ export class SeparateSession {
     this.#set({ busy: `looking inside the ${part.name.toLowerCase()}…`, progress: 0 });
     await new Promise((wake) => setTimeout(wake, 0));
 
+    /*
+     * The row itself is what goes in, and its samples come from its file.
+     *
+     * Going deeper needs an id, a share and some samples, and a row on this
+     * screen has the first two — which is what lets a separation read back out
+     * of last week's be opened like any other. See `Refinable`.
+     */
+    const audio = await this.#audioOf(part);
+    if (!audio) {
+      this.#set({ busy: null });
+      this.#store.set({ status: `the ${part.name.toLowerCase()} could not be read back` });
+      return;
+    }
+
     const inside = await this.#separator.refine(
       part,
-      part.audio.sampleRate,
+      audio,
       { lean: this.state.lean },
       (at, of, what) => {
         this.#set({ busy: `${what}…`, progress: of > 0 ? at / of : 0 });
@@ -180,6 +272,40 @@ export class SeparateSession {
 
     this.#set({ busy: null, progress: 1, stems, opened: [...this.state.opened, id] });
     this.#store.set({ status: `${part.name} came apart into ${made.length} more` });
+  }
+
+  /**
+   * Give a part a name of your own.
+   *
+   * The honest answer to "which instrument is this". The measurements can say a
+   * line is bright and steady between G4 and D5, and they cannot say it is a
+   * viola — that needs a model trained on instruments, which is the one thing
+   * this is built not to need. The person listening knows, in a second, and this
+   * is where they write it down.
+   *
+   * It renames the recording too, because the part and the recording are the same
+   * thing under two names — placing it on the timeline puts that name on a layer,
+   * and a layer called "Middle line" helps nobody.
+   */
+  rename(id: string, name: string): void {
+    const said = name.trim().slice(0, NAME_AT_MOST);
+    const stem = this.#stem(id);
+    if (!stem || !said || said === stem.name) return;
+
+    /*
+     * The recording is called "<part> · <where it came from>", and only the part
+     * of that is being renamed. Split on the separator this file put there rather
+     * than assuming the shape of the rest: the tail can be a file name with
+     * anything in it, and a stretch of time after that.
+     */
+    const sample = sampleById(stem.sampleId);
+    const at = sample?.name.indexOf(' · ') ?? -1;
+    const where = sample && at >= 0 ? sample.name.slice(at) : '';
+    this.#design.renameRecording(stem.sampleId, `${said}${where}`);
+
+    this.#set({
+      stems: this.state.stems.map((one) => (one.id === id ? { ...one, name: said } : one)),
+    });
   }
 
   /** Fold a part back up. Its files stay in the library; only the rows go. */
@@ -373,6 +499,73 @@ export class SeparateSession {
   }
 
   /**
+   * Keep these parts, so the screen is here next time.
+   *
+   * Off by default and a button rather than a setting, because of what it costs.
+   * Four parts of a three minute track is a couple of hundred megabytes, and
+   * writing that into the browser's store because somebody happened to take a
+   * beat apart is not a decision to make for them — which is the whole reason
+   * the parts are on loan in the first place. Pressing this is them saying they
+   * want it.
+   *
+   * It settles every loan before it writes the screen. What is written down is
+   * ids, and ids pointing at recordings nobody kept come back as a screen full
+   * of rows that cannot be played.
+   */
+  async keepParts(): Promise<void> {
+    const stems = this.state.stems;
+    if (!stems.length || this.state.kept) return;
+
+    /*
+     * The recordings are written first, and waited for.
+     *
+     * The screen written down here is a list of recording ids, so writing it
+     * before those recordings are on disk leaves a screen pointing at nothing —
+     * and the next visit drops the whole separation rather than showing rows
+     * that cannot be played. That is not theoretical: writing the recordings
+     * used to be started and forgotten, this wrote the screen on the next line,
+     * and a page reloaded in between lost the lot. It took a CI runner slow
+     * enough to open the gap to show it.
+     *
+     * Which is also why the button only says "Kept" once this has come back:
+     * the word has to mean the parts are on disk, not that a write was begun.
+     */
+    this.#set({ busy: 'keeping them…', progress: 0 });
+    const onDisk = await this.#design.keepRecordings(stems.map((one) => one.sampleId));
+    this.#set({ busy: null, progress: 1 });
+    if (!onDisk) {
+      this.#store.set({ status: 'these parts could not be written down — the browser store refused them' });
+      return;
+    }
+
+    this.#set({ kept: true });
+    writeDownParts(written(this.state));
+    this.#store.set({
+      status: `${stems.length} parts kept · they will be here next time`,
+    });
+  }
+
+  /**
+   * Put back the separation that was kept, if its recordings are still here.
+   *
+   * Called once, after the sample store has come back, because that is what
+   * decides whether this is worth doing at all: a part whose recording is gone —
+   * a library cleared, a store evicted by the browser — is a row that draws and
+   * cannot be played, which is worse than an empty screen. If any part is
+   * missing the whole separation is dropped rather than half of it shown.
+   */
+  restoreKept(): void {
+    if (this.state.stems.length) return;
+    const kept = readParts(heldParts());
+    if (!kept) return;
+    if (kept.stems.some((one) => !sampleById(one.sampleId))) {
+      writeDownParts(null);
+      return;
+    }
+    this.#set({ ...kept, kept: true });
+  }
+
+  /**
    * Forget the separation.
    *
    * The parts that were used stay: placing one on the timeline is what writes it
@@ -382,7 +575,10 @@ export class SeparateSession {
    */
   clear(): void {
     this.stop();
-    this.#held.clear();
+    this.#file = null;
+    // Whatever was kept goes with it. The recordings stay in the library, which
+    // is what Forget has always meant here; what goes is the screen.
+    writeDownParts(null);
     this.#store.set({ separation: { ...emptySeparation(), lean: this.state.lean } });
     // After the state is cleared, so that nothing still on screen is counted as
     // in use. See `releaseLoans`.
@@ -391,7 +587,6 @@ export class SeparateSession {
 
   dispose(): void {
     this.stop();
-    this.#held.clear();
   }
 
   /* -------------------------------------------------------------- the plumbing */
@@ -403,11 +598,10 @@ export class SeparateSession {
   /**
    * Turn what the separator gave back into recordings the app can hold.
    *
-   * Encoded once, here, and the AudioBuffer is let go of straight after — except
-   * for the four, which are kept so that opening one does not mean decoding it
-   * again. Twenty four bits, matching every other file this app writes: a part is
-   * something somebody will put under a voiceover, and the room underneath the
-   * quiet detail is the whole reason for the depth.
+   * Each part arrives already written as a file — see `written.ts` — so this
+   * hands that file over rather than encoding anything, and the part lets go of
+   * its bytes as it does. The waveform and the share come with it, both counted
+   * while the part was being written, so nothing here reads a sample.
    */
   #adopt(parts: readonly StemPart[], from: string): Stem[] {
     const out: Stem[] = [];
@@ -415,7 +609,7 @@ export class SeparateSession {
       const seconds = part.audio.duration;
       const sampleId = this.#design.takeOnRecording({
         name: `${part.name} · ${from}`,
-        blob: encodeWav(part.audio),
+        blob: part.audio.wav(),
         seconds,
         tags: ['separated', part.under ?? part.id],
         // On loan until one of them is used. Four parts of a three minute track
@@ -423,7 +617,6 @@ export class SeparateSession {
         // before anybody has said they want any of it is slow and mostly wasted.
         keep: false,
       });
-      if (!part.under) this.#held.set(part.id, part);
       out.push({
         id: part.id,
         name: part.name,
@@ -431,7 +624,7 @@ export class SeparateSession {
         under: part.under,
         sampleId,
         share: part.share,
-        peaks: peaksOf(part.audio),
+        peaks: part.audio.peaks,
         seconds,
         // The bass is the low end of what is left, and there is nothing inside
         // "the low end" to find. The other three all have things in them.
@@ -450,8 +643,6 @@ export class SeparateSession {
    * a part could not be read on a page where nothing had been played yet.
    */
   async #audioOf(stem: Stem): Promise<AudioBuffer | null> {
-    const held = this.#held.get(stem.id);
-    if (held) return held.audio;
     const ctx = this.#engine.start();
     this.#store.set({ ready: true });
     if (!(await decodeSample(stem.sampleId, ctx))) return null;
@@ -471,37 +662,167 @@ export class SeparateSession {
   }
 }
 
-/** How many points a waveform is drawn from. */
-const PEAKS = 700;
 
 /**
- * The loudest sample in each slice of a part, for drawing it.
+ * The shortest stretch worth asking for.
  *
- * Kept because the audio is not. A waveform is seven hundred numbers and the
- * sound it came from is tens of megabytes, and the screen redraws far more often
- * than anybody plays anything.
- *
- * The loudest rather than the average, because an average of a waveform is
- * roughly nothing however loud it is: a drum part drawn from its mean would be a
- * flat line with the odd bump.
+ * A guard against a typo rather than a considered minimum. A block is sixteen
+ * seconds and the widest median reaches across a fifth of a second either way,
+ * so a stretch of half a second is very nearly all edge — it would come back
+ * looking broken, and nobody asks for it on purpose.
  */
-export function peaksOf(buffer: AudioBuffer, count = PEAKS): Float32Array {
-  const out = new Float32Array(count);
-  const lanes: Float32Array[] = [];
-  for (let c = 0; c < buffer.numberOfChannels; c++) lanes.push(buffer.getChannelData(c));
-  const per = buffer.length / count;
+const LEAST_SPAN = 1;
 
-  for (let at = 0; at < count; at++) {
-    const from = Math.floor(at * per);
-    const to = Math.min(buffer.length, Math.floor((at + 1) * per));
-    let most = 0;
-    for (const lane of lanes) {
-      for (let i = from; i < to; i++) {
-        const value = Math.abs(lane[i]);
-        if (value > most) most = value;
-      }
-    }
-    out[at] = Math.min(1, most);
+/**
+ * A stretch of a recording, as a recording of its own.
+ *
+ * Copied rather than referred to. A subarray of the decoded file would keep the
+ * whole file alive behind it, which is the thing the length limit is made of, and
+ * everything downstream wants a recording that starts at zero anyway.
+ */
+function cut(buffer: AudioBuffer, from: number, to: number): AudioBuffer {
+  const rate = buffer.sampleRate;
+  const start = Math.max(0, Math.round(from * rate));
+  const end = Math.min(buffer.length, Math.round(to * rate));
+  const out = new AudioBuffer({
+    numberOfChannels: buffer.numberOfChannels,
+    length: Math.max(1, end - start),
+    sampleRate: rate,
+  });
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    out.getChannelData(c).set(buffer.getChannelData(c).subarray(start, end));
   }
   return out;
+}
+
+/** Minutes and seconds, for saying which stretch a part came out of. */
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+/**
+ * How long a name somebody gives a part can be.
+ *
+ * Long enough for "Second violins, con sordino" and short enough that the row
+ * still has room for what the part is and what can be done with it.
+ */
+const NAME_AT_MOST = 40;
+
+/**
+ * The version stamp on a kept separation.
+ *
+ * Read back and checked rather than trusted. What comes out of a browser store
+ * may have been written by an older version of this app, and a shape that has
+ * changed since is better dropped than half understood — the alternative is a
+ * screen of rows with fields missing from them.
+ */
+const KEPT_VERSION = 1;
+
+/** A separation, in the shape it is written down in. */
+function written(state: SeparationState): unknown {
+  return {
+    v: KEPT_VERSION,
+    from: state.from,
+    seconds: state.seconds,
+    span: state.span,
+    lean: state.lean,
+    notes: state.notes,
+    opened: state.opened,
+    stems: state.stems.map((one) => ({
+      ...one,
+      /*
+       * Three decimals on the waveform, which is not thrift for its own sake.
+       * A part's peaks are seven hundred numbers, a track opened all the way is
+       * eight parts, and full precision writes each one as seventeen characters
+       * — ninety five kilobytes of a store that holds five megabytes, for
+       * detail a tenth of a pixel high.
+       */
+      peaks: Array.from(one.peaks, (value) => Math.round(value * 1000) / 1000),
+    })),
+  };
+}
+
+/** What a kept separation puts back on the screen, or null if it cannot be read. */
+type Restored = Pick<
+  SeparationState,
+  'from' | 'seconds' | 'span' | 'lean' | 'notes' | 'opened' | 'stems'
+>;
+
+/*
+ * How long the file was is not among them, and that is not an oversight.
+ *
+ * It is what the stretch boxes offer to choose from, and choosing a stretch
+ * needs the file itself — which is on somebody's disk and not in this browser.
+ * So a separation read back out of last week comes back with the boxes gone
+ * rather than with two boxes and a button that quietly does nothing. Picking
+ * the file again brings them back, along with everything else.
+ */
+
+/**
+ * Read a kept separation, checking as it goes.
+ *
+ * Anything wrong anywhere gives back nothing, rather than a screen assembled out
+ * of whatever survived. A row missing its recording id or its waveform is a row
+ * that draws and does nothing, and half a separation is harder to understand
+ * than none.
+ */
+function readParts(raw: unknown): Restored | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const held = raw as Record<string, unknown>;
+  if (held.v !== KEPT_VERSION) return null;
+  if (!Array.isArray(held.stems) || !held.stems.length) return null;
+
+  const stems: Stem[] = [];
+  for (const one of held.stems) {
+    if (!one || typeof one !== 'object') return null;
+    const stem = one as Record<string, unknown>;
+    if (typeof stem.id !== 'string' || typeof stem.name !== 'string') return null;
+    if (typeof stem.sampleId !== 'string' || !Array.isArray(stem.peaks)) return null;
+    stems.push({
+      id: stem.id,
+      name: stem.name,
+      about: typeof stem.about === 'string' ? stem.about : '',
+      under: typeof stem.under === 'string' ? stem.under : null,
+      sampleId: stem.sampleId,
+      share: figure(stem.share),
+      peaks: Float32Array.from(stem.peaks, (value) => figure(value)),
+      seconds: figure(stem.seconds),
+      deeper: stem.deeper === true,
+    });
+  }
+
+  const held_span = held.span as Record<string, unknown> | null | undefined;
+  return {
+    from: typeof held.from === 'string' ? held.from : null,
+    seconds: figure(held.seconds),
+    span:
+      held_span && typeof held_span === 'object'
+        ? { from: figure(held_span.from), to: figure(held_span.to) }
+        : null,
+    lean: typeof held.lean === 'number' && held.lean >= 0 && held.lean <= 1 ? held.lean : 0.5,
+    notes: readNotes(held.notes),
+    opened: Array.isArray(held.opened)
+      ? held.opened.filter((one): one is string => typeof one === 'string')
+      : [],
+    stems,
+  };
+}
+
+/** What the measurements found, or nothing if that cannot be read either. */
+function readNotes(raw: unknown): SeparationNotes | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const notes = raw as Record<string, unknown>;
+  return {
+    loop: typeof notes.loop === 'number' && Number.isFinite(notes.loop) ? notes.loop : null,
+    loopStrength: figure(notes.loopStrength),
+    stereo: notes.stereo === true,
+    width: figure(notes.width),
+    took: figure(notes.took),
+  };
+}
+
+/** A number that is really a number, or nought. */
+function figure(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
