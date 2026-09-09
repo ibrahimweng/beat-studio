@@ -2,6 +2,7 @@ import { PAD_KEYS } from './constants.ts';
 import { TOOLS } from './store.ts';
 import { Session } from './session.ts';
 import { SeparateSession } from './separate-session.ts';
+import { VoiceoverSession } from './voiceover-session.ts';
 import { SoundDesignSession } from './sound-design-session.ts';
 import type { AppState } from './store.ts';
 import { el } from './ui/dom.ts';
@@ -27,6 +28,7 @@ import { createVideoWindow } from './ui/video-window.ts';
 import { createTimeline } from './ui/sound-design/timeline.ts';
 import { createTour } from './ui/sound-design/tour.ts';
 import { createSeparateScreen } from './ui/separate/screen.ts';
+import { createVoiceoverScreen } from './ui/voiceover/screen.ts';
 import type { View } from './ui/view.ts';
 
 /**
@@ -55,6 +57,7 @@ export function mountApp(root: HTMLElement): () => void {
    * a second path to keep in step.
    */
   const separate = new SeparateSession(session.engine, session.store, soundDesign);
+  const voiceover = new VoiceoverSession(session.store, session.engine, soundDesign);
 
   const tour = createTour({
     onShow: (tab, reveal) => {
@@ -87,6 +90,7 @@ export function mountApp(root: HTMLElement): () => void {
   const transport = createTransport(soundDesign);
   const timeline = createTimeline(soundDesign, { transport: transport.el });
   const separateScreen = createSeparateScreen(separate);
+  const voiceoverScreen = createVoiceoverScreen(voiceover);
   const soundDesignPanel = createWorkPanel(soundDesign, {
     // A column appearing or emptying changes how much width the lanes have.
     onLayout: () => {
@@ -111,6 +115,7 @@ export function mountApp(root: HTMLElement): () => void {
   const views: View[] = [
     rail, soundDesignBar, transport, videoStage, timeline, soundDesignPanel, keepNotice,
     separateScreen,
+    voiceoverScreen,
   ];
 
   const panelDivider = createPanelDivider({
@@ -210,6 +215,10 @@ export function mountApp(root: HTMLElement): () => void {
     main.replaceChildren(
       ...(state.screen === 'separate'
         ? [separateScreen.el]
+        : state.screen === 'voiceover'
+          ? // Asked here rather than at startup: a deployment with no key should
+            // not be called on every visit by everyone who never opens this.
+            (void voiceover.ready(), [voiceoverScreen.el])
         : floating
           ? [soundDesignBar.el, timeline.el]
           : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
@@ -351,7 +360,7 @@ export function mountApp(root: HTMLElement): () => void {
   window.addEventListener('pagehide', onLeaving);
   document.addEventListener('visibilitychange', onHidden);
 
-  const detachKeyboard = attachKeyboard(session, soundDesign, separate);
+  const detachKeyboard = attachKeyboard(session, soundDesign, separate, voiceover);
 
   return () => {
     detachKeyboard();
@@ -370,6 +379,7 @@ export function mountApp(root: HTMLElement): () => void {
     soundDesign.stopShuttle();
     soundDesign.dispose();
     separate.dispose();
+    voiceover.dispose();
     session.dispose();
   };
 }
@@ -395,6 +405,7 @@ function attachKeyboard(
   session: Session,
   soundDesign: SoundDesignSession,
   separate: SeparateSession,
+  voiceover: VoiceoverSession,
 ): () => void {
   /*
    * Which way and how fast a held shuttle is running, or 0 for stopped.
@@ -425,6 +436,7 @@ function attachKeyboard(
       if (!inField(event) && (event.key === ' ' || event.key === 'Escape')) {
         event.preventDefault();
         separate.stop();
+        voiceover.stop();
       }
       return;
     }

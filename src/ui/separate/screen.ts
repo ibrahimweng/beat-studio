@@ -1,8 +1,9 @@
 import type { AppState, Stem } from '../../store.ts';
 import type { SeparateSession } from '../../separate-session.ts';
-import { button, clear, el, setText, svg, toggleClass } from '../dom.ts';
+import { button, clear, el, setText, toggleClass } from '../dom.ts';
 import { helpButton } from '../help.ts';
 import type { View } from '../view.ts';
+import { waveform } from '../waveform.ts';
 
 /**
  * Taking a recording apart, on a screen of its own.
@@ -424,7 +425,7 @@ export function createSeparateScreen(session: SeparateSession): View {
     ]);
 
     const wave = el('div', { class: 'sep__wave', title: `${share(stem.share)} of the recording` }, [
-      waveform(stem.peaks),
+      waveform(stem.peaks, { svg: 'sep__svg', path: 'sep__path' }),
     ]);
 
     const buttons: HTMLElement[] = [
@@ -535,31 +536,6 @@ export function createSeparateScreen(session: SeparateSession): View {
       placeAll.disabled = state.separation.stems.length === 0;
     },
   };
-}
-
-/**
- * A part's waveform, as one filled shape.
- *
- * SVG rather than a canvas, because the row's width is decided by the layout and a
- * canvas would have to be measured and redrawn on every resize. A path with no
- * fixed aspect ratio stretches to whatever it is given and stays crisp.
- */
-function waveform(peaks: Float32Array): SVGElement {
-  const wide = peaks.length;
-  const tall = 40;
-  const middle = tall / 2;
-  let top = '';
-  let bottom = '';
-  for (let at = 0; at < wide; at++) {
-    // Never quite nothing, so a silent part is a line rather than an absence.
-    const half = Math.max(0.4, peaks[at] * middle);
-    top += `${at === 0 ? 'M' : 'L'}${at} ${middle - half}`;
-    bottom = `L${wide - 1 - at} ${middle + Math.max(0.4, peaks[wide - 1 - at] * middle)}` + bottom;
-  }
-
-  return svg('svg', { class: 'sep__svg', viewBox: `0 0 ${wide} ${tall}`, preserveAspectRatio: 'none' }, [
-    svg('path', { d: `${top}${bottom}Z`, class: 'sep__path' }),
-  ]);
 }
 
 /**

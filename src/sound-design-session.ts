@@ -609,6 +609,10 @@ export class SoundDesignSession {
      * looked at.
      */
     for (const stem of this.#store.state.separation.stems) inUse.add(stem.sampleId);
+    // And the voiceover take on screen, for the same reason: it is on loan
+    // because nobody has placed it yet, not because nobody is looking at it.
+    const take = this.#store.state.voiceover.take;
+    if (take) inUse.add(take.sampleId);
 
     for (const id of [...this.#onLoan]) {
       if (inUse.has(id)) continue;

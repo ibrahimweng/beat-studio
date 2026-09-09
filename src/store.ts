@@ -17,7 +17,7 @@ export type PanelTab = 'moments' | 'sounds' | 'selected';
  * screen rather than a panel because what it needs is width: a row of waveforms
  * one under another, with the parts of each one folded under it.
  */
-export type Screen = 'design' | 'separate';
+export type Screen = 'design' | 'separate' | 'voiceover';
 
 /**
  * One separated part of a recording, as the app holds it.
@@ -152,6 +152,81 @@ export function emptySeparation(): Separation {
   };
 }
 
+/** A voice that can read a script: from the catalogue, or one somebody kept. */
+export interface Reader {
+  id: string;
+  name: string;
+  about: string;
+  language: string | null;
+  /** Whether it came with the catalogue rather than being described here. */
+  stock: boolean;
+}
+
+/** One narrator being made, while it is still a draft. */
+export interface Draft {
+  id: string;
+  ready: boolean;
+}
+
+/**
+ * Putting a voice to a script.
+ *
+ * The screen's whole state. What is deliberately not here is any audio: a take
+ * becomes a recording the moment it is made, exactly as a separated part does,
+ * so everything after that — placing it, exporting it, finding it in the picker
+ * — is something the app already knows how to do.
+ */
+export interface Voiceover {
+  /** What it is doing, or null when it is not doing anything. */
+  busy: string | null;
+  /**
+   * Whether this deployment can make one at all.
+   *
+   * Null until it has been asked. A deployment with no Gradium key is a normal
+   * state rather than a fault — the rest of the app is untouched — so the screen
+   * says the voiceover is off and offers nothing rather than failing at a press.
+   */
+  on: boolean | null;
+  /** Every narrator that can be used, once they have been fetched. */
+  readers: Reader[];
+  /** Which one is chosen, by id. */
+  reader: string | null;
+  /** What they are to read. */
+  script: string;
+  /** Which language a described narrator will be made for. */
+  language: string;
+  /** A description being tried out, and the drafts it produced. */
+  describing: string;
+  drafts: Draft[];
+  /** The take that came back, as a recording the piece can use. */
+  take: {
+    sampleId: string;
+    name: string;
+    seconds: number;
+    peaks: Float32Array;
+  } | null;
+  /** Whether the take is sounding, so the button can offer to stop it. */
+  hearing: boolean;
+  /** What just happened, in one line. */
+  said: string | null;
+}
+
+export function emptyVoiceover(): Voiceover {
+  return {
+    busy: null,
+    on: null,
+    readers: [],
+    reader: null,
+    script: '',
+    language: 'en',
+    describing: '',
+    drafts: [],
+    take: null,
+    hearing: false,
+    said: null,
+  };
+}
+
 export interface AppState {
   /** The audio engine has been started by a user gesture. */
   ready: boolean;
@@ -250,6 +325,8 @@ export interface AppState {
   screen: Screen;
   /** Taking a recording apart into its parts. */
   separation: Separation;
+  /** Putting a voice to a script. */
+  voiceover: Voiceover;
 }
 
 /**
@@ -381,6 +458,7 @@ export function initialState(): AppState {
     keeping: true,
     screen: 'design',
     separation: emptySeparation(),
+    voiceover: emptyVoiceover(),
   };
 }
 
