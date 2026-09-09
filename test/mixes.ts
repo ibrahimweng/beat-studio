@@ -94,6 +94,28 @@ export function mix(...parts: readonly Float32Array[]): Float32Array {
   return out;
 }
 
+/**
+ * Two channels as an AudioBuffer, which is what a separator takes.
+ *
+ * `new AudioBuffer` rather than a stub, because `test/web-audio.ts` puts a real
+ * implementation on the global and the code under test writes into these as well
+ * as reading them.
+ */
+export function stereo(left: Float32Array, right: Float32Array, rate = RATE): AudioBuffer {
+  const length = Math.max(left.length, right.length);
+  const buffer = new AudioBuffer({ numberOfChannels: 2, length, sampleRate: rate });
+  buffer.getChannelData(0).set(left.subarray(0, length));
+  buffer.getChannelData(1).set(right.subarray(0, length));
+  return buffer;
+}
+
+/** One channel as an AudioBuffer, for the measurements that are about mono. */
+export function monoBuffer(data: Float32Array, rate = RATE): AudioBuffer {
+  const buffer = new AudioBuffer({ numberOfChannels: 1, length: data.length, sampleRate: rate });
+  buffer.getChannelData(0).set(data);
+  return buffer;
+}
+
 /** How much energy is in a signal, which is what every share below compares. */
 export function energy(data: Float32Array): number {
   let sum = 0;

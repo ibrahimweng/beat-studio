@@ -196,6 +196,30 @@ export function masked(spec: Spectra, mask: Float32Array): Spectra {
   return { ...spec, re, im };
 }
 
+/** Room for a spectrogram of the same shape, to be written into. */
+export function like(spec: Spectra): Spectra {
+  return {
+    ...spec,
+    re: new Float32Array(spec.re.length),
+    im: new Float32Array(spec.im.length),
+  };
+}
+
+/**
+ * The same as {@link masked}, into room that already exists.
+ *
+ * Every part of every block goes through this, so allocating two arrays the
+ * size of the block each time is a hundred megabytes of churn per block for
+ * nothing. The result is identical; only the room is reused.
+ */
+export function maskInto(spec: Spectra, mask: Float32Array, into: Spectra): void {
+  for (let i = 0; i < spec.re.length; i++) {
+    const m = mask[i];
+    into.re[i] = spec.re[i] * m;
+    into.im[i] = spec.im[i] * m;
+  }
+}
+
 /** Frequency of a bin, in hertz. */
 export function binHz(bin: number, size: number, rate: number): number {
   return (bin * rate) / size;

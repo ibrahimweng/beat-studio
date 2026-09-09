@@ -3,10 +3,114 @@ import type { Sample } from './audio/samples.ts';
 import type { Rebuilt } from './audio/rebuild.ts';
 import { emptyProject } from './timeline/project.ts';
 import type { CuePreset, CueSource, Project } from './timeline/types.ts';
+import type { SeparationNotes } from './audio/separate/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
 import type { Moment } from './video/moments.ts';
 
 export type PanelTab = 'moments' | 'sounds' | 'selected';
+
+/**
+ * Which screen the app is on.
+ *
+ * There was one for a long while, and a rail with one button on it that went
+ * where you already were. Taking a recording apart is the second, and it is a
+ * screen rather than a panel because what it needs is width: a row of waveforms
+ * one under another, with the parts of each one folded under it.
+ */
+export type Screen = 'design' | 'separate';
+
+/**
+ * One separated part of a recording, as the app holds it.
+ *
+ * The audio is not here. Every part is registered as a recording the moment it
+ * is made — the same kind of recording somebody drags in — so it is held as a
+ * file in the browser's own store and decoded when something asks to hear it.
+ * That is what makes four parts of a three minute track affordable, and it is
+ * also what makes every one of them placeable on the timeline, exportable, and
+ * still there tomorrow, without any of that being written twice.
+ */
+export interface Stem {
+  id: string;
+  name: string;
+  /** What it is, in one line. */
+  about: string;
+  /** The part this came out of, or null for one of the four. */
+  under: string | null;
+  /** How a cue names the recording it was registered as. */
+  sampleId: string;
+  /** How much of the recording's energy it holds, nought to one. */
+  share: number;
+  /**
+   * The loudest sample in each slice of it, for drawing.
+   *
+   * Kept because the audio is not: a waveform is a few hundred numbers and the
+   * sound it came from is tens of megabytes, and the panel redraws far more
+   * often than anybody plays anything.
+   */
+  peaks: Float32Array;
+  seconds: number;
+  /** Whether there is anything inside it worth taking further. */
+  deeper: boolean;
+}
+
+/**
+ * Taking a recording apart.
+ *
+ * The separation itself is in `audio/separate/`, which knows nothing about any
+ * of this. What is here is what the screen needs: how far along it is, what came
+ * out, which parts are open, and which are being listened to.
+ */
+export interface Separation {
+  /** What it is doing, or null when it is not doing anything. */
+  busy: string | null;
+  /** Nought to one while working. */
+  progress: number;
+  /** Roughly how many seconds are left, or null before there is enough to say. */
+  secondsLeft: number | null;
+  /** The name of the file the parts came out of. */
+  from: string | null;
+  /** How long it is, in seconds. */
+  seconds: number;
+  /** Every part, the four and anything opened, in the order they are shown. */
+  stems: Stem[];
+  /**
+   * What the measurements found, for the screen to say what it did.
+   *
+   * The honest thing to report about a separation is the evidence rather than a
+   * score: whether there was a loop and how strong it was, and whether there
+   * were two different channels to read a position from. Somebody looking at
+   * four parts has no other way to know that a mono file was split on repetition
+   * alone.
+   */
+  notes: SeparationNotes | null;
+  /** Which parts are unfolded. */
+  opened: string[];
+  /** The one part being heard on its own, or null. */
+  solo: string | null;
+  /** Parts silenced while comparing. */
+  muted: string[];
+  /** The part currently armed to be placed, or null. */
+  chosen: string | null;
+  /** Which way the split was asked to lean, nought for notes and one for hits. */
+  lean: number;
+}
+
+export function emptySeparation(): Separation {
+  return {
+    busy: null,
+    progress: 0,
+    secondsLeft: null,
+    from: null,
+    seconds: 0,
+    stems: [],
+    notes: null,
+    opened: [],
+    solo: null,
+    muted: [],
+    chosen: null,
+    lean: 0.5,
+  };
+}
 
 export interface AppState {
   /** The audio engine has been started by a user gesture. */
@@ -102,6 +206,10 @@ export interface AppState {
    * have to reach into a view to find out what is selected.
    */
   range: TimeRange | null;
+  /** Which screen is showing. */
+  screen: Screen;
+  /** Taking a recording apart into its parts. */
+  separation: Separation;
 }
 
 /**
@@ -231,6 +339,8 @@ export function initialState(): AppState {
     tool: 'move',
     range: null,
     keeping: true,
+    screen: 'design',
+    separation: emptySeparation(),
   };
 }
 

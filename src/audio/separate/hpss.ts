@@ -115,6 +115,13 @@ export function estimates(
  * Edges take the nearest frame rather than a zero, because a signal that
  * starts loud would otherwise have its first tenth of a second read as half
  * silence and be handed to the drums.
+ *
+ * Reading one bin across time steps four kilobytes at a stride, which looks
+ * like the sort of thing to gather into a run of its own first. It was tried
+ * and it is worth nothing at all — 549 against 541 milliseconds over twenty
+ * seconds of music — because the stride is regular enough for the processor to
+ * see it coming and the sort below is what the time actually goes on. Left
+ * plain, on the strength of the measurement rather than the reasoning.
  */
 function medianAlongTime(
   mag: Float32Array,

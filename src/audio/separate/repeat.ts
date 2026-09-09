@@ -90,11 +90,24 @@ export function repeatingMask(
   const mask = new Float32Array(frames * bins);
   if (longest <= shortest) return { mask, period: null, strength: 0 };
 
-  const beats = beatSpectrum(mag, frames, bins, longest);
+  /*
+   * The loop is looked for on a coarse copy and applied to the fine one.
+   *
+   * The self-similarity curve is a sum over frequency, so grouping a thousand
+   * bins into thirty two bands barely moves it — and it turns the one expensive
+   * step here into a cheap one. Measured over twenty seconds of music the curve
+   * at full resolution is three hundred and sixty million multiplications, or
+   * about two seconds, which is as much as everything else in this folder put
+   * together; over thirty two bands it is eleven million. The model that
+   * actually does the separating is still built at full resolution, where it
+   * matters.
+   */
+  const small = inBands(mag, frames, bins, SEARCH_BANDS);
+  const beats = beatSpectrum(small, frames, SEARCH_BANDS, longest);
   const found = strongestLag(beats, shortest, longest, Math.max(5, Math.round(BASELINE / perFrame)));
   if (!found) return { mask, period: null, strength: 0 };
 
-  const period = refine(mag, frames, bins, found.lag);
+  const period = refine(small, frames, SEARCH_BANDS, found.lag);
   const slots = Math.max(1, Math.round(period));
   const model = loopModel(mag, frames, bins, period, slots);
 
@@ -254,14 +267,12 @@ const SEARCH_STEP = 0.02;
  * accounts for, over a coarse version of the spectrogram where it costs almost
  * nothing to try a hundred of them.
  */
-function refine(mag: Float32Array, frames: number, bins: number, lag: number): number {
-  const small = inBands(mag, frames, bins, SEARCH_BANDS);
-
+function refine(small: Float32Array, frames: number, bands: number, lag: number): number {
   let best = lag;
   let most = -Infinity;
   for (let period = lag - SEARCH_REACH; period <= lag + SEARCH_REACH; period += SEARCH_STEP) {
     if (period < 2) continue;
-    const score = explained(small, frames, SEARCH_BANDS, period);
+    const score = explained(small, frames, bands, period);
     if (score > most) {
       most = score;
       best = period;
@@ -335,12 +346,24 @@ function loopModel(
   slots: number,
 ): Float32Array {
   const out = new Float32Array(slots * bins);
-  const times = Math.ceil(frames / period) + 2;
 
   // Which frames belong to each slot, gathered once rather than searched for
   // per bin: the mapping is the same for all thousand of them.
   const inSlot: number[][] = Array.from({ length: slots }, () => []);
   for (let f = 0; f < frames; f++) inSlot[slotOf(f, period, slots)].push(f);
+
+  /*
+   * The largest slot decides the working size, and it is not the average.
+   *
+   * Sizing it from the average — the number of repetitions the recording holds
+   * — was the first version and it threw partway through the period search. A
+   * period a shade above a whole number of frames sends both ends of it to the
+   * same slot, so one slot takes twice its share while the rest take slightly
+   * less. Measured is measured.
+   */
+  let times = 0;
+  for (const which of inSlot) times = Math.max(times, which.length);
+  if (!times) return out;
 
   const scratch = new Float32Array(times);
   for (let p = 0; p < slots; p++) {
