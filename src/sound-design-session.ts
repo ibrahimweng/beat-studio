@@ -599,6 +599,16 @@ export class SoundDesignSession {
     // Whatever is armed stays: it was clicked a moment ago and is about to be
     // placed, which is the whole reason it was fetched.
     if (armed.kind === 'sample') inUse.add(armed.name);
+    /*
+     * And so does anything a separation is currently showing.
+     *
+     * The parts of a beat are on loan for the same reason a fetched sound is —
+     * neither has been used yet, and neither is worth writing down until it has
+     * been. What is different is that they are on screen: forgetting one because
+     * somebody typed into the Freesound box would empty a row while it was being
+     * looked at.
+     */
+    for (const stem of this.#store.state.separation.stems) inUse.add(stem.sampleId);
 
     for (const id of [...this.#onLoan]) {
       if (inUse.has(id)) continue;
@@ -840,6 +850,17 @@ export class SoundDesignSession {
     blob: Blob;
     seconds: number;
     tags?: readonly string[];
+    /**
+     * Whether to write it down now, or only once it is used.
+     *
+     * False for anything the app made on spec. Taking a three minute track apart
+     * makes four files of fifty megabytes each and then four more inside one of
+     * them, and writing all of that into the browser's store the moment it exists
+     * — before anybody has said they want any of it — is slow, and most of it is
+     * thrown away. So they go on loan, exactly as a sound fetched to be listened
+     * to does, and placing one settles it. See {@link releaseLoans}.
+     */
+    keep?: boolean;
   }): string {
     const id = newId('s');
     addSample(
@@ -852,7 +873,8 @@ export class SoundDesignSession {
       },
       null,
     );
-    this.#keepSamples();
+    if (entry.keep === false) this.#onLoan.add(id);
+    else this.#keepSamples();
     this.#store.set({ samples: [...samples()] });
     return id;
   }
@@ -889,6 +911,9 @@ export class SoundDesignSession {
     if (longest > next.duration) next = { ...next, duration: longest };
 
     this.#setProject(next, 'place parts');
+    // Using one is what turns it from something the app offered into something
+    // you have, and that is when it is written down. See #onLoan.
+    for (const cue of next.cues.filter((one) => added.includes(one.id))) this.#settle(cue);
     this.#store.set({
       selection: added,
       status: `${list.length} part${list.length === 1 ? '' : 's'} placed, one per layer`,

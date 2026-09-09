@@ -162,6 +162,24 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: 'separate',
+    title: 'Taking a beat apart',
+    rows: [
+      ['What it does', 'Reads a track and divides it into the drums, the bass, whatever is in front, and everything else. Nothing is uploaded and nothing is downloaded — it is all worked out here.'],
+      ['They add back up', 'The parts sum to the recording exactly. Every moment of it is divided between them, so nothing is lost and nothing is counted twice.'],
+      ['Open', 'Takes a part further. The drums come apart into the kick, the snare, the toms, the hats and the cymbals; what is left comes apart into the lines that are held, by register.'],
+      ['Rest', 'What no hit and no line accounted for. It is a part like the others because the parts have to add up, and how much is in it is the most honest number about how well this worked.'],
+      ['Hits and Notes', 'Which way the next separation leans. A compressed mix has its drums smeared until they look like notes; an acoustic recording has a piano attack that looks like a drum.'],
+      ['M and S', 'Hold a part down, or hear only that one. For listening to one against the others, which is what this screen is for.'],
+      ['Place on the timeline', 'Every part on a layer of its own, at the start of the piece, ready to be balanced and drawn over.'],
+      ['Rebuild', 'Reads a part back into the palette: every sound in it as a voice and five numbers, which can then be tuned, stretched, put in another room and stacked. This works far better on a separated part than on a mix.'],
+      ['Hits', 'Finds every hit in a part and puts the sound you have chosen on each one. The same idea as reading the hits out of a picture, with a beat instead.'],
+      ['Write the files', 'Each part as a WAV. All the same length and all starting at zero, so they sit on separate tracks and stay in sync.'],
+      ['What it cannot do', 'It reads the recording rather than recognising instruments. Drums come out well. Two instruments in the same place and the same register will not come apart, and a violin out from under a viola is not something this can do.'],
+      ['How long it takes', 'About a fifth of the length of the track. Eight minutes is as much as a browser can hold at once, and it says so rather than failing partway.'],
+    ],
+  },
+  {
     id: 'sound',
     title: 'The selected sound',
     rows: [

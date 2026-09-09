@@ -91,6 +91,14 @@ export interface Separation {
   muted: string[];
   /** The part currently armed to be placed, or null. */
   chosen: string | null;
+  /**
+   * What is sounding on this screen: a part's id, "all", or null.
+   *
+   * Its own thing rather than the timeline's `playing`, because these are not on
+   * the timeline. Somebody here is listening to a recording being taken apart,
+   * and the useful gesture is one part against the others.
+   */
+  hearing: string | null;
   /** Which way the split was asked to lean, nought for notes and one for hits. */
   lean: number;
 }
@@ -108,6 +116,7 @@ export function emptySeparation(): Separation {
     solo: null,
     muted: [],
     chosen: null,
+    hearing: null,
     lean: 0.5,
   };
 }

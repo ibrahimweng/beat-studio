@@ -114,8 +114,8 @@ export async function refineDrums(
     'reading the drums',
   );
 
-  const total = energyOf(part.audio, channels);
   const counted = present.map((kind) => kinds.filter((one) => one === kind).length);
+  const shareOf = sharesWithin(part, audio, channels);
 
   const parts: StemPart[] = present.map((kind, at) => ({
     id: `${part.id}.${kind}`,
@@ -123,7 +123,7 @@ export async function refineDrums(
     about: `${DRUM_ABOUT[kind]} · ${counted[at]} hit${counted[at] === 1 ? '' : 's'}`,
     under: part.id,
     audio: audio[at],
-    share: total > 0 ? energyOf(audio[at], channels) / total : 0,
+    share: shareOf(at),
   }));
   parts.push({
     id: `${part.id}.rest`,
@@ -131,7 +131,7 @@ export async function refineDrums(
     about: 'What no hit accounted for: the room, the bleed, and anything missed',
     under: part.id,
     audio: audio[present.length],
-    share: total > 0 ? energyOf(audio[present.length], channels) / total : 0,
+    share: shareOf(present.length),
   });
   return parts;
 }
@@ -298,6 +298,24 @@ function divideByHits(
   return [...masks, rest];
 }
 
+/**
+ * What share of the whole recording each piece of a part holds.
+ *
+ * Of the recording, not of the part it came out of, and the difference is the
+ * kind of thing that reads as nonsense on screen: the drums holding seven per
+ * cent of a track with the toms inside them holding sixty five. Both numbers were
+ * true and they were shares of different things. Every number in the tree now
+ * means the same thing, so a part and everything inside it come to the same total.
+ */
+function sharesWithin(
+  part: StemPart,
+  audio: readonly AudioBuffer[],
+  channels: number,
+): (at: number) => number {
+  const total = energyOf(part.audio, channels);
+  return (at) => (total > 0 ? part.share * (energyOf(audio[at], channels) / total) : 0);
+}
+
 /* ------------------------------------------------------------- the tonal part */
 
 /**
@@ -317,16 +335,35 @@ const FOR_LINES: HowFinely = { size: SIZE * 4, hop: HOP * 4 };
  * What it can say is where a line sits and how long it went on for, and a
  * separate file per register is what makes a melody that sits above the chords
  * come out on its own.
+ *
+ * The two boundaries are middle C and the C above it, which are notes rather than
+ * round numbers of hertz. That is not decoration: pitch is searched a semitone at
+ * a time, so a boundary between two semitones puts a line one step either side of
+ * it into a different file depending on which step the tracker happened to settle
+ * on. Measured, a tone at 900 hertz landed on 848 or 898 from one run to the next,
+ * either side of a boundary that had been set at 850.
+ *
+ * Each part still says the range it actually holds, which is the useful number:
+ * "held notes from G4 to D5" says more than the name of the file it is in.
  */
 const REGISTERS = [
-  { id: 'low', name: 'Low line', below: 300 },
-  { id: 'middle', name: 'Middle line', below: 850 },
+  { id: 'low', name: 'Low line', below: 261.63 },
+  { id: 'middle', name: 'Middle line', below: 523.25 },
   { id: 'high', name: 'High line', below: Infinity },
 ] as const;
 
-/** The lowest and highest pitch a line is looked for at, in hertz. */
-const PITCH_FROM = 80;
-const PITCH_TO = 2100;
+/**
+ * The lowest and highest pitch a line is looked for at, in hertz.
+ *
+ * On the equal-tempered grid rather than at a round number, which matters
+ * because the steps below are semitones counted from here. Starting at eighty
+ * hertz puts every step between two real notes — measured, a tone at 392 hertz,
+ * which is G4 exactly, came back as F♯4, because the nearest step to it was
+ * 382.5 and that rounds down. E2 is 440 divided by two, five times, and then
+ * down a minor third, so every step from it is a note somebody could name.
+ */
+const PITCH_FROM = 440 * Math.pow(2, -32 / 12);
+const PITCH_TO = 440 * Math.pow(2, 24 / 12);
 
 /**
  * How finely pitch is searched: steps per octave.
@@ -375,6 +412,66 @@ const MOVES_BY = 2;
 const CLAIM_WIDE = 1.5;
 
 /**
+ * How far either side of a step's own frequency a harmonic is looked for.
+ *
+ * Half a step, in proportion, which is what makes the grid cover the whole range
+ * rather than fifty six points in it. A fixed neighbourhood of a bin or two was
+ * the first version and it works at the bottom and fails at the top: at 150 hertz
+ * a semitone is nine hertz, or a bin and a half, so a note between two steps is
+ * still caught by both. At 900 hertz a semitone is fifty two hertz, or nine bins,
+ * and a note between two steps is caught by neither. Measured, a steady tone at
+ * 900 hertz was not found at all while one at 150 was found immediately.
+ */
+const HALF_STEP = Math.pow(2, 1 / (2 * PER_OCTAVE)) - 1;
+
+/** The bins a harmonic of a step could be in, given that. */
+function reachFor(bin: number, bins: number): { from: number; to: number } {
+  const away = Math.max(1, bin * HALF_STEP);
+  return { from: Math.max(1, Math.floor(bin - away)), to: Math.min(bins - 1, Math.ceil(bin + away)) };
+}
+
+/**
+ * The frequency of a peak, to better than a bin.
+ *
+ * A parabola through the peak and its two neighbours, which is the standard way of
+ * reading a maximum that falls between two samples. It is here for one reason:
+ * what a line is called. The grid is a semitone and a note can be a quarter tone
+ * off it, so the step a line settles on is not its pitch — measured, a tone at 150
+ * hertz settled on 146.8 or 155.6 from one run to the next, which is D3 or D♯3 for
+ * the same note. The bins are five and a half hertz apart at this window, which is
+ * not enough on its own either. Between the two, the reported note is right.
+ */
+function peakHz(
+  mag: Float32Array,
+  row: number,
+  bin: number,
+  bins: number,
+  size: number,
+  rate: number,
+): number {
+  if (bin <= 0 || bin >= bins - 1) return (bin * rate) / size;
+  const before = mag[row + bin - 1];
+  const here = mag[row + bin];
+  const after = mag[row + bin + 1];
+  const curve = before - 2 * here + after;
+  const shift = curve < 0 ? Math.max(-0.5, Math.min(0.5, (0.5 * (before - after)) / curve)) : 0;
+  return ((bin + shift) * rate) / size;
+}
+
+/** The strongest bin in a run, which is where the harmonic actually is. */
+function loudestIn(mag: Float32Array, row: number, from: number, to: number): { at: number; value: number } {
+  let at = from;
+  let value = -1;
+  for (let k = from; k <= to; k++) {
+    if (mag[row + k] > value) {
+      value = mag[row + k];
+      at = k;
+    }
+  }
+  return { at, value };
+}
+
+/**
  * Split what is left into the lines that are in it.
  *
  * Held notes are found by looking for pitches whose harmonics are all present,
@@ -408,8 +505,8 @@ export async function refineTonal(
     FOR_LINES,
   );
 
-  const total = energyOf(part.audio, channels);
   const perFrame = FOR_LINES.hop / part.audio.sampleRate;
+  const shareOf = sharesWithin(part, audio, channels);
 
   const parts: StemPart[] = [];
   REGISTERS.forEach((register, at) => {
@@ -424,7 +521,7 @@ export async function refineTonal(
         `sounding for ${(held.frames * perFrame).toFixed(1)}s in total`,
       under: part.id,
       audio: audio[at],
-      share: total > 0 ? energyOf(audio[at], channels) / total : 0,
+      share: shareOf(at),
     });
   });
   if (!parts.length) return [];
@@ -435,7 +532,7 @@ export async function refineTonal(
     about: 'What no line accounted for: noise, decays, and anything too short to follow',
     under: part.id,
     audio: audio[REGISTERS.length],
-    share: total > 0 ? energyOf(audio[REGISTERS.length], channels) / total : 0,
+    share: shareOf(REGISTERS.length),
   });
   return parts;
 }
@@ -482,7 +579,17 @@ function divideByLines(
     claim.fill(0);
     belongs.fill(-1);
     for (const step of here) {
-      const hz = pitchOf(step);
+      const nominal = pitchOf(step);
+      /*
+       * Where the note actually is, rather than which step it settled on.
+       *
+       * Both the register it goes in and the range the part reports are read from
+       * this, because a step is a semitone-wide statement about a note that can be
+       * a quarter tone off it — and a file called "Middle line" whose contents are
+       * a semitone from what it says is worse than no label.
+       */
+      const own = reachFor((nominal * size) / rate, bins);
+      const hz = peakHz(mag, row, loudestIn(mag, row, own.from, own.to).at, bins, size, rate);
       const at = registerOf(hz);
       const note = seen[at];
       note.frames++;
@@ -490,8 +597,16 @@ function divideByLines(
       note.high = Math.max(note.high, hz);
 
       for (let h = 1; h <= HARMONICS; h++) {
-        const bin = (hz * h * size) / rate;
-        if (bin >= bins - 1) break;
+        const where = (hz * h * size) / rate;
+        if (where >= bins - 1) break;
+        /*
+         * Centred on where the harmonic actually is, not on where the grid step
+         * says it should be. A note is rarely on a step — the grid is a semitone
+         * and a note can be a quarter tone off it — and a claim centred on the
+         * step is a claim on the bins either side of the note rather than on it.
+         */
+        const reach = reachFor(where, bins);
+        const bin = loudestIn(mag, row, reach.from, reach.to).at;
         const first = Math.max(0, Math.floor(bin - CLAIM_WIDE));
         const last = Math.min(bins - 1, Math.ceil(bin + CLAIM_WIDE));
         for (let k = first; k <= last; k++) {
@@ -552,16 +667,29 @@ function follow(
   steps: number,
   pitchOf: (step: number) => number,
 ): number[][] {
-  // Which bin each step's harmonics land in, worked out once for all frames.
-  const combs: Int32Array[] = [];
+  /*
+   * Which bins each step's harmonics could be in, worked out once for all frames.
+   *
+   * A run rather than a bin, and a run that grows with the frequency: half a step
+   * either side, so that every note between two steps is caught by both of them
+   * rather than by neither. See {@link HALF_STEP}.
+   */
+  const combs: { from: Int32Array; to: Int32Array }[] = [];
   for (let step = 0; step <= steps; step++) {
     const hz = pitchOf(step);
-    const own = new Int32Array(HARMONICS);
+    const from = new Int32Array(HARMONICS);
+    const to = new Int32Array(HARMONICS);
     for (let h = 1; h <= HARMONICS; h++) {
-      const bin = Math.round((hz * h * size) / rate);
-      own[h - 1] = bin < bins ? bin : -1;
+      const bin = (hz * h * size) / rate;
+      if (bin >= bins - 1) {
+        from[h - 1] = -1;
+        continue;
+      }
+      const reach = reachFor(bin, bins);
+      from[h - 1] = reach.from;
+      to[h - 1] = reach.to;
     }
-    combs.push(own);
+    combs.push({ from, to });
   }
 
   const found: number[][] = [];
@@ -575,13 +703,10 @@ function follow(
       let strongest = 0;
       const comb = combs[step];
       for (let h = 0; h < HARMONICS; h++) {
-        const bin = comb[h];
-        if (bin < 0) break;
-        // The strongest of the bin and its two neighbours, so a note a few
-        // cents off the grid still adds up rather than falling between steps.
-        let most = mag[row + bin];
-        if (bin > 0) most = Math.max(most, mag[row + bin - 1]);
-        if (bin + 1 < bins) most = Math.max(most, mag[row + bin + 1]);
+        if (comb.from[h] < 0) break;
+        // The strongest bin in the run, so a note off the grid still adds up
+        // rather than falling between two steps.
+        const most = loudestIn(mag, row, comb.from[h], comb.to[h]).value;
         if (h === 0) own = most;
         strongest = Math.max(strongest, most);
         sum += most / (h + 1);

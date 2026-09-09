@@ -42,6 +42,31 @@ export function waveMark(
 
 
 
+/**
+ * The mark for the screen that takes a recording apart.
+ *
+ * Three bars of different lengths, one under another, which is what a set of
+ * separated parts looks like: the same stretch of time, read three ways. Built
+ * from boxes like everything above rather than drawn, since a stack of bars is
+ * exactly what this is a picture of.
+ */
+export function splitMark(): HTMLElement {
+  return el(
+    'span',
+    { style: { display: 'flex', flexDirection: 'column', gap: '2px', width: '14px' } },
+    [10, 14, 7].map((wide, at) =>
+      el('i', {
+        style: {
+          height: '2px',
+          width: `${wide}px`,
+          borderRadius: '1px',
+          background: at === 1 ? 'var(--ac)' : 'currentColor',
+        },
+      }),
+    ),
+  );
+}
+
 /*
  * The tools, which are the one place this file draws rather than builds.
  *

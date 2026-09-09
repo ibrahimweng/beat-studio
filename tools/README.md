@@ -290,6 +290,78 @@ score. There is no threshold on them; the numbers are printed.
 Takes about a minute. Run the development server and open
 http://localhost:5173/tools/listen-check.html
 
+## separate-check.html
+
+Checks taking a beat apart. Three different kinds of claim, and they are not
+equally checkable, so the page is in three parts.
+
+The first is exact. Every moment of the recording is divided between the four
+parts by shares that add to one, the transform that puts them back together
+loses nothing, and the blocks are joined by two ramps that add to one — so the
+parts sum to the recording sample for sample, not nearly. That is the one thing
+this feature can promise and the page checks it on every level: the four
+against the mix, and the parts of the drums against the drums.
+
+The second is against ground truth, because the mix is built here out of parts
+that are known: a kit pattern, a low sub under it, a held drone in the middle,
+and a piano figure pushed hard to one side. Each part has to hold more of what
+it is for than any other part does, and the numbers are printed rather than
+only thresholded. It is not music. What it is is unambiguous, so a failure
+there is a fault rather than a disappointment.
+
+The third has no ground truth at all. Drop an audio file on the page and it
+reports what can honestly be said about a recording nobody knows the right
+answer for: the shares, whether a loop was found and how strongly, whether
+there were two different channels to read a position from, how long the work
+took, how many hits are in the drums and what they were called — and whether
+the sum still holds. It does not say whether it sounds right, because it
+cannot. That is what listening in the app is for.
+
+Several things were found by measuring rather than by reading the code, and the
+two that mattered most are in `repeat.ts` and `hits.ts`.
+
+The loop finder was comparing each lag against the average of the whole
+self-similarity curve. That curve falls away steeply, so every short lag beats
+the average and the shortest lag in the search range came back as the period
+for everything — including material with nothing repeating in it. Comparing
+against the tenth of a second either side instead removes the trend. And the
+period is searched for to a fraction of a frame rather than rounded to one: half
+a second at this hop is 46.875 frames, and rounding it means the model drifts a
+little further out of step on every repetition. Measured on a loop with a line
+over it, the background held 84 per cent of the loop with the period rounded and
+91 with it searched for. Reading the peak with a parabola, which is the usual
+way, made it worse rather than better — 76 per cent — because the peak is
+smeared by the very drift being removed.
+
+Finding the hits in a drum part needed its own finder rather than `listen.ts`,
+for two reasons the page shows plainly. A hat a quarter of a second after a
+snare is treated as part of the snare: ten of fourteen hits found on a plain
+pattern, and every miss a hat after a snare. And a kick and a hat on the same
+eighth are one rise in one spectrogram, so both drums land in one file — which is
+the commonest thing in a beat. Looking for rises in three bands separately
+answers both. Which drum a hit is then comes from the shares of the whole
+spectrum rather than from which band it rose in, because the three bands are
+wildly different widths and scaling them against each other puts some drum in
+the wrong one whichever way it is done: totals put a snare in with the hats,
+averages per bin put a snare in with the kicks, and both were measured.
+
+On the pattern above, 14 of 14 hits are found, all named right, and the kick,
+snare and hat files hold 97, 92 and 93 per cent of what they should. All
+thirteen voices of the app's own kit come back as exactly one hit in the right
+family, which is the closest thing to ground truth available without a labelled
+recording.
+
+**What the page cannot tell you** is the honest limit of the whole feature. This
+is arithmetic over a spectrogram, not a model that has heard music before. Drums
+come out well because a hit and a note look nothing like each other. Two
+instruments in the same place and the same register do not come apart, and never
+will by this route: a violin out from under a viola shares the same harmonics in
+the same bins, and there is nothing in one spectrogram that says which of them a
+given cell belongs to.
+
+Takes about a minute. Run the development server and open
+http://localhost:5173/tools/separate-check.html
+
 ## stack-check.html
 
 Checks that a sound made of several voices really is all of them, at a level

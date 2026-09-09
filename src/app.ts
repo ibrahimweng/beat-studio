@@ -1,6 +1,7 @@
 import { PAD_KEYS } from './constants.ts';
 import { TOOLS } from './store.ts';
 import { Session } from './session.ts';
+import { SeparateSession } from './separate-session.ts';
 import { SoundDesignSession } from './sound-design-session.ts';
 import type { AppState } from './store.ts';
 import { el } from './ui/dom.ts';
@@ -25,20 +26,35 @@ import { createVideoStage } from './ui/sound-design/stage.ts';
 import { createVideoWindow } from './ui/video-window.ts';
 import { createTimeline } from './ui/sound-design/timeline.ts';
 import { createTour } from './ui/sound-design/tour.ts';
+import { createSeparateScreen } from './ui/separate/screen.ts';
 import type { View } from './ui/view.ts';
 
 /**
  * Build the app and attach it to `root`.
  *
- * One screen: a video, a timeline under it, and a panel down the side saying
- * what belongs where. There used to be a second half, three instrument
- * screens running on bars and tempo, and it was half the interface for a job
- * nobody opened this app to do. What those instruments make is still here, in
- * the library, filed under the moment it serves. Returns a teardown function.
+ * Two screens, and they are two halves of one job. The one it opens on is a
+ * video, a timeline under it, and panels down the side saying what belongs
+ * where. The other takes a recording apart into its parts, and every one of
+ * those parts arrives on that timeline the moment somebody presses Place.
+ *
+ * There used to be a different second half — three instrument screens running on
+ * bars and tempo — and it was half the interface for a job nobody opened this
+ * app to do. What those instruments make is still here, in the library, filed
+ * under the moment it serves. Returns a teardown function.
  */
 export function mountApp(root: HTMLElement): () => void {
   const session = new Session();
   const soundDesign = new SoundDesignSession(session.engine, session.store);
+  /*
+   * Taking a recording apart, which hands its parts to the piece.
+   *
+   * It is given the sound design session rather than the store, because every one
+   * of the four ways a part reaches the piece is something that session already
+   * does: adopting a recording, adding layers, reading sounds back into the
+   * palette, placing on a list of moments. A second path to any of those would be
+   * a second path to keep in step.
+   */
+  const separate = new SeparateSession(session.engine, session.store, soundDesign);
 
   const tour = createTour({
     onShow: (tab, reveal) => {
@@ -70,6 +86,7 @@ export function mountApp(root: HTMLElement): () => void {
   });
   const transport = createTransport(soundDesign);
   const timeline = createTimeline(soundDesign, { transport: transport.el });
+  const separateScreen = createSeparateScreen(separate);
   const soundDesignPanel = createWorkPanel(soundDesign, {
     // A column appearing or emptying changes how much width the lanes have.
     onLayout: () => {
@@ -93,6 +110,7 @@ export function mountApp(root: HTMLElement): () => void {
 
   const views: View[] = [
     rail, soundDesignBar, transport, videoStage, timeline, soundDesignPanel, keepNotice,
+    separateScreen,
   ];
 
   const panelDivider = createPanelDivider({
@@ -166,30 +184,37 @@ export function mountApp(root: HTMLElement): () => void {
   window.addEventListener('blur', () => shell.classList.remove('is-alt'));
 
   /**
-   * Whether the video is floating, which is the one thing that changes the
-   * layout: with the clip in a window the stage above the lanes is not just
-   * empty but gone, and the height it was using goes to the timeline. That is
-   * the reason to want the window at all.
+   * What the middle column is currently showing.
+   *
+   * Two things decide it: which screen is on, and whether the video is floating.
+   * With the clip in a window the stage above the lanes is not just empty but
+   * gone, and the height it was using goes to the timeline — which is the reason
+   * to want the window at all.
    */
   let mounted = '';
 
-  /** Swap the middle column when the video moves into or out of its window. */
+  /** Swap the middle column when the screen or the video's place changes. */
   const mount = (state: AppState): void => {
     const floating = state.videoWindow;
-    const key = String(floating);
+    const key = `${state.screen}:${floating}`;
     if (mounted === key) return;
     const first = mounted === '';
     mounted = key;
+    // The panels and the dividers read this, since they belong to the timeline
+    // and there is no timeline on the other screen.
+    shell.dataset.screen = state.screen;
 
     // There is one video element and two places it can be. In the window, the
     // stage above the lanes is gone rather than empty, and the height it was
     // using goes to the timeline.
     main.replaceChildren(
-      ...(floating
-        ? [soundDesignBar.el, timeline.el]
-        : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
+      ...(state.screen === 'separate'
+        ? [separateScreen.el]
+        : floating
+          ? [soundDesignBar.el, timeline.el]
+          : [soundDesignBar.el, videoStage.el, divider.el, timeline.el]),
     );
-    if (!floating) divider.refresh();
+    if (state.screen === 'design' && !floating) divider.refresh();
 
     if (first) {
       shell.appendChild(panelDivider.el);
@@ -318,7 +343,7 @@ export function mountApp(root: HTMLElement): () => void {
   window.addEventListener('pagehide', onLeaving);
   document.addEventListener('visibilitychange', onHidden);
 
-  const detachKeyboard = attachKeyboard(session, soundDesign);
+  const detachKeyboard = attachKeyboard(session, soundDesign, separate);
 
   return () => {
     detachKeyboard();
@@ -336,6 +361,7 @@ export function mountApp(root: HTMLElement): () => void {
     help.destroy();
     soundDesign.stopShuttle();
     soundDesign.dispose();
+    separate.dispose();
     session.dispose();
   };
 }
@@ -357,7 +383,11 @@ function nextShuttle(rate: number): number {
 }
 
 /** Keyboard control. */
-function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () => void {
+function attachKeyboard(
+  session: Session,
+  soundDesign: SoundDesignSession,
+  separate: SeparateSession,
+): () => void {
   /*
    * Which way and how fast a held shuttle is running, or 0 for stopped.
    *
@@ -369,6 +399,23 @@ function attachKeyboard(session: Session, soundDesign: SoundDesignSession): () =
   const onKeyDown = (event: KeyboardEvent): void => {
     // Somewhere text is being typed. Nothing here applies.
     if (inField(event)) return;
+
+    /*
+     * On the other screen, two keys and no others.
+     *
+     * Every shortcut below is about the timeline — the playhead, the selection,
+     * the tools, the pads — and none of that exists while a recording is being
+     * taken apart. Letting them through means pressing space on a screen with no
+     * transport starts a piece you cannot see. Space stops what is playing here,
+     * because that is what somebody pressing it wants, and Escape does too.
+     */
+    if (session.state.screen !== 'design') {
+      if (event.key === ' ' || event.key === 'Escape') {
+        event.preventDefault();
+        separate.stop();
+      }
+      return;
+    }
 
     // Editing shortcuts first, because they are the ones meant to carry a
     // modifier and would otherwise be turned away with the browser's own.
