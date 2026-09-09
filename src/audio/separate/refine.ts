@@ -20,10 +20,10 @@
 
 import { NAMES as PITCH_NAMES } from '../../constants.ts';
 import { mono } from '../listen.ts';
-import { inBlocks, type Block, type HowFinely } from './blocks.ts';
+import { energyOf, inBlocks, type Block, type HowFinely } from './blocks.ts';
 import { BANDS, drumHits, type BandId, type DrumHit, type DrumKind } from './hits.ts';
 import { binHz, HOP, SIZE } from './stft.ts';
-import type { PartAudio, Progress, StemPart } from './types.ts';
+import type { PartAudio, Progress, Refinable, StemPart } from './types.ts';
 
 /* ---------------------------------------------------------------- the drums */
 
@@ -91,7 +91,7 @@ const RINGS_FOR = 4;
  * own spectrum is what lets two hits at the same moment come apart at all.
  */
 export async function refineDrums(
-  part: StemPart,
+  part: Refinable,
   audio: AudioBuffer,
   onStep?: Progress,
 ): Promise<StemPart[]> {
@@ -116,7 +116,7 @@ export async function refineDrums(
   );
 
   const counted = present.map((kind) => kinds.filter((one) => one === kind).length);
-  const shareOf = sharesWithin(part, inside);
+  const shareOf = sharesWithin(part, inside, audio, channels);
 
   const parts: StemPart[] = present.map((kind, at) => ({
     id: `${part.id}.${kind}`,
@@ -308,8 +308,16 @@ function divideByHits(
  * true and they were shares of different things. Every number in the tree now
  * means the same thing, so a part and everything inside it come to the same total.
  */
-function sharesWithin(part: StemPart, inside: readonly PartAudio[]): (at: number) => number {
-  const total = part.audio.energy;
+function sharesWithin(
+  part: Refinable,
+  inside: readonly PartAudio[],
+  audio: AudioBuffer,
+  channels: number,
+): (at: number) => number {
+  // Of the samples that were handed over, rather than of a number the part is
+  // carrying: those are the samples these pieces were cut out of, and a part
+  // read back out of a kept separation has no number to carry.
+  const total = energyOf(audio, channels);
   return (at) => (total > 0 ? part.share * (inside[at].energy / total) : 0);
 }
 
@@ -486,7 +494,7 @@ function loudestIn(mag: Float32Array, row: number, from: number, to: number): { 
  * them a given one belongs to.
  */
 export async function refineTonal(
-  part: StemPart,
+  part: Refinable,
   audio: AudioBuffer,
   onStep?: Progress,
 ): Promise<StemPart[]> {
@@ -513,7 +521,7 @@ export async function refineTonal(
   );
 
   const perFrame = FOR_LINES.hop / audio.sampleRate;
-  const shareOf = sharesWithin(part, inside);
+  const shareOf = sharesWithin(part, inside, audio, channels);
 
   const parts: StemPart[] = [];
   REGISTERS.forEach((register, at) => {

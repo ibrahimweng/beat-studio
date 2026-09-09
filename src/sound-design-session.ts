@@ -880,6 +880,26 @@ export class SoundDesignSession {
   }
 
   /**
+   * Write these recordings down, so they are here next time.
+   *
+   * What placing one does, done deliberately and for several at once. Keeping a
+   * separation means keeping the parts it points at — a screen of rows whose
+   * recordings were never written is a screen of rows that cannot be played —
+   * and this is how that is said without pretending each one was placed.
+   */
+  keepRecordings(ids: readonly string[]): number {
+    let kept = 0;
+    for (const id of ids) {
+      if (this.#onLoan.delete(id)) kept++;
+    }
+    if (kept) {
+      this.#keepSamples();
+      this.#store.set({ samples: [...samples()] });
+    }
+    return kept;
+  }
+
+  /**
    * Give a recording a different name.
    *
    * The whole of what naming a separated part comes down to, because a part is a

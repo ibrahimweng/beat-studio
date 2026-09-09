@@ -44,6 +44,7 @@ import {
   type Progress,
   type SeparateOptions,
   type Separation,
+  type Refinable,
   type Separator,
   type StemPart,
 } from './types.ts';
@@ -320,7 +321,7 @@ export function lowWeights(bins: number, size: number, rate: number, to: number)
 
 /** Take one of the four further, or give back nothing when it cannot be. */
 async function refine(
-  part: StemPart,
+  part: Refinable,
   audio: AudioBuffer,
   _options: SeparateOptions = {},
   onStep?: Progress,

@@ -294,6 +294,14 @@ export function mountApp(root: HTMLElement): () => void {
   void heldSamples().then((list) => {
     soundDesign.restoreSamples(list);
     /*
+     * And the parts of whatever was being taken apart, if they were kept.
+     *
+     * After the recordings and not before. A kept separation is a list of ids,
+     * and whether those ids point at anything is the question that decides
+     * whether it is worth putting back at all.
+     */
+    separate.restoreKept();
+    /*
      * After what was kept, not before: the shelves are only filled for
      * somebody who has no recordings at all, and until this has come back
      * from the database nobody knows whether that is true.

@@ -182,6 +182,92 @@ async function recordingsShown(page: import('@playwright/test').Page): Promise<n
   return Number(/Recordings · (\d+)/.exec(said)?.[1] ?? '0');
 }
 
+test.describe('keeping them for next time', () => {
+  /*
+   * Off by default, and the reason is size.
+   *
+   * Four parts of a three minute track is a couple of hundred megabytes, and
+   * writing that into the browser's store because somebody happened to take a
+   * beat apart is not a decision to make for them — it is the same reason the
+   * parts are on loan until one is used. So the screen is empty next visit
+   * unless it was asked not to be, and this is the pair of tests that says both
+   * halves of that are true.
+   */
+  test('is empty next visit when nothing was kept', async ({ page }) => {
+    await takeApart(page);
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(0);
+  });
+
+  test('brings the parts back next visit once they are kept', async ({ page }) => {
+    await takeApart(page);
+    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await expect(page.getByRole('button', { name: 'Kept for next time' })).toBeDisabled();
+
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+    expect(await namesShown(page, '.sep__title')).toContain('Drums');
+    // And what was measured comes back with them, not just the names.
+    await expect(page.locator('.sep__notes')).toContainText('loop');
+  });
+
+  /*
+   * The recordings are kept too, which is the half that is easy to get wrong.
+   *
+   * What is written down is a list of ids. Keeping the screen without settling
+   * the loans behind it would come back as four rows that draw perfectly and
+   * cannot be played — so a part missing its recording drops the whole
+   * separation rather than showing half of one, and this plays one to prove the
+   * recordings actually survived.
+   */
+  test('keeps the recordings behind them, so a part brought back can be played', async ({
+    page,
+  }) => {
+    await takeApart(page);
+    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await page.reload();
+    await settled(page);
+
+    expect(await recordingsShown(page)).toBe(4);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await rowButton(page, 'drums', '▶').click();
+    await expect(rowButton(page, 'drums', '■')).toBeVisible();
+  });
+
+  /*
+   * The stretch boxes do not come back, and that is on purpose.
+   *
+   * Choosing a stretch needs the file, which is on somebody's disk and not in
+   * this browser. Two boxes and a button that quietly did nothing would be worse
+   * than no boxes; picking the file again brings them back.
+   */
+  test('does not offer a stretch of a file it no longer has', async ({ page }) => {
+    await takeApart(page);
+    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+    await expect(page.locator('.sep__span')).toBeHidden();
+  });
+
+  test('forgets them when the screen is cleared', async ({ page }) => {
+    await takeApart(page);
+    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await page.getByRole('button', { name: 'Forget' }).click();
+
+    await page.reload();
+    await settled(page);
+    await page.locator('.rail__screen[data-screen="separate"]').click();
+    await expect(page.locator('.sep__row')).toHaveCount(0);
+  });
+});
+
 test.describe('naming a part', () => {
   /*
    * The name is the person's to give, because the measurements cannot give it.

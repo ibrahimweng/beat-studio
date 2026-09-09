@@ -27,6 +27,22 @@ import type { Project } from './timeline/types.ts';
 /** Where the piece is kept. */
 const WORK_KEY = 'toolcraft.st88.work';
 
+/**
+ * Where the parts of a taken-apart recording are kept.
+ *
+ * Its own key rather than part of the piece, because it is not part of the
+ * piece: a separation is a workbench, and what reaches the timeline from it
+ * reaches it as ordinary cues that the piece already keeps. What is here is the
+ * screen — which parts there were, what they were called, what they look like —
+ * so that coming back to a beat half taken apart does not mean starting again.
+ *
+ * The audio is not here. Each part is a recording in the sample store like any
+ * other, and this holds the ids. Which is also why keeping a separation has to
+ * settle the loans first: ids pointing at recordings nobody wrote down would
+ * come back as a screen full of rows that cannot be played.
+ */
+const PARTS_KEY = 'toolcraft.st88.parts';
+
 /** How long a run of edits settles before it is written. */
 const SETTLE_MS = 800;
 
@@ -284,6 +300,36 @@ function worthKeeping(project: Project): boolean {
   return project.cues.length > 0 || project.videoName !== null;
 }
 
+/**
+ * Keep a separation, or forget the one that is kept.
+ *
+ * Written whole and at once rather than settled like the piece, because it
+ * changes when somebody presses a button and not while they drag. Stored as
+ * whatever the caller hands over: the shape belongs to `separate-session.ts`,
+ * which is also where what comes back is checked, on the same principle as the
+ * piece — anything read out of a browser store may have been written by an
+ * older version of the app.
+ */
+export function keepParts(what: unknown | null): void {
+  try {
+    if (what === null) localStorage.removeItem(PARTS_KEY);
+    else localStorage.setItem(PARTS_KEY, JSON.stringify(what));
+  } catch {
+    // Storage full or turned off. Everything still works; it just will not be
+    // here next time, and saying so on every press would be worse.
+  }
+}
+
+/** Whatever separation was kept, unchecked, or null if there is none. */
+export function heldParts(): unknown {
+  try {
+    const raw = localStorage.getItem(PARTS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- the things too big for localStorage ----------
 
 const DB_NAME = 'toolcraft.st88';
@@ -485,6 +531,10 @@ export async function forgetWork(): Promise<void> {
   waiting = null;
   try {
     localStorage.removeItem(WORK_KEY);
+    // The parts of a taken-apart recording go with it. Starting again means
+    // starting again, and a workbench left set up from the last piece is not
+    // what anybody means by it.
+    localStorage.removeItem(PARTS_KEY);
   } catch {
     // Nothing to do about it, and nothing that needs saying.
   }

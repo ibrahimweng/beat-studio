@@ -229,6 +229,26 @@ export function createSeparateScreen(session: SeparateSession): View {
     ['Write the files'],
   );
 
+  /**
+   * Keep these parts for next time.
+   *
+   * A button rather than something that happens by itself, because of what it
+   * costs: four parts of a three minute track is a couple of hundred megabytes,
+   * and writing that into the browser's store because somebody happened to take
+   * a beat apart is not a decision to make for them. It is the same reason the
+   * parts are on loan until one is used — this is how you say you want them all.
+   */
+  const keep = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'Write these parts down, so this screen is here next time. Without it ' +
+        'they go when you leave, and only the ones you used are kept',
+      on: { click: () => session.keepParts() },
+    },
+    ['Keep for next time'],
+  );
+
   const forget = button(
     {
       class: 'chip chip--sm chip--danger',
@@ -244,6 +264,7 @@ export function createSeparateScreen(session: SeparateSession): View {
     stop,
     write,
     el('div', { class: 'topbar__spacer' }),
+    keep,
     forget,
   ]);
 
@@ -302,6 +323,11 @@ export function createSeparateScreen(session: SeparateSession): View {
      */
     if (document.activeElement !== spanFrom) spanFrom.value = clock(state.span?.from ?? 0);
     if (document.activeElement !== spanTo) spanTo.value = clock(state.span?.to ?? state.whole);
+
+    // Once they are kept the button says so and stops offering, because
+    // pressing it again would do nothing and look as though it had failed.
+    keep.disabled = working || state.kept;
+    setText(keep, state.kept ? 'Kept for next time' : 'Keep for next time');
 
     const has = state.stems.length > 0;
     nothing.style.display = has || working ? 'none' : 'block';

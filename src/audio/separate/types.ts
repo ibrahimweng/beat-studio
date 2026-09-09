@@ -147,6 +147,20 @@ export interface SeparateOptions {
 export type Progress = (done: number, of: number, what: string) => void;
 
 /**
+ * What going deeper into a part needs to know about it.
+ *
+ * Less than a whole {@link StemPart}, on purpose. The id says which of the four
+ * it is and what to call the pieces; the share is what the pieces' own shares
+ * are shares of. Nothing else is used, and asking for less means a part read
+ * back out of last week's separation — which has a name and a waveform and no
+ * samples at all — can be taken further like any other.
+ */
+export interface Refinable {
+  id: string;
+  share: number;
+}
+
+/**
  * Something that can take a recording apart.
  *
  * `refine` is optional and is what makes the tree two deep: given one of the
@@ -167,7 +181,7 @@ export interface Separator {
     onStep?: Progress,
   ): Promise<Separation>;
   refine?(
-    part: StemPart,
+    part: Refinable,
     /**
      * The part's samples, decoded by the caller.
      *

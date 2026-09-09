@@ -118,6 +118,17 @@ export interface Separation {
    * the boxes on screen are showing while somebody is still typing a new one.
    */
   span: { from: number; to: number } | null;
+  /**
+   * Whether these parts are being kept for next time.
+   *
+   * Off by default, and the reason is size. Four parts of a three minute track
+   * is a couple of hundred megabytes, and writing that into the browser's store
+   * because somebody happened to take a beat apart is not a decision to make on
+   * their behalf. So it is a button, and pressing it settles every part's loan
+   * as well as writing the screen down — ids pointing at recordings nobody kept
+   * would come back as rows that cannot be played.
+   */
+  kept: boolean;
 }
 
 export function emptySeparation(): Separation {
@@ -137,6 +148,7 @@ export function emptySeparation(): Separation {
     lean: 0.5,
     whole: 0,
     span: null,
+    kept: false,
   };
 }
 
