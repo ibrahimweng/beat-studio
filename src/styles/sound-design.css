@@ -2312,7 +2312,16 @@
 /* ---------- docks ---------- */
 
 /*
- * A column of panels, with a strip of tabs over whichever one is showing.
+ * A column of panels, with a rail of marks beside whichever one is showing.
+ *
+ * The rail is on the inner edge — between the work and the panel — because that
+ * is the edge somebody's eye is already at, and because it puts the two columns'
+ * rails either side of the middle rather than both against the window.
+ *
+ * It used to be a strip of names across the top, wrapping onto a second row
+ * when seven of them would not fit 340 pixels. Wrapping was the honest fix for
+ * that and it cost a row of height; a column costs a column of width and never
+ * wraps however many panels there are.
  *
  * The width is the divider's to set. An empty column takes none at all, which
  * is what lets the left one exist without costing anything until somebody
@@ -2322,13 +2331,15 @@
   flex: 0 0 var(--panel-width, 340px);
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   background: var(--side);
   border-left: 1px solid var(--line);
   overflow: hidden;
 }
 
+/* Mirrored, so its rail is on the inner edge too. */
 .dock--left {
+  flex-direction: row-reverse;
   border-left: 0;
   border-right: 1px solid var(--line);
 }
@@ -2339,30 +2350,29 @@
 }
 
 /*
- * The tabs wrap rather than scrolling away.
+ * The rail: one mark per panel, down the inner edge.
  *
- * Six names do not fit 340 pixels: this scrolled sideways with the scrollbar
- * hidden, so "Session" and "Palette" sat 75 pixels past the edge with nothing
- * saying they were there. A tab is the way you reach a panel, so two of the
- * six were reachable only by dragging or by the Window menu — which is the
- * same silent overflow the top bar used to have, shipped again somewhere
- * narrower.
- *
- * Wrapping costs a row of height when the column is narrow and nothing when
- * it is wide, and there is no width at which something is missing.
+ * It never scrolls and never wraps, because it is as tall as the window and
+ * seven marks are 250 pixels of it. Whatever else gets added has room.
  */
 .dock__tabs {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: stretch;
   gap: 2px;
-  padding: 6px 8px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 8px 6px;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.dock--left .dock__tabs {
+  border-right: 0;
+  border-left: 1px solid var(--line);
 }
 
 /*
- * A tab, which is a name and a handle at the same time.
+ * One mark, which is a destination and a handle at the same time.
  *
  * Nothing on it says "drag me", because in every editor that has these the
  * answer to "can I move this" is to try it, and a tab that carried a grip
@@ -2370,9 +2380,12 @@
  */
 .dock__tab {
   flex: 0 0 auto;
-  padding: 6px 10px 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--r-6);
   background: transparent;
   color: var(--txt-3);
   font: inherit;
@@ -2384,13 +2397,39 @@
   touch-action: none;
 }
 
+.dock__tab-mark {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+/*
+ * The name, which only appears once the column is wide enough to spare it.
+ *
+ * `.is-named` is set from a ResizeObserver on the column rather than from a
+ * media query, because what decides this is how wide somebody has dragged the
+ * panel and not how wide their screen is.
+ */
+.dock__tab-name {
+  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock.is-named .dock__tab-name {
+  display: block;
+}
+
 .dock__tab:hover {
   color: var(--txt-2);
+  background: var(--panel-2);
 }
 
 .dock__tab.is-on {
   color: var(--txt);
-  border-bottom-color: var(--ac);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  /* The border would move everything by a pixel, so it comes out of the padding. */
+  padding: 6px 7px;
 }
 
 /* The one being carried, left dimmed where it came from. */
@@ -2400,6 +2439,7 @@
 
 .dock__body {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 14px 14px 20px;

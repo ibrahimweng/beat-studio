@@ -60,6 +60,7 @@ export function createWorkPanel(
   const PANELS: readonly DockPanel[] = [
     { id: 'moments', title: 'Moments', hint: 'What the video suggests, and why', el: moments.el },
     { id: 'sounds', title: 'Sounds', hint: 'Choose a sound yourself', el: panel.soundsPage },
+    { id: 'yours', title: 'Yours', hint: 'Packs and recordings you brought, and taking sounds out of one', el: panel.yoursPage },
     { id: 'selected', title: 'Selected', hint: 'The sound picked on the timeline', el: panel.selectedPage },
     { id: 'export', title: 'Export', hint: 'Write the piece out as a file', el: panel.exportCard },
     { id: 'session', title: 'Session', hint: 'Save, open, or start again', el: panel.sessionCard },

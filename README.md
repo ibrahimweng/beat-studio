@@ -600,8 +600,8 @@ that way.
 ### What it makes of each moment
 
 The scan finds where something happens. The Moments panel, which is the first
-of the three tabs down the right, says what kind of moment it is and what
-belongs on it.
+mark down the panel's rail, says what kind of moment it is and what belongs on
+it.
 
 It works that out from the shape of the curve around each hit rather than from
 how tall the hit is. A cut arrives out of nothing. A build climbs into itself.
@@ -1341,7 +1341,7 @@ src/
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
       moments.ts   what the video suggests, and why
-      work-panel.ts the three tabs the right panel shows one at a time
+      work-panel.ts the panels a column shows one at a time
   styles/          design tokens and stylesheets
 api/               the serverless functions, each a thin adapter over `src/`
 test/fixtures/     measurements taken off real clips, for the tests to read
@@ -1380,6 +1380,27 @@ app still works and a message appears in the status line.
 The interface follows the Toolcraft design system. Everything visual is taken
 from it directly, including the colours and the type sizes. The original design
 files are in `design/`, and `design/README.md` explains what they are.
+
+## The panels
+
+Seven panels live in a column beside the work: Moments, Sounds, Yours, Selected,
+Export, Session and Palette. Which one is showing is chosen from a rail of marks
+down the column's inner edge, and any of them can be dragged into a second
+column on the other side of the timeline, or put away from the Window menu.
+
+The rail names its panels once the column is wide enough to spare the room. A
+named rail is about a hundred pixels against a marked one's forty five, so the
+names appear past 380 — the width at which the body is as wide as it was at the
+340 the column starts at, which makes that the point where naming is free rather
+than the point where it fits. Drag the divider between the timeline and the
+column to set the width; double-clicking it puts the width back.
+
+**Sounds and Yours are two halves of what used to be one page.** Sounds is
+choosing something to place: the search, the shelf of a thousand, browsing by
+kind, and which layer the next thing lands on. Yours is getting material into
+the app at all: sound packs, your recordings, and taking sounds out of a
+recording. They were one scrolling column of ten sections, which read as one
+undifferentiated list and was two different jobs.
 
 ## Making a voiceover
 

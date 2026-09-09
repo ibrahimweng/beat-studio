@@ -183,6 +183,17 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: 'panels',
+    title: 'The panels beside the work',
+    rows: [
+      ['The rail', 'One mark per panel, down the inner edge of the column. Hover for its name, or drag the column wider and the names appear beside the marks.'],
+      ['Resizing', 'Drag the line between the timeline and the column. Double-click it to put the width back.'],
+      ['Moving one', 'Drag a mark into the other side of the timeline and the panel goes with it, so two can be open at once. The Window menu puts one away, or brings it back.'],
+      ['Sounds', 'Choosing something to place: the search, the shelf, browsing by kind, and which layer the next thing lands on.'],
+      ['Yours', 'Getting material into the app: sound packs, your own recordings, and taking sounds out of a recording. Split from Sounds, which was ten sections doing two different jobs.'],
+    ],
+  },
+  {
     id: 'voiceover',
     title: 'Making a voiceover',
     rows: [

@@ -49,8 +49,57 @@ test.describe('the panel columns', () => {
     await open(page);
   });
 
+  /*
+   * The rail names its panels once the column is wide enough to spare the room.
+   *
+   * A mark on its own is a thing you learn once and read instantly, and a thing
+   * you have to hover the first few times. So the names appear where there is
+   * width going spare and the column keeps it where there is not — measured
+   * against the column, because that is what somebody drags.
+   */
+  test('the rail names the panels only when there is room', async ({ page }) => {
+    const dock = page.locator('.dock--right');
+    const name = page.locator('.dock--right .dock__tab[data-panel="sounds"] .dock__tab-name');
+    // Every panel has a mark at every width; that is what the rail is.
+    await expect(page.locator('.dock--right .dock__tab-mark')).toHaveCount(7);
+    await expect(dock).not.toHaveClass(/is-named/);
+    await expect(name).toBeHidden();
+
+    await page.evaluate(() => {
+      (document.querySelector('.dock--right') as HTMLElement).style.setProperty(
+        '--panel-width',
+        '460px',
+      );
+    });
+    await expect(dock).toHaveClass(/is-named/);
+    await expect(name).toBeVisible();
+    await expect(name).toHaveText('Sounds');
+  });
+
+  /*
+   * What somebody brought is its own panel, and is not also on the other one.
+   *
+   * The Sounds page was ten sections in one scrolling column doing two different
+   * jobs: choosing a sound to place, and getting material into the app at all.
+   * Splitting them is the whole point, so this checks both halves landed —
+   * finding is still on Sounds, and nothing about packs or recordings is.
+   */
+  test('choosing a sound and bringing one in are different panels', async ({ page }) => {
+    await page.locator('.dock__tab[data-panel="sounds"]').click();
+    await expect(page.locator('.dock__body .pick-find--held')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Load a sound pack' })).toHaveCount(0);
+    // Finding a sound stayed where it was.
+    await expect(page.locator('.dock__body input[placeholder*="Find a sound"]')).toBeVisible();
+
+    await page.locator('.dock__tab[data-panel="yours"]').click();
+    await expect(page.getByRole('button', { name: 'Load a sound pack' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Take sounds out of a recording' }),
+    ).toBeVisible();
+  });
+
   test('everything starts in one column, on the right', async ({ page }) => {
-    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(6);
+    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(7);
     await expect(page.locator('.dock--left .dock__tab')).toHaveCount(0);
     await expect(page.locator('.dock--left')).toHaveClass(/is-empty/);
   });
@@ -74,7 +123,7 @@ test.describe('the panel columns', () => {
   test('and dragged back again', async ({ page }) => {
     await dragTabTo(page, 'Moments', 'left');
     await dragTabTo(page, 'Moments', 'right');
-    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(6);
+    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(7);
     await expect(page.locator('.dock--left')).toHaveClass(/is-empty/);
   });
 
@@ -93,7 +142,7 @@ test.describe('the panel columns', () => {
     await expect(page.locator('.rail__tool').first()).toBeVisible();
 
     await expect(page.locator('.dock--left .dock__tab', { hasText: 'Sounds' })).toHaveCount(1);
-    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(5);
+    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(6);
   });
 
   /*
@@ -119,7 +168,7 @@ test.describe('the panel columns', () => {
     await page.getByRole('button', { name: 'Window' }).first().click();
     await page.getByRole('menuitem', { name: 'Put the panels back' }).click();
 
-    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(6);
+    await expect(page.locator('.dock--right .dock__tab')).toHaveCount(7);
     await expect(page.locator('.dock--left')).toHaveClass(/is-empty/);
   });
 });

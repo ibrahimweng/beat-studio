@@ -89,6 +89,8 @@ function noteName(midi: number): string {
 export interface SoundDesignPanelView extends View {
   /** Everything for choosing a sound. */
   soundsPage: HTMLElement;
+  /** Packs and recordings somebody brought, and taking sounds out of one. */
+  yoursPage: HTMLElement;
   /** The settings of whatever is picked on the timeline. */
   selectedPage: HTMLElement;
   /** Getting a file out. */
@@ -1849,8 +1851,29 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       ]),
       layerRow,
       layerJobLine,
+    ]),
+  ]);
+
+  /*
+   * What somebody brought, on a panel of its own.
+   *
+   * These four used to be the bottom half of the Sounds page, and being at the
+   * bottom was not the problem: they are setup, run once or never, and the page
+   * was right to put finding a sound above them. The problem was that they were
+   * there at all. Ten sections in one scrolling column read as one undifferentiated
+   * list, and the two halves are not the same job — above is choosing a sound to
+   * place, here is getting material into the app in the first place.
+   *
+   * Split rather than merely spaced, because the panels were already draggable
+   * and dockable: this costs one entry in the rail and gives both halves room,
+   * where spacing alone would have left one long scroll with better gaps in it.
+   */
+  const yoursPage = el('div', { class: 'panel-page' }, [
+    el('div', {}, [
+      heading('Sound packs', 'library'),
       packSections,
       el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
+      heading('Recordings', 'record', { marginTop: '18px' }),
       sampleSections,
       // One row of three. The help dot used to sit under a full-width button
       // on a line of its own, which reads as a stray character.
@@ -1894,6 +1917,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
    */
   const root = el('aside', { class: 'inspector inspector--work' }, [
     soundsPage,
+    yoursPage,
     selectedPage,
     exportCard,
     sessionCard,
@@ -2043,6 +2067,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   return {
     el: root,
     soundsPage,
+    yoursPage,
     selectedPage,
     exportCard,
     sessionCard,

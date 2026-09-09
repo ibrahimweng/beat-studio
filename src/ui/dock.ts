@@ -1,4 +1,5 @@
 import { button, clear, el } from './dom.ts';
+import { panelIcon } from './icons.ts';
 
 /** One thing that can be docked, and what to call it. */
 export interface DockPanel {
@@ -27,14 +28,15 @@ const STORAGE_KEY = 'toolcraft.st88.docks';
  * Where everything starts, for somebody who has never moved anything.
  *
  * All of it on the right, in the order the work happens: what the video
- * suggests, then choosing something yourself, then the sound you picked, then
- * the three cards that are about the piece rather than about a sound. The left
+ * suggests, then choosing something yourself, then the packs and recordings you
+ * brought, then the sound you picked, then the three cards that are about the
+ * piece rather than about a sound. The left
  * column starts empty and takes no room until something is put in it, because
  * a second column of chrome is a cost somebody should have to ask for.
  */
 const DEFAULT_LAYOUT: Layout = {
   left: [],
-  right: ['moments', 'sounds', 'selected', 'export', 'session', 'palette'],
+  right: ['moments', 'sounds', 'yours', 'selected', 'export', 'session', 'palette'],
   active: { left: null, right: 'moments' },
 };
 
@@ -105,6 +107,33 @@ export function createDocks(panels: readonly DockPanel[], options: DockOptions =
     right: el('aside', { class: 'dock dock--right' }, [strips.right, bodies.right, hint()]),
   };
 
+  /**
+   * Name the panels once the column is wide enough to spare the room.
+   *
+   * The rail is a column of marks, which is the narrowest a list of seven
+   * destinations can be and is what the app's other rail already looks like. A
+   * mark on its own is a thing you learn once and then read instantly, and a
+   * thing you have to hover the first few times — so where there is width going
+   * spare the name goes beside it, and where there is not the column keeps it.
+   *
+   * Measured against the column rather than the window, because the column is
+   * what somebody drags: a narrow panel on a wide screen should still be narrow.
+   *
+   * The threshold is where naming stops costing anything. A named rail is about
+   * a hundred pixels against a marked one's forty five, so at 380 the body is
+   * the same width it had at the 340 it starts at — which makes widening past
+   * that the moment the names are free rather than the moment they fit.
+   */
+  const NAMED_AT = 380;
+  if (typeof ResizeObserver !== 'undefined') {
+    const watching = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        entry.target.classList.toggle('is-named', entry.contentRect.width >= NAMED_AT);
+      }
+    });
+    for (const side of SIDES) watching.observe(nodes[side]);
+  }
+
   /** Which side a panel is on, or null when it has been closed. */
   function sideOf(id: string): DockSide | null {
     for (const side of SIDES) if (layout[side].includes(id)) return side;
@@ -147,7 +176,10 @@ export function createDocks(panels: readonly DockPanel[], options: DockOptions =
               },
             },
           },
-          [el('span', { class: 'dock__tab-name', text: panel.title })],
+          [
+            el('span', { class: 'dock__tab-mark' }, [panelIcon(id)]),
+            el('span', { class: 'dock__tab-name', text: panel.title }),
+          ],
         );
         tab.addEventListener('pointerdown', (event) => beginTabDrag(event, id, tab));
         strips[side].appendChild(tab);

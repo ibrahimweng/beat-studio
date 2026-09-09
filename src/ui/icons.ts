@@ -177,3 +177,50 @@ function svgIcon(inner: string): HTMLElement {
   holder.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
   return holder;
 }
+
+/**
+ * The mark for one docked panel.
+ *
+ * Drawn rather than built out of boxes like the marks above, because seven of
+ * them have to read at sixteen pixels and be told apart at a glance down a
+ * column. Line art at a single weight is what makes a set look like a set.
+ *
+ * Anything unknown gets a plain square, so a panel added later shows up in the
+ * rail as something rather than as a gap.
+ */
+export function panelIcon(id: string): HTMLElement {
+  return svgIcon(PANEL_MARKS[id] ?? PANEL_MARKS.unknown);
+}
+
+const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"';
+
+const PANEL_MARKS: Record<string, string> = {
+  // A spark over a line: what the picture suggests, on the piece.
+  moments:
+    `<path d="M2.5 12.5h11" ${STROKE}/>` +
+    `<path d="M8 2.5l1.3 3.2L12.5 7l-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3z" ${STROKE}/>`,
+  // Four bars: the shape of a sound, and the same idea as the app's own logo.
+  sounds:
+    `<path d="M3 6.5v3M6.3 3.5v9M9.7 5v6M13 7v2" ${STROKE}/>`,
+  // A folder: the things somebody brought rather than the things here already.
+  yours:
+    `<path d="M2.5 4.5h4l1.2 1.5h5.8v6.5h-11z" ${STROKE}/>`,
+  // A ring around a dot: the one that is picked out of everything else.
+  selected:
+    `<circle cx="8" cy="8" r="5.2" ${STROKE}/><circle cx="8" cy="8" r="1.6" fill="currentColor"/>`,
+  // Down into a tray: out of the app and onto a disk.
+  export:
+    `<path d="M8 2.5v7m0 0L5.5 7M8 9.5L10.5 7" ${STROKE}/>` +
+    `<path d="M3 10.5v3h10v-3" ${STROKE}/>`,
+  // A disk with its shutter: saving, opening, starting again.
+  session:
+    `<path d="M3 3.5h7.5L13 6v6.5H3z" ${STROKE}/>` +
+    `<path d="M5.5 3.5v3h4v-3M5.5 12.5v-3h5v3" ${STROKE}/>`,
+  // Four swatches: the catalogue, written out for somebody else.
+  palette:
+    `<rect x="2.8" y="2.8" width="4.6" height="4.6" rx="1" ${STROKE}/>` +
+    `<rect x="8.6" y="2.8" width="4.6" height="4.6" rx="1" ${STROKE}/>` +
+    `<rect x="2.8" y="8.6" width="4.6" height="4.6" rx="1" ${STROKE}/>` +
+    `<rect x="8.6" y="8.6" width="4.6" height="4.6" rx="1" ${STROKE}/>`,
+  unknown: `<rect x="3" y="3" width="10" height="10" rx="1.5" ${STROKE}/>`,
+};
