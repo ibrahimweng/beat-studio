@@ -132,10 +132,17 @@ test.describe('taking a beat apart', () => {
     const names = await page.locator('.sep__title').allInnerTexts();
     expect(names).toEqual(['Drums', 'Bass', 'Lead', 'Tonal']);
 
-    // Every part has a share, and they come to about the whole recording.
+    /*
+     * Every part says how much of the recording it holds.
+     *
+     * With a decimal place under ten per cent, because everything in the tree is a
+     * share of the same thing and a hi-hat file is a couple of per cent of a track
+     * however much of the drums it is. Rounded to whole numbers, four rows inside
+     * the drums all read "0%" and the list says nothing.
+     */
     const shares = await page.locator('.sep__share').allInnerTexts();
     expect(shares).toHaveLength(4);
-    for (const share of shares) expect(share).toMatch(/^\d+%$/);
+    for (const share of shares) expect(share).toMatch(/^\d+(\.\d)?%$/);
 
     /*
      * The evidence, not a score.

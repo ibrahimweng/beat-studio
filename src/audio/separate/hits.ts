@@ -247,22 +247,18 @@ function nextIn(
 }
 
 /**
- * Which drum a hit is, from the four shares of the spectrum at its attack.
+ * Which drum a hit is, once {@link bandsFor} has decided which family it is in.
  *
- * An ordered set of questions rather than a largest-of-four, because the four are
- * not four points in a space. Is nearly all of it in the bottom two octaves? Then
- * it is a drum, and whether there is a click on the front of it says which one. Is
- * nearly all of it above three kilohertz? Then it is metal, and how long it rings
- * says which. Anything else has a body in the middle, and that is a snare.
+ * Two follow-up questions, and no more. A hit at the bottom is a kick if it has a
+ * click on the front of it and a tom if it does not; a hit at the top is a hat if
+ * it stops and a cymbal if it rings; a hit with a body in the middle is a snare
+ * and there is nothing else to ask.
  *
- * A largest-of-four was the first version and it puts a snare in with the hats: a
- * snare has more of its magnitude above three kilohertz, in the rattle, than it has
- * in the body everybody would name it by.
- *
- * The numbers are measured. `refine.test.ts` renders all thirteen voices of this
+ * The numbers are measured. `hits.test.ts` renders all thirteen voices of this
  * app's own drum kit, finds them the same way a recording is found, and checks
- * every one is sorted into the right family — the closest thing to ground truth
- * available without a labelled recording, since the app knows exactly what it made.
+ * every one comes back as exactly one hit in the right family — the closest thing
+ * to ground truth available without a labelled recording, since the app knows
+ * exactly what it made.
  *
  * Two of the boundaries are thin, and pretending otherwise would be the dishonest
  * part.
@@ -308,8 +304,25 @@ function bandsFor(
   shares: readonly [number, number, number, number],
 ): BandId[] {
   const bottom = shares[0] + shares[1];
+  const body = shares[2];
   const top = shares[3];
-  const primary: BandId = bottom > MOSTLY_LOW ? 'low' : top > MOSTLY_HIGH ? 'high' : 'mid';
+
+  /*
+   * Metal first, then a body, then the bottom.
+   *
+   * The order is the whole of it. Asking about the bottom first — which was the
+   * first version — puts a snare whose body is louder than its rattle in with the
+   * kicks, because a snare's body is at two or three hundred hertz and that is
+   * the bottom by any measure. What a kick does not have is anything between five
+   * hundred hertz and three kilohertz: measured on this app's own kit, its kicks
+   * and toms carry one to three hundredths there and its snare carries a third of
+   * itself. So a body in the middle is a snare whatever else is true.
+   *
+   * Metal has to come before that, or a ride — which carries a fifth of itself in
+   * the same range — comes back as a snare.
+   */
+  const primary: BandId =
+    top > MOSTLY_HIGH ? 'high' : body > HAS_A_BODY ? 'mid' : bottom > MOSTLY_LOW ? 'low' : 'mid';
 
   /*
    * Two hits, whatever the cascade would have said on its own.
@@ -328,6 +341,16 @@ function bandsFor(
 /** How much of a hit has to be at the bottom, or at the top, to be that alone. */
 const MOSTLY_LOW = 0.7;
 const MOSTLY_HIGH = 0.6;
+
+/**
+ * How much a hit has to carry between five hundred hertz and three kilohertz to
+ * be a snare.
+ *
+ * Measured on this app's own kit: its kicks and toms carry between one and three
+ * hundredths there, and its snare carries thirty one. Anything in between is not
+ * a drum this kit makes, so the line sits where there is the most room.
+ */
+const HAS_A_BODY = 0.15;
 
 /**
  * How much has to be at each end for a moment to be two hits.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clicks, energy, glide, heldShare, mix, RATE, stereo, tone } from '../../../test/mixes.ts';
+import { clicks, energy, glide, heldShare, kicks, mix, RATE, stereo, tone } from '../../../test/mixes.ts';
 import { lowWeights, measured } from './dsp.ts';
 import { PARTS } from './types.ts';
 
@@ -193,6 +193,41 @@ describe('taking a mix into four', () => {
       getChannelData: () => new Float32Array(0),
     } as unknown as AudioBuffer;
     await expect(measured.separate(huge)).rejects.toThrow(/9 minutes long/);
+  });
+});
+
+describe('a kick under a bass line', () => {
+  /*
+   * The hardest case here, and the one that was worst.
+   *
+   * A kick's body is a low tone that lasts a third of a second, which is longer
+   * than the window that tells a held note from a hit — so everything about it says
+   * "note" except the way it starts. Under a sustained bass it was going almost
+   * entirely to the bass part: 18 per cent of the kicks in the drums and 77 in the
+   * bass, which is a drum part with no kick in it.
+   *
+   * The frequency median was asking the wrong question. Seventeen bins is four
+   * hundred hertz, which at fifty hertz is two whole octaves, so a kick was being
+   * asked whether it filled a band reaching up to two hundred and fifty. Asked over
+   * a third of an octave instead — a constant musical width rather than a constant
+   * number of hertz — a kick fills its band and a bass note, which is one narrow
+   * line, does not.
+   */
+  it('puts the kicks in the drums rather than in the bass', async () => {
+    const beat = kicks(0.5, SECONDS);
+    const under = tone(55, SECONDS, 0.4);
+    const lane = mix(beat, under);
+    const parts = await apart(stereo(lane, lane));
+
+    const inDrums = heldShare(parts.drums.getChannelData(0), beat);
+    const inBass = heldShare(parts.bass.getChannelData(0), beat);
+    expect(inDrums, `only ${(inDrums * 100).toFixed(0)}% of the kick reached the drums`)
+      .toBeGreaterThan(0.6);
+    expect(inDrums).toBeGreaterThan(inBass);
+
+    // And the bass line is still mostly the bass part's, which is the other half
+    // of the trade: making the drums greedier costs the bass something.
+    expect(heldShare(parts.bass.getChannelData(0), under)).toBeGreaterThan(0.7);
   });
 });
 

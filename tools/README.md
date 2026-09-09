@@ -317,8 +317,27 @@ took, how many hits are in the drums and what they were called — and whether
 the sum still holds. It does not say whether it sounds right, because it
 cannot. That is what listening in the app is for.
 
-Several things were found by measuring rather than by reading the code, and the
-two that mattered most are in `repeat.ts` and `hits.ts`.
+Several things were found by measuring rather than by reading the code. The
+worst of them was in `hpss.ts`, and it is the kind of fault that hides behind a
+description everybody repeats.
+
+The median that decides whether a moment is a hit or a note looks across a
+band of frequencies, and every account of this method says seventeen bins.
+Seventeen bins at this window is four hundred hertz, which is a sliver at five
+kilohertz and two whole octaves at fifty — so a kick, which lives between forty
+and a hundred and ten hertz, was being asked whether it filled a band reaching
+up to two hundred and fifty. It does not, so it read as narrowband, so it read
+as a note, so it went to the bass. Measured on a kick over a sustained bass,
+the drums held 18 per cent of the kick and the bass held 77: a drum part with
+no kick in it, on a feature whose headline is taking the drums out of a beat.
+Asked over a third of an octave instead — a constant musical width rather than a
+constant number of hertz — a kick fills its band and a bass note, which is one
+narrow line, does not. It comes back as 74 and 26. The floor on that width is
+where the trade lives and it was swept rather than argued: at three bins the
+drums hold 85 per cent of the kick and the bass loses 42 per cent of itself
+into them; at five, 74 and 18; at seven, 51 and 6; at nine, 42 and 3.
+
+The other two that mattered are in `repeat.ts` and `hits.ts`.
 
 The loop finder was comparing each lag against the average of the whole
 self-similarity curve. That curve falls away steeply, so every short lag beats

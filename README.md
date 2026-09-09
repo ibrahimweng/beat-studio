@@ -1036,11 +1036,23 @@ The drums come out well, because a hit and a note look nothing like each other.
 Measured on a kick, snare and hat pattern this app made itself: 14 of 14 hits
 found, every one named right, and the three files hold 97, 92 and 93 per cent
 of what they should. All thirteen voices of the built-in kit come back as
-exactly one hit in the right family.
+exactly one hit in the right family. A kick and a hat played on the same eighth
+come out as two hits in two files, which is the thing a finder working on the
+whole spectrum cannot do and is the commonest thing in a beat.
 
 The bass comes out well enough, because it is mostly the low end of what is
 left. It is the crudest thing here: a bass part is right about the fundamentals
 and wrong about everything a bass does above them.
+
+A kick under a bass line is the hardest case, and worth knowing about. A kick's
+body is a low tone that lasts a third of a second — longer than the window used
+to tell a held note from a hit — so everything about it says "note" except the
+way it starts. It is asked whether it fills the third of an octave around it,
+which a kick does and a bass note does not, and that is what keeps it in the
+drums: measured on a kick over a sustained bass, 74 per cent of the kick lands
+in the drums and 82 per cent of the bass lands in the bass. The eighteen per
+cent of the bass that goes with the drums is bleed at the moments the kick is
+masking it anyway, and Hits and Notes moves the trade either way.
 
 A centred lead comes out usable on a stereo mix. On a mono file there is no
 position to read, and if nothing repeats either then there is no basis at all

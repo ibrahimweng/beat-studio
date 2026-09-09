@@ -153,20 +153,79 @@ function medianAlongBands(
   span: number,
 ): Float32Array {
   const out = new Float32Array(frames * bins);
-  const half = span >> 1;
   const scratch = new Float32Array(span);
+  const spans = bandSpans(bins, span);
 
   for (let f = 0; f < frames; f++) {
     const row = f * bins;
     for (let k = 0; k < bins; k++) {
-      for (let i = 0; i < span; i++) {
+      const wide = spans[k];
+      const half = wide >> 1;
+      for (let i = 0; i < wide; i++) {
         scratch[i] = mag[row + Math.min(bins - 1, Math.max(0, k - half + i))];
       }
-      out[row + k] = median(scratch);
+      out[row + k] = median(scratch.subarray(0, wide));
     }
   }
   return out;
 }
+
+/**
+ * How many bins the frequency median looks across, at each bin.
+ *
+ * Odd, always, so there is a middle value to take. Capped at {@link OVER_BANDS},
+ * which is where the constant-width version used to sit: past a couple of
+ * kilohertz a third of an octave is wider than the band anything useful occupies,
+ * and widening it further only costs time.
+ */
+export function bandSpans(bins: number, most: number): Int32Array {
+  const out = new Int32Array(bins);
+  for (let k = 0; k < bins; k++) {
+    const wide = Math.round(k * SPREAD_OVER * 2);
+    out[k] = Math.max(LEAST_BANDS, Math.min(most, wide | 1));
+  }
+  return out;
+}
+
+/**
+ * How wide the frequency median looks, as a share of the frequency it is at.
+ *
+ * A third of an octave either side, which is a constant *musical* width rather
+ * than a constant number of hertz, and it is the difference between a drum part
+ * with a kick in it and one without.
+ *
+ * A fixed seventeen bins was the first version and is what every description of
+ * this method says. Seventeen bins at this window is four hundred hertz, which is
+ * a sliver at five kilohertz and two whole octaves at fifty — so a kick, which
+ * lives between forty and a hundred and ten hertz, was being asked whether it
+ * filled a band reaching up to two hundred and fifty. It does not, so it read as
+ * narrowband, so it read as a note, so it went to the bass. Measured on a kick,
+ * a hat and a sustained sub together, the drums held 18 per cent of the kicks and
+ * the bass held 77 — which is a drum part with no kick in it, and the single worst
+ * result this whole folder produced.
+ *
+ * In octaves the same question becomes the right one: does this fill the third of
+ * an octave around it? A kick does. A bass note, which is one narrow line, does
+ * not. With that change the drums hold 74 per cent of the kicks and the bass holds
+ * 26.
+ */
+const SPREAD_OVER = Math.pow(2, 1 / 3) - 1;
+
+/**
+ * And never fewer than this many bins.
+ *
+ * A third of an octave at fifty hertz is two bins, and a median of two of anything
+ * says very little. The floor is where the trade lives and it was measured rather
+ * than argued: at three bins the drums hold 85 per cent of the kicks and a
+ * sustained bass loses 42 per cent of itself into them; at five, 74 and 18; at
+ * seven, 51 and 6; at nine, 42 and 3. Five is the last one where the kick is
+ * mostly in the drums, and eighteen per cent of a bass line that runs under every
+ * kick in the piece is bleed at the moments the kick is masking it anyway.
+ *
+ * Anybody who disagrees has the Hits and Notes control, which moves the same
+ * split without touching this.
+ */
+const LEAST_BANDS = 5;
 
 /**
  * The middle value of a short run, by insertion sort.

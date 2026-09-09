@@ -84,6 +84,42 @@ export function clicks(
   return out;
 }
 
+/**
+ * Kicks at a steady spacing: a low tone falling in pitch, with a click on it.
+ *
+ * Which is what a kick drum is, and the reason it is here rather than in a test
+ * file is that it is the hardest case in this folder. Its body is a low tone that
+ * lasts a third of a second — longer than the window that tells a held note from a
+ * hit — so everything about it says "note" except the way it starts. See the note
+ * on `SPREAD_OVER` in `hpss.ts`.
+ */
+export function kicks(
+  everySeconds: number,
+  seconds: number,
+  gain = 0.8,
+  rate = RATE,
+): Float32Array {
+  const out = new Float32Array(Math.round(seconds * rate));
+  const gap = Math.round(everySeconds * rate);
+  const length = Math.round(0.3 * rate);
+
+  const one = new Float32Array(length);
+  let phase = 0;
+  let state = 9;
+  for (let i = 0; i < length; i++) {
+    const along = i / length;
+    phase += (2 * Math.PI * (110 * Math.exp(-4 * along) + 45)) / rate;
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    const click = i < rate * 0.005 ? (state / 0x3fffffff - 1) * 0.3 : 0;
+    one[i] = (Math.sin(phase) + click) * gain * Math.exp(-5 * along);
+  }
+
+  for (let at = 0; at < out.length; at += gap) {
+    for (let i = 0; i < length && at + i < out.length; i++) out[at + i] += one[i];
+  }
+  return out;
+}
+
 /** Two signals added, at the length of the longer. */
 export function mix(...parts: readonly Float32Array[]): Float32Array {
   const length = Math.max(...parts.map((part) => part.length));
