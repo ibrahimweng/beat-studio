@@ -1535,6 +1535,13 @@
   gap: 6px;
 }
 
+/*
+ * A fold's head is a button, and a button needs its font reset — but `font`
+ * is a shorthand, so the reset was also throwing away the size and weight
+ * `.section-title` had just given it. "Browse" and "Export" came out at the
+ * panel's body size while "Place" and "On layer" beside them were headings.
+ * Said again here, after the reset that removed them.
+ */
 .section-title--folds {
   display: flex;
   align-items: center;
@@ -1545,6 +1552,9 @@
   background: none;
   color: inherit;
   font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-align: left;
   cursor: pointer;
 }
@@ -1607,6 +1617,67 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/*
+ * One thing a panel does, with a line between it and the next.
+ *
+ * A panel is several jobs stacked in a column — find a sound, browse for one,
+ * say where it lands — and until this they were separated by whatever inline
+ * margin was written at the time: 4, 6, 8, 10, 12 and 18px, ten of them, none
+ * agreeing. At those distances a heading reads as a label on the thing above
+ * it as easily as on the thing below, so four sections looked like one list
+ * with some bold words in it.
+ *
+ * 16px of gap, a hairline, then 16px of padding. The rule is what actually
+ * does the work: 32px of air alone is ambiguous at a glance, where a line is
+ * not, and it stays legible when a section grows to fill the panel. It is
+ * inset by the dock's own padding rather than bled to the edges, so it reads
+ * as a division inside one panel and not as the edge of another.
+ *
+ * `--line-strong` and not `--line`, which is the app's edge-on-a-surface and
+ * measures rgb(6,6,7) against this panel's black — a line nobody can see. The
+ * token carries the numbers.
+ *
+ * The gap goes on the column and the padding on the section, so the first
+ * section has neither and the page does not start with a line above it.
+ */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-section + .panel-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--line-strong);
+}
+
+/*
+ * The section owns the rhythm, so nothing directly inside it carries its own.
+ *
+ * These pieces are used elsewhere too — a pick group inside the browser, the
+ * search box, the import buttons — and each grew a margin for the first place
+ * it was put. Stacked in a column those margins added up differently depending
+ * on what happened to sit next to what, which is the arrangement this is
+ * replacing. Only direct children are reset: a group nested inside a pack list
+ * or the browser still spaces itself.
+ */
+.panel-section > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/*
+ * A holder with nothing in it is not a gap.
+ *
+ * Half of these fill in from state — the packs somebody loaded, their
+ * recordings, the sounds pulled out of one — and start empty. As flex items
+ * they are zero pixels tall and still take a 10px gap on each side, so an
+ * untouched panel was spaced for lists that were not there.
+ */
+.panel-section > div:empty {
+  display: none;
 }
 
 /* ---------- the moments ---------- */
@@ -1852,13 +1923,9 @@
 /* The heading and the one button that acts on all of them, on one line. */
 .layer-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.layer-head .section-title {
-  margin-bottom: 8px;
 }
 
 /*

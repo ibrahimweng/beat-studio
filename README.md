@@ -1402,6 +1402,33 @@ the app at all: sound packs, your recordings, and taking sounds out of a
 recording. They were one scrolling column of ten sections, which read as one
 undifferentiated list and was two different jobs.
 
+**A section is a thing a panel does, and the spacing says so.** What separated
+them before was ten inline margins between 4px and 18px, each written for the
+one place it appeared: at those distances a heading reads as a label on the
+thing above it as easily as on the thing below, so three sections still looked
+like one list with some bold words in it. Now it is one rule — 16px, a
+hairline, 16px — and nothing inside a section carries a margin of its own. That
+also fixed an arrangement that changed with its contents: the margin between
+two groups of sounds only applied when they were literally adjacent, so "Made
+from your words" sat flush against the sounds above it exactly when there were
+any.
+
+The line is `--line-strong`, which is this app's and not Toolcraft's. The two
+line tokens above it are edges on a surface — a card border against `--panel`
+— and on the panel's black ground a screenshot puts `--line` at rgb(6,6,7),
+darker than the fill of a chip beside it at rgb(13,13,13). That is not a quiet
+line, it is no line. 42% measures rgb(20,20,23) on black, rgb(25,25,28) on the
+dark finish and rgb(28,28,35) on slate: above the chip border it has to be told
+apart from on all three, and still the quietest thing on the panel.
+
+Section headings are 13px at weight 600 in full-strength text, which is what a
+heading already looked like elsewhere in the app. They were 12px at 500 in
+`--txt-3` — the size and colour of `.hint` — so "Sound packs" was set in the
+same ink as the sentence explaining what a sound pack is. A fold's head is a
+button and needed its font reset, and `font: inherit` was throwing away the
+size and weight along with it, so "Browse" and "Export" came out at body size
+beside headings that had not.
+
 ## Making a voiceover
 
 The third screen puts a voice to a script. Pick a narrator, write what they say,
