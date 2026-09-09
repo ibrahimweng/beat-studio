@@ -4,7 +4,6 @@ import { bufferAt, decodeSample, sampleById } from './audio/samples.ts';
 import { expectedSeconds, LONG_SECONDS, measured } from './audio/separate/dsp.ts';
 import { drumHits } from './audio/separate/hits.ts';
 import type { Separation, Separator, StemPart } from './audio/separate/types.ts';
-import { encodeWav } from './export/wav.ts';
 import { fileStem, saveBlob } from './export/save.ts';
 import type { SoundDesignSession } from './sound-design-session.ts';
 import { emptySeparation, type Separation as SeparationState, type Stem, type Store } from './store.ts';
@@ -46,14 +45,15 @@ export class SeparateSession {
   #separator: Separator = measured;
 
   /**
-   * The parts as the separator gave them, with their audio, for taking further.
+   * The parts as the separator gave them, for taking further.
    *
-   * Held only while a separation is on screen, and only for the four: opening one
-   * needs its samples again, and going back to the file to decode them would be
-   * a second decode of something that was in hand a moment ago. Cleared with
-   * everything else, because four AudioBuffers is the largest thing this app
-   * holds and holding them for a separation nobody is looking at is how a tab
-   * runs out of room.
+   * What is held is the description and the energy that was counted while each
+   * was written, not the samples — a part hands its bytes over to its file and
+   * keeps neither. That is why opening one decodes it again: the alternative is
+   * four whole parts of floating point kept against the chance that somebody
+   * opens one, which is the largest thing this app could hold and usually
+   * wasted. Energy is kept because every share inside a part is a share of it,
+   * and counting it again would mean reading the part back.
    */
   #held = new Map<string, StemPart>();
 
@@ -89,7 +89,7 @@ export class SeparateSession {
     this.clear();
     this.#set({ busy: 'reading the file…', from: file.name });
 
-    const buffer = await this.#decode(file);
+    let buffer: AudioBuffer | null = await this.#decode(file);
     if (!buffer) {
       this.#set({ busy: null, from: null });
       this.#store.set({ status: `${file.name} could not be read as sound` });
@@ -127,6 +127,16 @@ export class SeparateSession {
       return;
     }
 
+    /*
+     * The recording is let go of before the parts are handed over as files.
+     *
+     * Handing over means a Blob is built beside the bytes it is built from, for
+     * as long as that takes, and the recording is four bytes a sample of
+     * something nothing needs any more. Dropping it first keeps that moment
+     * below the peak the separation itself already reached, so the length this
+     * will take on is decided by one number rather than two.
+     */
+    buffer = null;
     const stems = this.#adopt(done.parts, file.name);
     this.#set({
       busy: null,
@@ -157,9 +167,17 @@ export class SeparateSession {
     this.#set({ busy: `looking inside the ${part.name.toLowerCase()}…`, progress: 0 });
     await new Promise((wake) => setTimeout(wake, 0));
 
+    const stem = this.#stem(id);
+    const audio = stem ? await this.#audioOf(stem) : null;
+    if (!audio) {
+      this.#set({ busy: null });
+      this.#store.set({ status: `the ${part.name.toLowerCase()} could not be read back` });
+      return;
+    }
+
     const inside = await this.#separator.refine(
       part,
-      part.audio.sampleRate,
+      audio,
       { lean: this.state.lean },
       (at, of, what) => {
         this.#set({ busy: `${what}…`, progress: of > 0 ? at / of : 0 });
@@ -403,11 +421,10 @@ export class SeparateSession {
   /**
    * Turn what the separator gave back into recordings the app can hold.
    *
-   * Encoded once, here, and the AudioBuffer is let go of straight after — except
-   * for the four, which are kept so that opening one does not mean decoding it
-   * again. Twenty four bits, matching every other file this app writes: a part is
-   * something somebody will put under a voiceover, and the room underneath the
-   * quiet detail is the whole reason for the depth.
+   * Each part arrives already written as a file — see `written.ts` — so this
+   * hands that file over rather than encoding anything, and the part lets go of
+   * its bytes as it does. The waveform and the share come with it, both counted
+   * while the part was being written, so nothing here reads a sample.
    */
   #adopt(parts: readonly StemPart[], from: string): Stem[] {
     const out: Stem[] = [];
@@ -415,7 +432,7 @@ export class SeparateSession {
       const seconds = part.audio.duration;
       const sampleId = this.#design.takeOnRecording({
         name: `${part.name} · ${from}`,
-        blob: encodeWav(part.audio),
+        blob: part.audio.wav(),
         seconds,
         tags: ['separated', part.under ?? part.id],
         // On loan until one of them is used. Four parts of a three minute track
@@ -431,7 +448,7 @@ export class SeparateSession {
         under: part.under,
         sampleId,
         share: part.share,
-        peaks: peaksOf(part.audio),
+        peaks: part.audio.peaks,
         seconds,
         // The bass is the low end of what is left, and there is nothing inside
         // "the low end" to find. The other three all have things in them.
@@ -450,8 +467,6 @@ export class SeparateSession {
    * a part could not be read on a page where nothing had been played yet.
    */
   async #audioOf(stem: Stem): Promise<AudioBuffer | null> {
-    const held = this.#held.get(stem.id);
-    if (held) return held.audio;
     const ctx = this.#engine.start();
     this.#store.set({ ready: true });
     if (!(await decodeSample(stem.sampleId, ctx))) return null;
@@ -471,37 +486,3 @@ export class SeparateSession {
   }
 }
 
-/** How many points a waveform is drawn from. */
-const PEAKS = 700;
-
-/**
- * The loudest sample in each slice of a part, for drawing it.
- *
- * Kept because the audio is not. A waveform is seven hundred numbers and the
- * sound it came from is tens of megabytes, and the screen redraws far more often
- * than anybody plays anything.
- *
- * The loudest rather than the average, because an average of a waveform is
- * roughly nothing however loud it is: a drum part drawn from its mean would be a
- * flat line with the odd bump.
- */
-function peaksOf(buffer: AudioBuffer, count = PEAKS): Float32Array {
-  const out = new Float32Array(count);
-  const lanes: Float32Array[] = [];
-  for (let c = 0; c < buffer.numberOfChannels; c++) lanes.push(buffer.getChannelData(c));
-  const per = buffer.length / count;
-
-  for (let at = 0; at < count; at++) {
-    const from = Math.floor(at * per);
-    const to = Math.min(buffer.length, Math.floor((at + 1) * per));
-    let most = 0;
-    for (const lane of lanes) {
-      for (let i = from; i < to; i++) {
-        const value = Math.abs(lane[i]);
-        if (value > most) most = value;
-      }
-    }
-    out[at] = Math.min(1, most);
-  }
-  return out;
-}

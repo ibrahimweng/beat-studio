@@ -24,6 +24,7 @@
 
 import type { Progress } from './types.ts';
 import { analyse, HOP, like, magnitudes, maskInto, SIZE, synthesise, type Spectra } from './stft.ts';
+import { Written } from './written.ts';
 
 /**
  * How much is worked on at a time, and how much of it two blocks share.
@@ -99,21 +100,14 @@ export async function inBlocks(
   onStep?: Progress,
   what = 'separating',
   finely: HowFinely = { size: SIZE, hop: HOP },
-): Promise<AudioBuffer[]> {
+): Promise<Written[]> {
   const rate = input.sampleRate;
   const length = input.length;
   const source: Float32Array[] = [];
   for (let c = 0; c < channels; c++) source.push(input.getChannelData(c));
 
-  const outs: AudioBuffer[] = [];
-  const lanes: Float32Array[][] = [];
-  for (let p = 0; p < parts; p++) {
-    const buffer = new AudioBuffer({ numberOfChannels: channels, length, sampleRate: rate });
-    outs.push(buffer);
-    const own: Float32Array[] = [];
-    for (let c = 0; c < channels; c++) own.push(buffer.getChannelData(c));
-    lanes.push(own);
-  }
+  const outs: Written[] = [];
+  for (let p = 0; p < parts; p++) outs.push(new Written(length, channels, rate));
   if (!parts) return outs;
 
   /*
@@ -133,6 +127,29 @@ export async function inBlocks(
     Math.min(Math.round((OVERLAP_SECONDS * rate) / hop) * hop, Math.floor(blockLength / 4 / hop) * hop),
   );
   const stride = Math.max(hop, blockLength - fade);
+
+  /*
+   * The stretch each part is added into before it is written out.
+   *
+   * A sample is touched by at most two blocks — the one it is in and the one it
+   * overlaps — so once the following block has been added there is nothing left
+   * to come, and it can be quantised and handed over. Keeping only what is still
+   * open means one block's worth of floating point per part instead of the whole
+   * recording's — twenty five megabytes whatever the recording is, against seven
+   * hundred and thirty for eight minutes of stereo — and it is what lets a
+   * recording that long be taken apart at all.
+   *
+   * A window longer than the block by one analysis window, because `synthesise`
+   * hands back the block plus the tail of its last window.
+   */
+  const window: Float32Array[][] = [];
+  for (let p = 0; p < parts; p++) {
+    const own: Float32Array[] = [];
+    for (let c = 0; c < channels; c++) own.push(new Float32Array(blockLength + finely.size));
+    window.push(own);
+  }
+  /** Where the window starts, which is also everything written so far. */
+  let windowFrom = 0;
 
   /*
    * Where each block starts, worked out in one go.
@@ -171,8 +188,36 @@ export async function inBlocks(
       const mask = masks[p];
       for (let c = 0; c < channels; c++) {
         maskInto(specs[c], mask, scratch);
-        addRamped(lanes[p][c], synthesise(scratch), from, risesFor, fallsFrom, fade);
+        addRamped(
+          window[p][c],
+          synthesise(scratch),
+          from - windowFrom,
+          risesFor,
+          fallsFrom,
+          fade,
+          length - windowFrom,
+        );
       }
+    }
+
+    /*
+     * Hand over everything the next block cannot reach, and slide the window on.
+     *
+     * The next block starts at `starts[index + 1]`, so nothing below that will
+     * ever be added to again. On the last block there is no next one and the
+     * rest of the recording goes.
+     */
+    const settled = index < starts.length - 1 ? Math.min(length, starts[index + 1]) : length;
+    const count = settled - windowFrom;
+    if (count > 0) {
+      for (let p = 0; p < parts; p++) outs[p].write(windowFrom, window[p], 0, count);
+      for (const own of window) {
+        for (const lane of own) {
+          lane.copyWithin(0, count);
+          lane.fill(0, Math.max(0, lane.length - count));
+        }
+      }
+      windowFrom = settled;
     }
 
     await new Promise((wake) => setTimeout(wake, 0));
@@ -187,6 +232,10 @@ export async function inBlocks(
  *
  * `risesFor` is nought on the first block and `fallsFrom` is negative on the
  * last, since neither of those has a neighbour on that side to hand over to.
+ *
+ * `limit` is how much of the window is still inside the recording. It is not the
+ * window's own length: the window is deliberately longer than a block, so the
+ * end of the recording has to be said rather than inferred from the array.
  */
 function addRamped(
   into: Float32Array,
@@ -195,10 +244,11 @@ function addRamped(
   risesFor: number,
   fallsFrom: number,
   fallsFor: number,
+  limit: number,
 ): void {
   for (let i = 0; i < block.length; i++) {
     const at = start + i;
-    if (at >= into.length) break;
+    if (at >= limit || at >= into.length) break;
     let weight = 1;
     if (risesFor > 0 && i < risesFor) weight = i / risesFor;
     if (fallsFrom >= 0 && i >= fallsFrom) weight = Math.max(0, 1 - (i - fallsFrom) / fallsFor);

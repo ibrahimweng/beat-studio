@@ -51,14 +51,31 @@ import {
 /**
  * The longest recording this will take on.
  *
- * Not arbitrary. Four parts are built at once, each as long as the recording and
- * at full precision, which is four times the size of the file in memory before
- * anything else — about three hundred megabytes for three minutes of stereo.
- * Eight minutes is where a browser tab starts failing to allocate rather than
- * getting slower, and failing to allocate halfway through loses the work.
- * Refusing up front and saying why is the better of the two.
+ * Not arbitrary, and it moved, and the ceiling did not — what moved is what a
+ * minute costs to reach it.
+ *
+ * Measured, by separating thirty seconds and ninety and taking the difference,
+ * so that the part which grows is separated from the part which does not:
+ *
+ *   peak = 111 MB, plus 90 MB for every minute of forty eight kilohertz stereo
+ *
+ * The fixed 111 megabytes is one block's spectrograms and masks, which is the
+ * same whether the recording is a minute or an hour. The 90 is 15.6 bytes for
+ * every sample of every channel, and it is exactly what the arithmetic says it
+ * should be: four bytes for the recording itself, and twelve for the four parts
+ * at twenty four bits.
+ *
+ * It used to be 180 a minute, because the parts were built as whole lanes of
+ * floating point — sixteen bytes rather than twelve — and then encoded, so both
+ * existed at once for another twelve. Eight minutes came to about 1.5 gigabytes,
+ * which is where a browser tab stops allocating rather than getting slower, and
+ * failing halfway through loses the work. Parts are now written as they are
+ * made, one block at a time: see `written.ts`. The same wall at half the cost a
+ * minute is twice as far away, so eight minutes becomes sixteen.
+ *
+ * Refusing up front and saying why is still better than failing halfway.
  */
-const LONGEST_SECONDS = 8 * 60;
+const LONGEST_SECONDS = 16 * 60;
 
 /** Above this it is worth saying how long it will take before starting. */
 export const LONG_SECONDS = 45;
@@ -171,7 +188,7 @@ async function separate(
     about: ABOUT[id],
     under: null,
     audio: audio[at],
-    share: total > 0 ? energyOf(audio[at], channels) / total : 0,
+    share: total > 0 ? audio[at].energy / total : 0,
   }));
 
   return {
@@ -304,11 +321,11 @@ export function lowWeights(bins: number, size: number, rate: number, to: number)
 /** Take one of the four further, or give back nothing when it cannot be. */
 async function refine(
   part: StemPart,
-  rate: number,
+  audio: AudioBuffer,
   _options: SeparateOptions = {},
   onStep?: Progress,
 ): Promise<StemPart[]> {
-  if (part.id === 'drums') return refineDrums(part, rate, onStep);
-  if (part.id === 'tonal' || part.id === 'lead') return refineTonal(part, onStep);
+  if (part.id === 'drums') return refineDrums(part, audio, onStep);
+  if (part.id === 'tonal' || part.id === 'lead') return refineTonal(part, audio, onStep);
   return [];
 }

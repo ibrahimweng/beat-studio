@@ -20,10 +20,10 @@
 
 import { NAMES as PITCH_NAMES } from '../../constants.ts';
 import { mono } from '../listen.ts';
-import { energyOf, inBlocks, type Block, type HowFinely } from './blocks.ts';
+import { inBlocks, type Block, type HowFinely } from './blocks.ts';
 import { BANDS, drumHits, type BandId, type DrumHit, type DrumKind } from './hits.ts';
 import { binHz, HOP, SIZE } from './stft.ts';
-import type { Progress, StemPart } from './types.ts';
+import type { PartAudio, Progress, StemPart } from './types.ts';
 
 /* ---------------------------------------------------------------- the drums */
 
@@ -92,10 +92,11 @@ const RINGS_FOR = 4;
  */
 export async function refineDrums(
   part: StemPart,
-  rate: number,
+  audio: AudioBuffer,
   onStep?: Progress,
 ): Promise<StemPart[]> {
-  const hits = drumHits(mono(part.audio), rate);
+  const rate = audio.sampleRate;
+  const hits = drumHits(mono(audio), rate);
   if (!hits.length) return [];
 
   const kinds = hits.map((hit) => hit.kind);
@@ -104,9 +105,9 @@ export async function refineDrums(
   const present = DRUM_ORDER.filter((kind) => kinds.includes(kind));
   if (!present.length) return [];
 
-  const channels = Math.min(2, part.audio.numberOfChannels);
-  const audio = await inBlocks(
-    part.audio,
+  const channels = Math.min(2, audio.numberOfChannels);
+  const inside = await inBlocks(
+    audio,
     channels,
     present.length + 1,
     (block) => divideByHits(block, hits, kinds, present, rate),
@@ -115,14 +116,14 @@ export async function refineDrums(
   );
 
   const counted = present.map((kind) => kinds.filter((one) => one === kind).length);
-  const shareOf = sharesWithin(part, audio, channels);
+  const shareOf = sharesWithin(part, inside);
 
   const parts: StemPart[] = present.map((kind, at) => ({
     id: `${part.id}.${kind}`,
     name: DRUM_NAMES[kind],
     about: `${DRUM_ABOUT[kind]} · ${counted[at]} hit${counted[at] === 1 ? '' : 's'}`,
     under: part.id,
-    audio: audio[at],
+    audio: inside[at],
     share: shareOf(at),
   }));
   parts.push({
@@ -130,7 +131,7 @@ export async function refineDrums(
     name: 'Rest',
     about: 'What no hit accounted for: the room, the bleed, and anything missed',
     under: part.id,
-    audio: audio[present.length],
+    audio: inside[present.length],
     share: shareOf(present.length),
   });
   return parts;
@@ -307,13 +308,9 @@ function divideByHits(
  * true and they were shares of different things. Every number in the tree now
  * means the same thing, so a part and everything inside it come to the same total.
  */
-function sharesWithin(
-  part: StemPart,
-  audio: readonly AudioBuffer[],
-  channels: number,
-): (at: number) => number {
-  const total = energyOf(part.audio, channels);
-  return (at) => (total > 0 ? part.share * (energyOf(audio[at], channels) / total) : 0);
+function sharesWithin(part: StemPart, inside: readonly PartAudio[]): (at: number) => number {
+  const total = part.audio.energy;
+  return (at) => (total > 0 ? part.share * (inside[at].energy / total) : 0);
 }
 
 /* ------------------------------------------------------------- the tonal part */
@@ -490,13 +487,14 @@ function loudestIn(mag: Float32Array, row: number, from: number, to: number): { 
  */
 export async function refineTonal(
   part: StemPart,
+  audio: AudioBuffer,
   onStep?: Progress,
 ): Promise<StemPart[]> {
-  const channels = Math.min(2, part.audio.numberOfChannels);
+  const channels = Math.min(2, audio.numberOfChannels);
   const seen = REGISTERS.map(() => ({ frames: 0, low: Infinity, high: 0 }));
 
-  const audio = await inBlocks(
-    part.audio,
+  const inside = await inBlocks(
+    audio,
     channels,
     REGISTERS.length + 1,
     (block) => divideByLines(block, seen),
@@ -505,8 +503,8 @@ export async function refineTonal(
     FOR_LINES,
   );
 
-  const perFrame = FOR_LINES.hop / part.audio.sampleRate;
-  const shareOf = sharesWithin(part, audio, channels);
+  const perFrame = FOR_LINES.hop / audio.sampleRate;
+  const shareOf = sharesWithin(part, inside);
 
   const parts: StemPart[] = [];
   REGISTERS.forEach((register, at) => {
@@ -520,7 +518,7 @@ export async function refineTonal(
         `Held notes from ${noteFor(held.low)} to ${noteFor(held.high)}, ` +
         `sounding for ${(held.frames * perFrame).toFixed(1)}s in total`,
       under: part.id,
-      audio: audio[at],
+      audio: inside[at],
       share: shareOf(at),
     });
   });
@@ -531,7 +529,7 @@ export async function refineTonal(
     name: 'Rest',
     about: 'What no line accounted for: noise, decays, and anything too short to follow',
     under: part.id,
-    audio: audio[REGISTERS.length],
+    audio: inside[REGISTERS.length],
     share: shareOf(REGISTERS.length),
   });
   return parts;
