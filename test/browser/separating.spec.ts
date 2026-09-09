@@ -166,6 +166,105 @@ async function recordingsShown(page: import('@playwright/test').Page): Promise<n
   return Number(/Recordings · (\d+)/.exec(said)?.[1] ?? '0');
 }
 
+test.describe('taking apart a stretch of it', () => {
+  /*
+   * The stretch appears after the first separation, not before it.
+   *
+   * Dropping a file in and getting the parts back is what the screen is for, so
+   * the stretch is the second question rather than a form in front of the first.
+   * By the time it is asked there is a length to choose from and a file still in
+   * hand, which is why the boxes can be filled in with the whole recording.
+   */
+  test('offers the whole recording once there is one', async ({ page }) => {
+    await takeApart(page, 8);
+    await expect(page.locator('.sep__span')).toBeVisible();
+    await expect(page.locator('.sep__time').first()).toHaveValue('0:00');
+    await expect(page.locator('.sep__time').nth(1)).toHaveValue('0:08');
+    await expect(page.locator('.sep__of')).toHaveText('of 0:08');
+    // Nothing to go back to yet, so there is nothing offering to.
+    await expect(page.getByRole('button', { name: 'All of it' })).toBeDisabled();
+  });
+
+  test('takes apart only the stretch it is given', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+
+    await expect(page.locator('.sep__row')).toHaveCount(4, { timeout: 60_000 });
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:02–0:06');
+  });
+
+  /*
+   * The parts say which stretch they came out of.
+   *
+   * They are registered as recordings the moment they exist, and a library with
+   * two separations of the same track in it is unreadable if every part is
+   * called "Drums · beat.wav". The stretch is the only thing that tells them
+   * apart, so it goes in the name.
+   */
+  test('names the parts after the stretch they came from', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+    await expect(page.locator('.sep__row')).toHaveCount(4, { timeout: 60_000 });
+
+    /*
+     * Found by searching for the stretch, which is the way somebody would.
+     *
+     * The picker only draws the first dozen of a library, so looking for a name
+     * among the buttons finds whichever twelve happened to be drawn. The search
+     * counts all of them, and the count in the group's title is the answer.
+     */
+    await page.locator('.rail__screen[data-screen="design"]').click();
+    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+
+    const recordings = page.locator('.pick-group__title', { hasText: 'Recordings' });
+    await page.locator('.pick-find--held').fill('0:02–0:06');
+    await expect(recordings).toContainText('Recordings · 4');
+    // And a stretch that was never taken apart finds none of them, which is
+    // what makes the first half of this a claim rather than a coincidence.
+    await page.locator('.pick-find--held').fill('7:31–9:02');
+    await expect(recordings).toContainText('0 of 4');
+  });
+
+  test('goes back to all of it', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:06');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:02–0:06', {
+      timeout: 60_000,
+    });
+
+    await page.getByRole('button', { name: 'All of it' }).click();
+    await expect(page.locator('.sep .appbar__title')).toHaveText('beat.wav · 0:08', {
+      timeout: 60_000,
+    });
+    await expect(page.locator('.sep__time').first()).toHaveValue('0:00');
+    await expect(page.locator('.sep__time').nth(1)).toHaveValue('0:08');
+  });
+
+  /*
+   * A stretch too short to mean anything is refused rather than attempted.
+   *
+   * Half a second is very nearly all edge — the widest median reaches a fifth of
+   * a second either way — so it would come back looking broken rather than
+   * looking short, and nobody asks for it on purpose.
+   */
+  test('refuses a stretch that is only edges', async ({ page }) => {
+    await takeApart(page, 8);
+    await page.locator('.sep__time').first().fill('0:02');
+    await page.locator('.sep__time').nth(1).fill('0:02');
+    await page.getByRole('button', { name: 'Take apart this stretch' }).click();
+
+    await expect(page.locator('.sep__said')).toContainText('at least 1 seconds');
+    // And the parts that were already there are still there.
+    await expect(page.locator('.sep__row')).toHaveCount(4);
+  });
+});
+
 test.describe('taking a beat apart', () => {
   test('comes back as four parts, and says what it found', async ({ page }) => {
     await takeApart(page);

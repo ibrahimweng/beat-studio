@@ -57,6 +57,17 @@ export class SeparateSession {
    */
   #held = new Map<string, StemPart>();
 
+  /**
+   * The file the parts came out of, kept so a stretch of it can be asked for.
+   *
+   * The file and not the samples. A decoded recording is four bytes a sample of
+   * something already read, and holding it against the chance that somebody
+   * narrows the range would put the length this screen can take straight back
+   * where it was. A File is a handle to bytes on disk, and reading it a second
+   * time costs a second at the front of work that takes a minute.
+   */
+  #file: File | null = null;
+
   /** What is sounding on this screen, so it can be stopped. */
   #playing: AudioBufferSourceNode[] = [];
 
@@ -89,13 +100,74 @@ export class SeparateSession {
     this.clear();
     this.#set({ busy: 'reading the file…', from: file.name });
 
-    let buffer: AudioBuffer | null = await this.#decode(file);
-    if (!buffer) {
+    const whole = await this.#decode(file);
+    if (!whole) {
       this.#set({ busy: null, from: null });
       this.#store.set({ status: `${file.name} could not be read as sound` });
       return;
     }
 
+    this.#file = file;
+    this.#set({ whole: whole.duration, span: null });
+    await this.#take(whole, null);
+  }
+
+  /**
+   * Take the same recording apart again, between two times.
+   *
+   * The reason to want this is rarely tidiness. A recording longer than this can
+   * hold at once is still one somebody wants the drums out of, and eight bars is
+   * the part they were going to use anyway — so the length limit stops being a
+   * limit on what can be worked with and becomes a limit on how much at a time.
+   *
+   * And a stretch often separates better than the whole. The measurements that
+   * decide the split are made over everything they are given: what repeats, and
+   * what sits in the middle. A chorus arriving halfway through a song moves all
+   * of them, and the verse on its own is the cleaner question to ask.
+   *
+   * The file is read again rather than the recording being held. See {@link #file}.
+   */
+  async takeSpan(from: number, to: number): Promise<void> {
+    const file = this.#file;
+    if (!file) return;
+    const was = this.state.whole;
+    const start = Math.max(0, Math.min(from, was));
+    const end = Math.max(start, Math.min(to, was));
+    if (end - start < LEAST_SPAN) {
+      this.#store.set({ status: `a stretch has to be at least ${LEAST_SPAN} seconds long` });
+      return;
+    }
+
+    this.#engine.start();
+    this.#store.set({ ready: true });
+
+    // Asking for all of it is asking for no stretch at all, however it was said.
+    const span = start <= 0 && end >= was ? null : { from: start, to: end };
+
+    // The rows go, but the file does not: this is the same recording, read again.
+    this.clear();
+    this.#file = file;
+    this.#set({ busy: 'reading the file…', from: file.name, whole: was, span });
+
+    const whole = await this.#decode(file);
+    if (!whole) {
+      this.#set({ busy: null, from: null });
+      this.#store.set({ status: `${file.name} could not be read as sound` });
+      return;
+    }
+    await this.#take(span ? cut(whole, start, end) : whole, span);
+  }
+
+  /**
+   * Separate what has been decoded and cut, and adopt what comes back.
+   *
+   * The half of taking a recording apart that does not care where the samples
+   * came from, which is what lets the whole file and a stretch of it share it.
+   */
+  async #take(input: AudioBuffer, span: { from: number; to: number } | null): Promise<void> {
+    const file = this.#file;
+    if (!file) return;
+    let buffer: AudioBuffer | null = input;
     const seconds = buffer.duration;
     const expected = expectedSeconds(seconds);
     this.#set({
@@ -137,7 +209,10 @@ export class SeparateSession {
      * will take on is decided by one number rather than two.
      */
     buffer = null;
-    const stems = this.#adopt(done.parts, file.name);
+    const stems = this.#adopt(
+      done.parts,
+      span ? `${file.name} ${clock(span.from)}–${clock(span.to)}` : file.name,
+    );
     this.#set({
       busy: null,
       progress: 1,
@@ -400,6 +475,7 @@ export class SeparateSession {
    */
   clear(): void {
     this.stop();
+    this.#file = null;
     this.#held.clear();
     this.#store.set({ separation: { ...emptySeparation(), lean: this.state.lean } });
     // After the state is cleared, so that nothing still on screen is counted as
@@ -486,3 +562,41 @@ export class SeparateSession {
   }
 }
 
+
+/**
+ * The shortest stretch worth asking for.
+ *
+ * A guard against a typo rather than a considered minimum. A block is sixteen
+ * seconds and the widest median reaches across a fifth of a second either way,
+ * so a stretch of half a second is very nearly all edge — it would come back
+ * looking broken, and nobody asks for it on purpose.
+ */
+const LEAST_SPAN = 1;
+
+/**
+ * A stretch of a recording, as a recording of its own.
+ *
+ * Copied rather than referred to. A subarray of the decoded file would keep the
+ * whole file alive behind it, which is the thing the length limit is made of, and
+ * everything downstream wants a recording that starts at zero anyway.
+ */
+function cut(buffer: AudioBuffer, from: number, to: number): AudioBuffer {
+  const rate = buffer.sampleRate;
+  const start = Math.max(0, Math.round(from * rate));
+  const end = Math.min(buffer.length, Math.round(to * rate));
+  const out = new AudioBuffer({
+    numberOfChannels: buffer.numberOfChannels,
+    length: Math.max(1, end - start),
+    sampleRate: rate,
+  });
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    out.getChannelData(c).set(buffer.getChannelData(c).subarray(start, end));
+  }
+  return out;
+}
+
+/** Minutes and seconds, for saying which stretch a part came out of. */
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}

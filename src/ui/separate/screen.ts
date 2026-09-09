@@ -83,6 +83,69 @@ export function createSeparateScreen(session: SeparateSession): View {
     helpButton('separate', 'taking a beat apart'),
   ]);
 
+  /* ------------------------------------------------------- which stretch */
+
+  /**
+   * Which part of the recording to take apart.
+   *
+   * It appears after the first separation rather than before it, which is on
+   * purpose: dropping a file in and getting the parts back is the thing this
+   * screen is for, and asking two questions before doing anything would put a
+   * form in front of it. The stretch is the second question, asked once there is
+   * something to look at and a length to choose from — and the file is still in
+   * hand, so narrowing it does not mean finding it again.
+   *
+   * Two reasons somebody wants it. A recording longer than this can hold at once
+   * is still one they want the drums out of, and eight bars is the part they were
+   * going to use. And a stretch often separates better than the whole, because
+   * every measurement that decides the split is made over all of what it is
+   * given: a chorus arriving halfway through moves them all.
+   */
+  const spanFrom = timeBox('From');
+  const spanTo = timeBox('To');
+  const spanOf = el('span', { class: 'micro-label sep__of' });
+
+  const readSpan = (): { from: number; to: number } => ({
+    from: secondsFrom(spanFrom.value, 0),
+    to: secondsFrom(spanTo.value, shownWhole),
+  });
+
+  const takeSpan = button(
+    {
+      class: 'chip chip--sm',
+      title:
+        'Take apart only this stretch of the recording. The file is read again, ' +
+        'so nothing has to be found a second time',
+      on: {
+        click: () => {
+          const { from, to } = readSpan();
+          void session.takeSpan(from, to);
+        },
+      },
+    },
+    ['Take apart this stretch'],
+  );
+
+  const takeWhole = button(
+    {
+      class: 'chip chip--sm',
+      title: 'Go back to taking apart all of it',
+      on: { click: () => void session.takeSpan(0, shownWhole) },
+    },
+    ['All of it'],
+  );
+
+  const span = el('div', { class: 'sep__span' }, [
+    el('span', { class: 'micro-label', text: 'Take apart' }),
+    spanFrom,
+    el('span', { class: 'micro-label', text: 'to' }),
+    spanTo,
+    spanOf,
+    el('div', { class: 'topbar__spacer' }),
+    takeSpan,
+    takeWhole,
+  ]);
+
   /* -------------------------------------------------------------- the parts */
 
   const list = el('div', { class: 'sep__list' });
@@ -184,16 +247,32 @@ export function createSeparateScreen(session: SeparateSession): View {
     forget,
   ]);
 
+  /**
+   * What just happened, in one line.
+   *
+   * This screen was setting the app's status and nobody was reading it: the
+   * status line belongs to the timeline, and the timeline is not mounted here.
+   * So "came apart into four parts", "nothing separable inside the drums" and
+   * "four parts written" were all being said to an empty room. It is its own
+   * line rather than a shared one because the two screens are never up at once.
+   */
+  const said = el('div', { class: 'sep__said' });
+
+  const foot = el('div', { class: 'sep__foot' }, [said, actions]);
+
   const root = el('div', { class: 'sep' }, [
     bar,
-    el('div', { class: 'sep__body' }, [busyRow, notes, nothing, list]),
-    actions,
+    el('div', { class: 'sep__body' }, [busyRow, span, notes, nothing, list]),
+    foot,
   ]);
 
   /* ------------------------------------------------------------- redrawing */
 
   /** What the rows were last drawn from, so they are redrawn only when they move. */
   let drawn: AppState['separation'] | null = null;
+
+  /** How long the file is, for the buttons to read without a state lookup. */
+  let shownWhole = 0;
 
   const paint = (state: AppState['separation']): void => {
     const working = state.busy !== null;
@@ -208,6 +287,22 @@ export function createSeparateScreen(session: SeparateSession): View {
     );
     meter.style.width = `${Math.round(state.progress * 100)}%`;
 
+    shownWhole = state.whole;
+    span.style.display = state.whole > 0 ? 'flex' : 'none';
+    takeSpan.disabled = working;
+    takeWhole.disabled = working || state.span === null;
+    setText(spanOf, state.whole ? `of ${clock(state.whole)}` : '');
+    /*
+     * The boxes are left alone while somebody is typing in one.
+     *
+     * Everything else here redraws from the state on every change, which is what
+     * keeps the screen and the session in step. A text box is the exception: it
+     * holds a half-finished answer that is not state yet, and writing over it
+     * mid-word is the oldest bug in forms.
+     */
+    if (document.activeElement !== spanFrom) spanFrom.value = clock(state.span?.from ?? 0);
+    if (document.activeElement !== spanTo) spanTo.value = clock(state.span?.to ?? state.whole);
+
     const has = state.stems.length > 0;
     nothing.style.display = has || working ? 'none' : 'block';
     actions.style.display = has ? 'flex' : 'none';
@@ -217,7 +312,9 @@ export function createSeparateScreen(session: SeparateSession): View {
     setText(
       title,
       state.from
-        ? `${state.from} · ${length(state.seconds)}`
+        ? state.span
+          ? `${state.from} · ${clock(state.span.from)}–${clock(state.span.to)}`
+          : `${state.from} · ${length(state.seconds)}`
         : 'Nothing taken apart yet',
     );
     lean.value = String(state.lean);
@@ -363,6 +460,11 @@ export function createSeparateScreen(session: SeparateSession): View {
     el: root,
     update(state: AppState) {
       paint(state.separation);
+      setText(said, state.status ?? '');
+      said.style.display = state.status ? 'block' : 'none';
+      // The rule above the foot is only worth drawing when there is something
+      // under it — otherwise an empty screen has a line across the bottom.
+      foot.style.display = state.status || state.separation.stems.length ? 'block' : 'none';
       // Nothing to place until there is a piece to place it on, which there
       // always is: a piece has a length of its own with or without a video.
       placeAll.disabled = state.separation.stems.length === 0;
@@ -409,6 +511,40 @@ function share(value: number): string {
 }
 
 /** A length in minutes and seconds. */
+/** A box for a time, which is a text box because "1:30" is how people write one. */
+function timeBox(label: string): HTMLInputElement {
+  return el('input', {
+    class: 'sep__time',
+    type: 'text',
+    attrs: { 'aria-label': label, inputmode: 'numeric', size: '5', spellcheck: 'false' },
+  }) as HTMLInputElement;
+}
+
+/**
+ * Read a time somebody typed.
+ *
+ * Minutes and seconds, or just seconds, because both are things people write and
+ * neither is ambiguous: "90" is a minute and a half and "1:30" is the same
+ * minute and a half. Anything that is not either falls back to what was there,
+ * rather than to nought — a mistyped end time that silently became the start of
+ * the recording would look like the separation had gone wrong.
+ */
+function secondsFrom(text: string, fallback: number): number {
+  const said = text.trim();
+  if (!said) return fallback;
+  const parts = said.split(':');
+  if (parts.length > 2) return fallback;
+  const numbers = parts.map((one) => Number(one));
+  if (numbers.some((one) => !Number.isFinite(one) || one < 0)) return fallback;
+  return numbers.length === 2 ? numbers[0] * 60 + numbers[1] : numbers[0];
+}
+
+/** Minutes and seconds, always, so an empty box never means nought. */
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 function length(seconds: number): string {
   if (!seconds) return '';
   const whole = Math.round(seconds);
