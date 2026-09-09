@@ -26,10 +26,17 @@
  * tuning will make it. `tools/separate-check.html` measures all of it and the
  * README says the numbers.
  *
- * The one property that is exact: the four parts add back up to the recording,
- * sample for sample. Every cell is divided between them by four shares that add
- * to one, the round trip in `stft.ts` loses nothing, and the blocks are joined by
- * weights that add to one. There is no residue and nothing is counted twice.
+ * The one property that is exact: the four parts add back up to the recording.
+ * Every cell is divided between them by four shares that add to one, the round
+ * trip in `stft.ts` loses nothing, and the blocks are joined by weights that add
+ * to one. There is no residue and nothing is counted twice.
+ *
+ * What sits between that and sample for sample is the format the parts are
+ * written in — twenty four bits, like every file this app makes — which puts
+ * each of them within half a step of the number the arithmetic produced. Two
+ * ten-millionths across all four, and a hundred and thirty decibels under the
+ * mix. The division is exact; what is written down is written at the depth
+ * files are written at. See `written.ts`.
  */
 
 import { energyOf, inBlocks, type Block } from './blocks.ts';

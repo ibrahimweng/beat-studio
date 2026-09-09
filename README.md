@@ -90,9 +90,11 @@ the real thing gets driven.
 Taking a beat apart is here too, and it is the same shape of question: given
 this recording, what share of every moment belongs to which part. The claim
 that matters is exact and is checked at every level — the four parts add back
-up to the recording sample for sample, and so do the parts of the drums — which
-holds because the shares add to one, the transform loses nothing and the blocks
-are joined by ramps that add to one. Break any of the three and that test says
+up to the recording, and so do the parts of the drums — which holds because the
+shares add to one, the transform loses nothing and the blocks are joined by
+ramps that add to one. Writing each part as a 24-bit file, as every file here
+is written, is the only thing between that and sample for sample. Break any of
+the three and that test says
 so, and no other one would, because each part on its own would still look
 reasonable. The rest is measured against material the app made itself, where
 the right answer is known: all thirteen voices of its own kit come back as one
@@ -959,10 +961,17 @@ Four parts.
 - **Lead.** What is in front: centred in the mix, and not part of the loop.
 - **Tonal.** Everything else that is held rather than struck.
 
-**They add back up to the recording exactly.** Not nearly, and not once a fade
-at each end is allowed for. Every moment of the file is divided between the
-four by shares that add to one, so nothing is lost and nothing is counted
-twice. Play all four together and you have the track back, sample for sample.
+**They add back up to the recording.** Not nearly, and not once a fade at each
+end is allowed for. Every moment of the file is divided between the four by
+shares that add to one, so nothing is lost and nothing is counted twice. Play
+all four together and you have the track back.
+
+The one qualification is the format they are written in. A part is a 24-bit
+file, like everything else this app writes, so each of the four is within half
+a step of the number the arithmetic produced — about two ten-millionths across
+all four, which is a hundred and thirty decibels below anything in the mix and
+further below anything audible. The division itself is exact; what is written
+down is written down at the depth files are written at.
 
 Open any of the four and it comes apart again. The drums become the kick, the
 snare, the toms, the hats and the cymbals; the other two become the lines that
@@ -993,13 +1002,25 @@ it being a special case.
 They are also in the sound picker under your recordings, so any of them can be
 placed anywhere, any number of times, like any other sound.
 
+- **Take apart this stretch** reads the same file again between two times. For
+  a track longer than this can hold at once, and for the verse of a song.
+- The **name** of every part is a box you can type in. It renames the recording
+  with it, so a layer made from that part says "Second violins" rather than
+  "Tonal".
+
 A part is kept between visits once you use it. Placing one on the timeline is
 what says you want it, and from then on it is a recording like any other:
 saved, in the picker, there tomorrow. The ones you did not use are not written
 down, which is deliberate — four parts of a three minute track come to a couple
 of hundred megabytes, and storing all of that the moment it exists, before
-anybody has said they want any of it, would be slow and mostly wasted. The
-screen itself starts empty each time.
+anybody has said they want any of it, would be slow and mostly wasted.
+
+**Keep for next time** is how you say you want the lot. It settles every part
+and writes the screen down — the rows, the names, the shares, the waveforms —
+so the beat you were halfway through taking apart is still there when you come
+back. Without it the screen starts empty, which is the honest default when the
+alternative is a couple of hundred megabytes nobody asked for. Forget clears
+both; the recordings you actually used stay.
 
 ### How it works, and what it cannot do
 
@@ -1096,6 +1117,26 @@ The line under the parts says what the measurements actually found — whether
 there was a loop and how strongly, whether there were two channels to compare —
 because that is the evidence, and a score would not be.
 
+**The lines inside a part are named by you.** What can be measured about a held
+line is measured and said: how bright it is — the average harmonic number,
+weighted by loudness, which is 1.00 for a sine and 2.41 for a sawtooth — and
+whether its pitch holds still, counted as how often it turns round, which is
+10.4 times a second for vibrato at five and a half hertz and 0.4 for a melody
+stepping every half second. A register that held two lines at once says so
+rather than describing one of them, because it cannot have sounded for longer
+than the recording did.
+
+None of that says which instrument it is, and nothing here ever will: that needs
+a model trained on instruments, which is the one thing this is built not to
+need. So every part's name is a box you can type in. You know in a second, and
+the measurements are the evidence for what you write.
+
+How each note starts is the one measurement that would help most and is not
+here. Struck or plucked against bowed or blown is the strongest cue of the
+three, and lines are followed through a window that puts a frame every forty
+three milliseconds — the whole difference between a plucked attack and a bowed
+one is most of one frame. It would be a coin toss with a confident word on it.
+
 **Hits and Notes**, at the top right, decides which way the next separation
 leans. A heavily compressed mix has its drums smeared across time until they
 look partly like notes; an acoustic recording has a piano attack that looks
@@ -1105,10 +1146,22 @@ partly like a drum. One control, honestly labelled, beats guessing.
 
 About a fifth of the length of the track: a thirty second beat takes six and a
 half seconds in a browser, and a three minute one takes about forty. Opening a
-part costs about the same again. Eight minutes is as much as a browser can hold
-at once — four parts at full precision is four times the size of the file in
-memory before anything else — and it says so before it starts rather than
-failing halfway through.
+part costs about the same again.
+
+Sixteen minutes is as much as a browser can hold at once, and it says so before
+it starts rather than failing halfway through. Measured, the peak is 111
+megabytes plus 90 for every minute of forty eight kilohertz stereo — the fixed
+part is one block's spectrograms and is the same for an hour as for a minute,
+and the 90 is four bytes a sample for the recording and twelve for the four
+parts. It used to be 180 a minute, because a part was built as a whole lane of
+floating point and then encoded, so both existed at once. Parts are now written
+as they are made, which is what moved eight minutes to sixteen.
+
+If the file is longer than that, or you only want the verse, you can take apart
+a stretch of it instead. That is often the better question anyway: everything
+that decides the split is measured over all of what it is given, so a chorus
+arriving halfway through a song moves the loop and the middle of the mix and
+everything downstream of both.
 
 `tools/separate-check.html` measures all of it, including on a file of your
 own, and `tools/README.md` says what each number is worth.
@@ -1249,6 +1302,7 @@ src/
       stereo.ts    how centred each moment is, from the two channels
       repeat.ts    what comes round again, and how long the loop is
       blocks.ts    working a recording a piece at a time, and joining them up
+      written.ts   a part as it is made: a file first, and samples second
       dsp.ts       the four parts, and the one separator this app ships with
       hits.ts      the hits in a drum part, and which drum each one is
       refine.ts    dividing a part between the hits and lines found in it

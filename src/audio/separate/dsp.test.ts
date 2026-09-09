@@ -61,7 +61,7 @@ async function apart(input: AudioBuffer): Promise<Record<string, Float32Array>> 
 
 describe('taking a mix into four', () => {
   /*
-   * The four add back up to the recording, sample for sample.
+   * The four add back up to the recording.
    *
    * Not nearly, and not once a fade at each end is allowed for. Three separate
    * things have to be true at once for this to hold: every cell is divided by

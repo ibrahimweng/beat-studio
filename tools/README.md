@@ -295,12 +295,15 @@ http://localhost:5173/tools/listen-check.html
 Checks taking a beat apart. Three different kinds of claim, and they are not
 equally checkable, so the page is in three parts.
 
-The first is exact. Every moment of the recording is divided between the four
-parts by shares that add to one, the transform that puts them back together
-loses nothing, and the blocks are joined by two ramps that add to one — so the
-parts sum to the recording sample for sample, not nearly. That is the one thing
-this feature can promise and the page checks it on every level: the four
-against the mix, and the parts of the drums against the drums.
+The first is exact, to the depth the parts are written at. Every moment of the
+recording is divided between the four by shares that add to one, the transform
+that puts them back together loses nothing, and the blocks are joined by two
+ramps that add to one. The division is exact; what is written down is written at
+twenty four bits like every other file this app makes, so each part is within
+half a step of the number the arithmetic produced and the four together are
+within about two ten-millionths — a hundred and thirty decibels under the mix.
+That is the one thing this feature can promise and the page checks it on every
+level: the four against the mix, and the parts of the drums against the drums.
 
 The second is against ground truth, because the mix is built here out of parts
 that are known: a kit pattern, a low sub under it, a held drone in the middle,

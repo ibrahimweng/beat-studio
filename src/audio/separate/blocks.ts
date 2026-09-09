@@ -12,9 +12,11 @@
  * across the overlap while the one before it fades out, on two straight ramps
  * that add to exactly one. Two consequences follow, and both matter. The seam
  * cannot be heard, because nothing is cut. And the parts still add back up to
- * the recording sample for sample, because a cell divided by shares that add to
- * one, reconstructed by a transform that loses nothing, and assembled by weights
- * that add to one, has been divided and not damaged.
+ * the recording, because a cell divided by shares that add to one, reconstructed
+ * by a transform that loses nothing, and assembled by weights that add to one,
+ * has been divided and not damaged. What each part is then written at — twenty
+ * four bits, in `written.ts` — is the only thing between that and sample for
+ * sample.
  *
  * Why there is an overlap at all: the medians in `hpss.ts` and the loop in
  * `repeat.ts` look a little way either side of where they are, and near the edge

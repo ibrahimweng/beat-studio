@@ -177,9 +177,9 @@ export function createSeparateScreen(session: SeparateSession): View {
     el('p', {
       class: 'hint',
       text:
-        'The parts add back up to the recording exactly, so nothing is lost and ' +
-        'nothing is counted twice. Each one becomes a recording you can place, ' +
-        'export, rebuild out of the palette, or read the hits off.',
+        'The parts add back up to the recording, so nothing is lost and nothing ' +
+        'is counted twice. Each one becomes a recording you can place, export, ' +
+        'rebuild out of the palette, read the hits off, or give a name of your own.',
     }),
     el('p', {
       class: 'hint',

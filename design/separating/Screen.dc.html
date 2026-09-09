@@ -79,8 +79,13 @@
   .sep__path--quiet{fill:var(--txt-3);}
   .sep__buttons{display:flex;gap:3px;align-items:center;}
   .chip{border:1px solid var(--line);border-radius:var(--r-4);background:var(--panel-2);color:var(--txt-2);font-size:11px;padding:4px 7px;}
+  .chip.is-off{opacity:0.4;}
   .chip--danger{color:#ff8a80;}
-  .sep__actions{display:flex;align-items:center;gap:6px;padding:8px 14px;border-top:1px solid var(--line);background:var(--side);}
+  .sep__span{display:flex;align-items:center;gap:8px;}
+  .sep__time{width:60px;padding:4px 6px;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;color:var(--txt);background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-6);}
+  .sep__foot{border-top:1px solid var(--line);background:var(--side);}
+  .sep__said{padding:6px 14px 0;font-size:12px;color:var(--txt-2);}
+  .sep__actions{display:flex;align-items:center;gap:6px;padding:8px 14px;}
 </style>
 </helmet>
 
@@ -105,7 +110,7 @@
   <div class="sep">
     <header class="appbar">
       <span class="btn-accent">Take a beat apart</span>
-      <span class="appbar__title">beat.wav &middot; 0:24</span>
+      <span class="appbar__title">beat.wav &middot; 3:04</span>
       <div class="topbar__spacer"></div>
       <span class="micro-label">Notes</span>
       <span class="sep__lean"></span>
@@ -114,6 +119,16 @@
     </header>
 
     <div class="sep__body">
+      <div class="sep__span">
+        <span class="micro-label">Take apart</span>
+        <span class="sep__time">0:00</span>
+        <span class="micro-label">to</span>
+        <span class="sep__time">3:04</span>
+        <span class="micro-label">of 3:04</span>
+        <div class="topbar__spacer"></div>
+        <span class="chip chip--sm">Take apart this stretch</span>
+        <span class="chip chip--sm is-off">All of it</span>
+      </div>
       <p class="hint">a loop 0.50s long, standing 47% above its surroundings &middot; two channels 27% apart, so where things sit was read from them.</p>
       <div class="sep__list">
       <div class="sep__row is-on">
@@ -167,13 +182,17 @@
       </div>
     </div>
 
-    <div class="sep__actions">
-      <span class="btn-accent">Place on the timeline</span>
-      <span class="chip chip--sm">Hear it back</span>
-      <span class="chip chip--sm">Stop</span>
-      <span class="chip chip--sm">Write the files</span>
-      <div class="topbar__spacer"></div>
-      <span class="chip chip--sm chip--danger">Forget</span>
+    <div class="sep__foot">
+      <div class="sep__said">beat.wav came apart into 4 parts in 38.6s &middot; they add back up to the recording</div>
+      <div class="sep__actions">
+        <span class="btn-accent">Place on the timeline</span>
+        <span class="chip chip--sm">Hear it back</span>
+        <span class="chip chip--sm">Stop</span>
+        <span class="chip chip--sm">Write the files</span>
+        <div class="topbar__spacer"></div>
+        <span class="chip chip--sm">Keep for next time</span>
+        <span class="chip chip--sm chip--danger">Forget</span>
+      </div>
     </div>
   </div>
 </div>
