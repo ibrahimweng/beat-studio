@@ -244,7 +244,7 @@ export function createSeparateScreen(session: SeparateSession): View {
       title:
         'Write these parts down, so this screen is here next time. Without it ' +
         'they go when you leave, and only the ones you used are kept',
-      on: { click: () => session.keepParts() },
+      on: { click: () => void session.keepParts() },
     },
     ['Keep for next time'],
   );

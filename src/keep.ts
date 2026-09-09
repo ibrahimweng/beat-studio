@@ -394,18 +394,39 @@ function inStore<T>(
           return;
         }
         let request: IDBRequest<T>;
+        let deal: IDBTransaction;
         try {
-          request = work(db.transaction(store, mode).objectStore(store));
+          deal = db.transaction(store, mode);
+          request = work(deal.objectStore(store));
         } catch {
           db.close();
           resolve(null);
           return;
         }
+
+        /*
+         * Waited for on the transaction, not on the request.
+         *
+         * A request succeeding means the database has accepted the work; it does
+         * not mean the work is on disk. Anything that reported success and then
+         * reloaded the page could lose the write it had just been told had
+         * happened — which is exactly what "Keep for next time" did, and what CI
+         * caught on a runner slow enough for the gap to open. `oncomplete` is the
+         * commit, and it fires after `onsuccess`, so the result is already here.
+         */
+        let got: T | null = null;
         request.onsuccess = () => {
-          resolve(request.result);
+          got = request.result;
+        };
+        deal.oncomplete = () => {
+          resolve(got);
           db.close();
         };
-        request.onerror = () => {
+        deal.onerror = () => {
+          resolve(null);
+          db.close();
+        };
+        deal.onabort = () => {
           resolve(null);
           db.close();
         };

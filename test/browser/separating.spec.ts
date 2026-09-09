@@ -205,6 +205,21 @@ async function recordingsSettle(page: import('@playwright/test').Page, many: num
   await expect.poll(() => recordingsShown(page), { timeout: 20_000 }).toBe(many);
 }
 
+/**
+ * Press Keep, and wait until it has actually happened.
+ *
+ * The recordings go into the browser's database, which is not instant, and the
+ * button saying "Kept" is the app's own word for that having finished — it does
+ * not change until the write comes back. Reloading before then is reloading
+ * mid-write, which is how two of these tests found a real bug: the write used
+ * to be started and forgotten, so the screen was recorded pointing at
+ * recordings that never landed.
+ */
+async function keepThem(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByRole('button', { name: 'Keep for next time' }).click();
+  await expect(page.getByRole('button', { name: 'Kept for next time' })).toBeDisabled();
+}
+
 test.describe('keeping them for next time', () => {
   /*
    * Off by default, and the reason is size.
@@ -226,8 +241,7 @@ test.describe('keeping them for next time', () => {
 
   test('brings the parts back next visit once they are kept', async ({ page }) => {
     await takeApart(page);
-    await page.getByRole('button', { name: 'Keep for next time' }).click();
-    await expect(page.getByRole('button', { name: 'Kept for next time' })).toBeDisabled();
+    await keepThem(page);
 
     await page.reload();
     await settled(page);
@@ -251,7 +265,7 @@ test.describe('keeping them for next time', () => {
     page,
   }) => {
     await takeApart(page);
-    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await keepThem(page);
     await page.reload();
     await settled(page);
 
@@ -270,7 +284,7 @@ test.describe('keeping them for next time', () => {
    */
   test('does not offer a stretch of a file it no longer has', async ({ page }) => {
     await takeApart(page);
-    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await keepThem(page);
     await page.reload();
     await settled(page);
     await page.locator('.rail__screen[data-screen="separate"]').click();
@@ -281,7 +295,7 @@ test.describe('keeping them for next time', () => {
 
   test('forgets them when the screen is cleared', async ({ page }) => {
     await takeApart(page);
-    await page.getByRole('button', { name: 'Keep for next time' }).click();
+    await keepThem(page);
     await page.getByRole('button', { name: 'Forget' }).click();
 
     await page.reload();

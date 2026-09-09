@@ -512,10 +512,32 @@ export class SeparateSession {
    * ids, and ids pointing at recordings nobody kept come back as a screen full
    * of rows that cannot be played.
    */
-  keepParts(): void {
+  async keepParts(): Promise<void> {
     const stems = this.state.stems;
-    if (!stems.length) return;
-    this.#design.keepRecordings(stems.map((one) => one.sampleId));
+    if (!stems.length || this.state.kept) return;
+
+    /*
+     * The recordings are written first, and waited for.
+     *
+     * The screen written down here is a list of recording ids, so writing it
+     * before those recordings are on disk leaves a screen pointing at nothing —
+     * and the next visit drops the whole separation rather than showing rows
+     * that cannot be played. That is not theoretical: writing the recordings
+     * used to be started and forgotten, this wrote the screen on the next line,
+     * and a page reloaded in between lost the lot. It took a CI runner slow
+     * enough to open the gap to show it.
+     *
+     * Which is also why the button only says "Kept" once this has come back:
+     * the word has to mean the parts are on disk, not that a write was begun.
+     */
+    this.#set({ busy: 'keeping them…', progress: 0 });
+    const onDisk = await this.#design.keepRecordings(stems.map((one) => one.sampleId));
+    this.#set({ busy: null, progress: 1 });
+    if (!onDisk) {
+      this.#store.set({ status: 'these parts could not be written down — the browser store refused them' });
+      return;
+    }
+
     this.#set({ kept: true });
     writeDownParts(written(this.state));
     this.#store.set({
