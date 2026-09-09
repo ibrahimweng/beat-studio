@@ -172,7 +172,13 @@ async function namesShown(
   );
 }
 
-/** How many recordings the picker is showing, or null when it shows none. */
+/**
+ * How many recordings the picker is showing, or null when it shows none.
+ *
+ * One read, taken now. That is the right question for asking whether something
+ * is absent and the wrong one for asking whether it has arrived — use
+ * {@link recordingsSettle} for that.
+ */
 async function recordingsShown(page: import('@playwright/test').Page): Promise<number | null> {
   await page.locator('.rail__screen[data-screen="design"]').click();
   await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
@@ -180,6 +186,23 @@ async function recordingsShown(page: import('@playwright/test').Page): Promise<n
   if (!(await group.count())) return null;
   const said = await group.first().innerText();
   return Number(/Recordings · (\d+)/.exec(said)?.[1] ?? '0');
+}
+
+/**
+ * Wait until the picker is showing this many recordings.
+ *
+ * Recordings come back from the browser's database, and nothing on screen says
+ * when that has finished: the app is up, drawn and usable well before they land.
+ * So a single read after a reload is a race — one this machine won every time
+ * and a loaded CI runner lost, which is how it was found. Waiting for the number
+ * to arrive is the only honest way to ask.
+ *
+ * There is no matching wait for "none", because absence cannot be waited for:
+ * the tests that check a part was *not* kept read once and are checked instead
+ * by removing the thing that forgets it and watching them fail.
+ */
+async function recordingsSettle(page: import('@playwright/test').Page, many: number): Promise<void> {
+  await expect.poll(() => recordingsShown(page), { timeout: 20_000 }).toBe(many);
 }
 
 test.describe('keeping them for next time', () => {
@@ -232,7 +255,7 @@ test.describe('keeping them for next time', () => {
     await page.reload();
     await settled(page);
 
-    expect(await recordingsShown(page)).toBe(4);
+    await recordingsSettle(page, 4);
     await page.locator('.rail__screen[data-screen="separate"]').click();
     await rowButton(page, 'drums', '▶').click();
     await expect(rowButton(page, 'drums', '■')).toBeVisible();
@@ -680,9 +703,11 @@ test.describe('keeping the parts', () => {
     await page.reload();
     await settled(page);
     // The piece comes back with its sounds on it, and the recordings they name
-    // come back with it.
+    // come back with it. Waited for rather than read once: the piece is restored
+    // from local storage and the recordings from the database, so the cues being
+    // back says nothing about whether the recordings are.
     await expect(page.locator('.cue')).toHaveCount(4);
-    expect(await recordingsShown(page)).toBe(4);
+    await recordingsSettle(page, 4);
   });
 });
 
