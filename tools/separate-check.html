@@ -1,0 +1,265 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>separate check</title></head><body><pre id="out">working…</pre>
+<script type="module">
+  /* Taking a beat apart makes several claims, and they are not equally
+     checkable.
+
+     One is exact and is checked here: the parts add back up to the recording,
+     sample for sample. Another is measurable against ground truth, by building
+     a mix out of parts that are known and asking how much of each landed where.
+     The third — whether it does anything useful on real music — has no ground
+     truth at all, so the last section takes a file you give it and reports what
+     is honestly available: the shares, what the measurements found, how long it
+     took, and whether the sum still holds. */
+  import { measured, lowWeights } from '/src/audio/separate/dsp.ts';
+  import { drumHits } from '/src/audio/separate/hits.ts';
+  import { refineDrums, refineTonal } from '/src/audio/separate/refine.ts';
+  import { mono } from '/src/audio/listen.ts';
+  import { playCue } from '/src/audio/sources.ts';
+  import { makeCue } from '/src/timeline/project.ts';
+
+  const RATE = 48000;
+  const results = [];
+  const check = (name, pass, detail) => results.push({ name, pass, detail });
+  const lines = [];
+  const say = (t) => { document.getElementById('out').textContent = t; };
+
+  const energy = (data) => { let s = 0; for (const v of data) s += v * v; return s; };
+
+  /** How much of `part` is in `stem`: one when it holds it exactly, nought when none. */
+  const heldShare = (stem, part) => {
+    let dot = 0, own = 0;
+    const n = Math.min(stem.length, part.length);
+    for (let i = 0; i < n; i++) { dot += stem[i] * part[i]; own += part[i] * part[i]; }
+    return own > 1e-20 ? dot / own : 0;
+  };
+
+  /** One kit or design voice at a list of times, as a mono signal. */
+  async function played(source, times, span, settings = {}) {
+    const ctx = new OfflineAudioContext(1, Math.ceil(RATE * span), RATE);
+    for (const at of times) {
+      const cue = {
+        ...makeCue(0, 'check', source),
+        // Pinned off: this is measuring the separation, and a yardstick that
+        // varies from take to take is measuring itself. See `src/audio/vary.ts`.
+        vary: 0, gain: 1, ...settings,
+      };
+      playCue(ctx, ctx.destination, { ...cue, id: `${JSON.stringify(source)}-${at}` }, at, 1);
+    }
+    return (await ctx.startRendering()).getChannelData(0).slice();
+  }
+
+  const add = (into, from, gain = 1) => {
+    for (let i = 0; i < Math.min(into.length, from.length); i++) into[i] += from[i] * gain;
+  };
+
+  const stereo = (left, right) => {
+    const buffer = new AudioBuffer({ numberOfChannels: 2, length: left.length, sampleRate: RATE });
+    buffer.getChannelData(0).set(left);
+    buffer.getChannelData(1).set(right);
+    return buffer;
+  };
+
+  /* ------------------------------------------------------------------------
+     A mix built out of parts that are known.
+
+     Four things, each of which the separation is supposed to find: a kit
+     pattern, a low tone under it, a centred line that never repeats, and a
+     held chord pushed off to one side. It is not music. What it is is
+     unambiguous, so a failure here is a fault rather than a disappointment.
+     ------------------------------------------------------------------------ */
+
+  const SPAN = 12;
+  say('building a mix out of known parts…');
+
+  const beats = [];
+  for (let b = 0; b < 24; b++) beats.push(0.25 + b * 0.5);
+  const drums = new Float32Array(Math.ceil(RATE * SPAN));
+  add(drums, await played({ kind: 'kit', name: 'kick' }, beats.filter((_, i) => i % 2 === 0), SPAN));
+  add(drums, await played({ kind: 'kit', name: 'snare' }, beats.filter((_, i) => i % 4 === 2), SPAN));
+  add(drums, await played({ kind: 'kit', name: 'hhc' }, beats, SPAN), 0.8);
+
+  const bass = await played(
+    { kind: 'design', name: 'sub' },
+    beats.filter((_, i) => i % 2 === 0),
+    SPAN,
+    { length: 0.45, tune: -5, space: 0, drive: 0.2 },
+  );
+  const lead = await played({ kind: 'design', name: 'drone' }, [0], SPAN, {
+    length: SPAN, tune: 9, space: 0.1, drive: 0,
+  });
+  const aside = await played({ kind: 'pitched', name: 'piano', midi: 64 }, [0.5, 3, 5.5, 8, 10.5], SPAN, {
+    length: 2.4, space: 0.2,
+  });
+
+  const left = new Float32Array(drums.length);
+  const right = new Float32Array(drums.length);
+  for (const [into, other] of [[left, right]]) {
+    add(into, drums, 0.7); add(other, drums, 0.7);
+    add(into, bass, 0.8); add(other, bass, 0.8);
+    add(into, lead, 0.5); add(other, lead, 0.5);
+    // Hard over to one side, which is what makes it not the thing in front.
+    add(into, aside, 0.55);
+  }
+  const mix = stereo(left, right);
+
+  say('separating…');
+  const started = performance.now();
+  const done = await measured.separate(mix, {}, (at, of, what) => say(`${what} ${at} of ${of}…`));
+  const took = (performance.now() - started) / 1000;
+
+  const part = {};
+  for (const one of done.parts) part[one.id] = one;
+
+  /* ---------- the exact claim ---------- */
+
+  let worst = 0;
+  for (let c = 0; c < 2; c++) {
+    const was = mix.getChannelData(c);
+    const lanes = done.parts.map((one) => one.audio.getChannelData(c));
+    for (let i = 0; i < was.length; i++) {
+      let sum = 0;
+      for (const lane of lanes) sum += lane[i];
+      worst = Math.max(worst, Math.abs(was[i] - sum));
+    }
+  }
+  check('the four parts add back up to the recording', worst < 1e-4, `worst sample out by ${worst.toExponential(2)}`);
+
+  /* ---------- against what went in ---------- */
+
+  const held = (id, of) => heldShare(part[id].audio.getChannelData(0), of);
+  const table = [
+    ['drums', drums, 0.7],
+    ['bass', bass, 0.8],
+    ['lead', lead, 0.5],
+    ['tonal', aside, 0.55],
+  ];
+  for (const [id, signal, gain] of table) {
+    const mine = held(id, signal) / gain;
+    const elsewhere = table
+      .filter(([other]) => other !== id)
+      .map(([other]) => held(other, signal) / gain);
+    const most = Math.max(...elsewhere);
+    lines.push(`  ${id.padEnd(6)} holds ${(mine * 100).toFixed(0)}% of what it should, most in another part ${(most * 100).toFixed(0)}%`);
+    check(`${id}: more of it in its own part than in any other`, mine > most, `${(mine * 100).toFixed(0)}% against ${(most * 100).toFixed(0)}%`);
+  }
+
+  lines.push(`  shares: ${done.parts.map((one) => `${one.id} ${(one.share * 100).toFixed(0)}%`).join('  ')}`);
+  lines.push(`  found: loop ${done.notes.loop === null ? 'none' : done.notes.loop.toFixed(3) + 's'}` +
+    ` (${(done.notes.loopStrength * 100).toFixed(0)}% above its surroundings)` +
+    `, stereo ${done.notes.stereo ? (done.notes.width * 100).toFixed(0) + '% wide' : 'no'}`);
+  lines.push(`  took ${took.toFixed(1)}s for ${SPAN}s of audio, which is ${(took / SPAN).toFixed(2)} times its length`);
+
+  /* ---------- inside the drums ---------- */
+
+  say('looking inside the drums…');
+  const inside = await refineDrums(part.drums, RATE, (at, of, what) => say(`${what} ${at} of ${of}…`));
+  const byId = {};
+  for (const one of inside) byId[one.id] = one;
+  lines.push(`  inside the drums: ${inside.map((one) => `${one.name} ${(one.share * 100).toFixed(0)}%`).join('  ')}`);
+
+  let insideWorst = 0;
+  {
+    const was = part.drums.audio.getChannelData(0);
+    const lanes = inside.map((one) => one.audio.getChannelData(0));
+    for (let i = 0; i < was.length; i++) {
+      let sum = 0;
+      for (const lane of lanes) sum += lane[i];
+      insideWorst = Math.max(insideWorst, Math.abs(was[i] - sum));
+    }
+  }
+  check('the drums add back up to the drums', insideWorst < 1e-4, `worst sample out by ${insideWorst.toExponential(2)}`);
+
+  const rest = inside.find((one) => one.name === 'Rest');
+  if (rest) {
+    const share = rest.share / (part.drums.share || 1);
+    lines.push(`  Rest holds ${(share * 100).toFixed(0)}% of the drums — the most honest single number here`);
+    check('Rest is a minority of the drums', share < 0.5, `${(share * 100).toFixed(0)}%`);
+  }
+
+  /* ---------- how many hits, and what they were called ---------- */
+
+  const hits = drumHits(mono(part.drums.audio), RATE);
+  const counted = {};
+  for (const hit of hits) counted[hit.kind] = (counted[hit.kind] ?? 0) + 1;
+  lines.push(`  hits: ${hits.length} found — ${Object.entries(counted).map(([k, n]) => `${n} ${k}`).join(', ')}`);
+  lines.push('  played: 12 kick, 6 snare, 24 hat');
+
+  /* ---------- inside what is left ---------- */
+
+  say('following the lines…');
+  const linesFound = await refineTonal(part.tonal, (at, of, what) => say(`${what} ${at} of ${of}…`));
+  lines.push(`  inside the tonal part: ${linesFound.length ? linesFound.map((one) => `${one.name} ${(one.share * 100).toFixed(0)}%`).join('  ') : 'nothing held long enough to follow'}`);
+  for (const one of linesFound) if (one.name !== 'Rest') lines.push(`    ${one.name}: ${one.about}`);
+
+  /* ---------- the crossover ---------- */
+
+  const weights = lowWeights(1025, 2048, RATE, 220);
+  const at = (hz) => weights[Math.round((hz * 2048) / RATE)];
+  check('the bass crossover takes all of the bottom and none of the top',
+    at(60) > 0.99 && at(2000) < 0.01, `60Hz ${at(60).toFixed(3)}, 2kHz ${at(2000).toFixed(3)}`);
+
+  /* ------------------------------------------------------------------------
+     And on a real recording, where nothing is known.
+     ------------------------------------------------------------------------ */
+
+  const report = () => {
+    const passed = results.filter((r) => r.pass).length;
+    const body = results
+      .map((r) => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`)
+      .join('\n');
+    say(
+      `separate check — ${passed}/${results.length} passed\n\n${body}\n\nmeasured\n${lines.join('\n')}\n\n` +
+      'Drop an audio file on this page to run it on real music. Nothing is uploaded.\n' +
+      'What comes back is the shares, what the measurements found, how long it took,\n' +
+      'and whether the parts still add up — which is all that can honestly be said\n' +
+      'about a recording nobody knows the right answer for.'
+    );
+  };
+  report();
+
+  document.body.addEventListener('dragover', (event) => event.preventDefault());
+  document.body.addEventListener('drop', async (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    say(`reading ${file.name}…`);
+    const ctx = new OfflineAudioContext(1, 1, RATE);
+    const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+
+    const from = performance.now();
+    const real = await measured.separate(buffer, {}, (a, b, what) => say(`${what} ${a} of ${b}…`));
+    const spent = (performance.now() - from) / 1000;
+
+    let out = 0;
+    for (let c = 0; c < Math.min(2, buffer.numberOfChannels); c++) {
+      const was = buffer.getChannelData(c);
+      const lanes = real.parts.map((one) => one.audio.getChannelData(c));
+      for (let i = 0; i < was.length; i++) {
+        let sum = 0;
+        for (const lane of lanes) sum += lane[i];
+        out = Math.max(out, Math.abs(was[i] - sum));
+      }
+    }
+
+    const drumPart = real.parts.find((one) => one.id === 'drums');
+    const realHits = drumPart ? drumHits(mono(drumPart.audio), buffer.sampleRate) : [];
+    const kinds = {};
+    for (const hit of realHits) kinds[hit.kind] = (kinds[hit.kind] ?? 0) + 1;
+
+    say(
+      `${file.name}\n` +
+      `  ${buffer.duration.toFixed(1)}s, ${buffer.numberOfChannels} channel(s), ${buffer.sampleRate} Hz\n` +
+      `  took ${spent.toFixed(1)}s, which is ${(spent / buffer.duration).toFixed(2)} times its length\n` +
+      `  shares: ${real.parts.map((one) => `${one.id} ${(one.share * 100).toFixed(0)}%`).join('  ')}\n` +
+      `  loop: ${real.notes.loop === null ? 'none found' : `${real.notes.loop.toFixed(3)}s, ${(real.notes.loopStrength * 100).toFixed(0)}% above its surroundings`}\n` +
+      `  stereo: ${real.notes.stereo ? `${(real.notes.width * 100).toFixed(0)}% wide` : 'one channel in effect — the lead is empty on purpose'}\n` +
+      `  the parts add back up: worst sample out by ${out.toExponential(2)}\n` +
+      `  hits in the drums: ${realHits.length}` +
+      (realHits.length ? ` — ${Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ')}` : '') +
+      '\n\nNothing here says whether it sounds right. Listen to the parts in the app.\n' +
+      'Drop another file to run it again.'
+    );
+  });
+</script>
+</body></html>

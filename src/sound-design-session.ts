@@ -599,6 +599,16 @@ export class SoundDesignSession {
     // Whatever is armed stays: it was clicked a moment ago and is about to be
     // placed, which is the whole reason it was fetched.
     if (armed.kind === 'sample') inUse.add(armed.name);
+    /*
+     * And so does anything a separation is currently showing.
+     *
+     * The parts of a beat are on loan for the same reason a fetched sound is —
+     * neither has been used yet, and neither is worth writing down until it has
+     * been. What is different is that they are on screen: forgetting one because
+     * somebody typed into the Freesound box would empty a row while it was being
+     * looked at.
+     */
+    for (const stem of this.#store.state.separation.stems) inUse.add(stem.sampleId);
 
     for (const id of [...this.#onLoan]) {
       if (inUse.has(id)) continue;
@@ -820,6 +830,117 @@ export class SoundDesignSession {
   }
 
   /** Take a recording back out. Sounds already placed from it stay put. */
+  /**
+   * Take on a recording the app made itself, and say how a cue names it.
+   *
+   * The way in for the separator, which produces audio rather than files. What
+   * comes out of taking a beat apart goes through exactly what a dropped file
+   * goes through — the same store, the same keeping between visits, the same
+   * picker, the same export — because a separated part is a recording in every
+   * sense that matters, and giving it a path of its own would mean writing the
+   * placing, the keeping and the exporting a second time.
+   *
+   * The decoded audio is deliberately not kept. Four parts of a three minute
+   * track is three hundred megabytes of samples, and it is worked out again the
+   * first time anything asks to hear one, which is what every recording restored
+   * from a previous visit already does.
+   */
+  takeOnRecording(entry: {
+    name: string;
+    blob: Blob;
+    seconds: number;
+    tags?: readonly string[];
+    /**
+     * Whether to write it down now, or only once it is used.
+     *
+     * False for anything the app made on spec. Taking a three minute track apart
+     * makes four files of fifty megabytes each and then four more inside one of
+     * them, and writing all of that into the browser's store the moment it exists
+     * — before anybody has said they want any of it — is slow, and most of it is
+     * thrown away. So they go on loan, exactly as a sound fetched to be listened
+     * to does, and placing one settles it. See {@link releaseLoans}.
+     */
+    keep?: boolean;
+  }): string {
+    const id = newId('s');
+    addSample(
+      {
+        id,
+        name: entry.name,
+        duration: entry.seconds,
+        blob: entry.blob,
+        ...(entry.tags?.length ? { tags: entry.tags } : {}),
+      },
+      null,
+    );
+    if (entry.keep === false) this.#onLoan.add(id);
+    else this.#keepSamples();
+    this.#store.set({ samples: [...samples()] });
+    return id;
+  }
+
+  /**
+   * Put each of these recordings on a layer of its own, starting at zero.
+   *
+   * How a separated beat arrives on the timeline. A layer each, because that is
+   * what the parts of a mix are for: they are balanced against each other, drawn
+   * over, muted while something else is worked on, and exported apart. Placing
+   * them all on one layer would be four sounds on top of each other with no way
+   * to hold one of them down.
+   *
+   * At zero, and the piece is made long enough to hold them, since a separated
+   * mix is usually longer than whatever the timeline was set to. One step to
+   * undo, however many parts there were.
+   */
+  placeAsLayers(list: readonly { name: string; sampleId: string }[]): void {
+    if (!list.length) return;
+
+    let next = this.project;
+    const added: string[] = [];
+    let longest = 0;
+    for (const one of list) {
+      next = addLayer(next, one.name);
+      const layer = next.layers[next.layers.length - 1];
+      const cue = makeCue(0, layer.id, { kind: 'sample', name: one.sampleId });
+      next = { ...next, cues: [...next.cues, cue] };
+      added.push(cue.id);
+      longest = Math.max(longest, cue.length);
+    }
+    // Long enough to hold them, but never shortened: a piece already cut to a
+    // video keeps its length.
+    if (longest > next.duration) next = { ...next, duration: longest };
+
+    this.#setProject(next, 'place parts');
+    // Using one is what turns it from something the app offered into something
+    // you have, and that is when it is written down. See #onLoan.
+    for (const cue of next.cues.filter((one) => added.includes(one.id))) this.#settle(cue);
+    this.#store.set({
+      selection: added,
+      status: `${list.length} part${list.length === 1 ? '' : 's'} placed, one per layer`,
+    });
+    // They arrive without audio, so it is decoded before anything asks to hear
+    // one. See `takeOnRecording`.
+    void this.readySamples();
+  }
+
+  /**
+   * Put whatever sound is armed on every one of these moments.
+   *
+   * The audio equivalent of placing every hit the picture suggests: the times
+   * come from a separated drum part rather than from a curve in the video, and
+   * everything after that is the same. One step to undo.
+   */
+  placeOnTimes(times: readonly number[], what: string): void {
+    if (!times.length) return;
+    const on = this.#store.state.activeLayerId;
+    const cues = times.map((time) =>
+      this.#armedCue(snapTime(this.project, this.#insideVideo(time)), on),
+    );
+    this.#setProject({ ...this.project, cues: [...this.project.cues, ...cues] }, 'place on hits');
+    this.#store.set({ status: `${cues.length} sounds placed on the ${what}` });
+    void this.readySamples();
+  }
+
   removeSample(id: string): void {
     const sample = sampleById(id);
     if (!sample) return;
@@ -2252,7 +2373,22 @@ export class SoundDesignSession {
       });
       return;
     }
+    await this.extractFromBuffer(buffer, file.name);
+  }
 
+  /**
+   * The same, on audio the app already has rather than on a file.
+   *
+   * Which is what a separated part is. Rebuilding the drums out of a mix was
+   * never much use — the finder hears one hit where a kick and a hat played
+   * together, and the rebuild then looks for one voice that is both — and on a
+   * part that is only the kick it is the thing this app is best at. Separating
+   * first is what makes reading a real record into forty synthesised voices work
+   * at all.
+   */
+  async extractFromBuffer(buffer: AudioBuffer, label: string): Promise<void> {
+    this.#wake();
+    const file = { name: label };
     this.#store.set({
       extract: { busy: 'finding the sounds…', from: file.name, sounds: [] },
     });

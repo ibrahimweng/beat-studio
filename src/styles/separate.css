@@ -1,0 +1,239 @@
+/*
+ * Taking a beat apart.
+ *
+ * Laid out as a mixer, which is what the job is: a row per part, the whole width
+ * of the screen, with the waveform as the thing being read. Everything else on the
+ * row is small and to one side of it.
+ */
+
+.sep {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  background: var(--stage);
+}
+
+.sep__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------------------------------------------------------------- progress */
+
+.sep__busyrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sep__busy {
+  font-size: 12px;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+
+.sep__track {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: var(--r-2);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.sep__meter {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ac);
+  transition: width 120ms linear;
+}
+
+/* ------------------------------------------------------------- the empty page */
+
+.sep__nothing {
+  max-width: 62ch;
+  padding: 22px 0;
+}
+
+.sep__nothing-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 8px;
+}
+
+.sep__nothing .hint {
+  margin: 0 0 8px;
+}
+
+.sep__notes {
+  margin: 0;
+}
+
+/* ----------------------------------------------------------------- the rows */
+
+.sep__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sep__row {
+  display: grid;
+  /* Share, name, waveform, buttons. The waveform takes whatever is left, which
+     is the point of the row. */
+  grid-template-columns: 42px 190px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.sep__row:hover {
+  border-color: var(--ac-line);
+}
+
+/* A part opened out of another sits in from its parent, so the list reads as a
+   tree rather than as a heap. Padding rather than a margin: the buttons are at
+   the right-hand end of every row and a margin would step them in too, so the
+   columns of a list with a part open would no longer line up. */
+.sep__row.is-inside {
+  padding-left: 34px;
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+}
+
+.sep__row.is-on {
+  border-color: var(--ac);
+  background: var(--ac-soft);
+}
+
+.sep__row.is-quiet {
+  opacity: 0.45;
+}
+
+.sep__row.is-solo .sep__title {
+  color: var(--ac);
+}
+
+.sep__share {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-3);
+  text-align: right;
+}
+
+.sep__name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sep__title {
+  font-size: 13px;
+  color: var(--txt);
+}
+
+.sep__about {
+  font-size: 11px;
+  color: var(--txt-3);
+  /* One line: these say what the part is, and a row that grows to three lines
+     when a part has a lot of hits in it makes the whole list jump about. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sep__wave {
+  min-width: 0;
+  height: 40px;
+  border-radius: var(--r-4);
+  background: color-mix(in oklab, var(--tc-fg) 4%, transparent);
+  overflow: hidden;
+}
+
+.sep__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sep__path {
+  fill: var(--ac);
+  fill-opacity: 0.75;
+}
+
+.sep__row.is-quiet .sep__path {
+  fill: var(--txt-3);
+}
+
+.sep__buttons {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------- the footer */
+
+.sep__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--side);
+}
+
+.sep__lean {
+  width: 90px;
+}
+
+/* ------------------------------------------------- the two places to go */
+
+.rail__screens {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 2px;
+}
+
+.rail__screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--r-4);
+  background: transparent;
+  color: var(--txt-3);
+  cursor: pointer;
+}
+
+.rail__screen:hover {
+  color: var(--txt);
+  background: var(--panel-2);
+}
+
+.rail__screen.is-on {
+  color: var(--txt);
+  border-color: var(--ac-line);
+  background: var(--ac-soft);
+}
+
+/* The panels belong to the timeline, so they are not there on the other screen.
+   Taken out rather than left empty: a column of chrome for a screen that has
+   nothing to put in it is width the waveforms want. */
+.app[data-screen='separate'] .dock,
+.app[data-screen='separate'] .split--side {
+  display: none;
+}

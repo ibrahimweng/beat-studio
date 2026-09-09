@@ -1,5 +1,5 @@
 import { AudioEngine } from './audio/engine.ts';
-import { Store, initialState, type TimeRange, type Tool } from './store.ts';
+import { Store, initialState, type AppState, type TimeRange, type Tool } from './store.ts';
 
 /**
  * The audio engine and the state, and the one gesture that starts them.
@@ -39,6 +39,17 @@ export class Session {
     // Leaving the range tool takes the range with it. A stretch of time you
     // can no longer see the edges of is a selection that acts at a distance.
     this.store.set({ tool, range: tool === 'range' ? this.store.state.range : null });
+  }
+
+  /**
+   * Which screen is showing.
+   *
+   * Here for the same reason the tool is: it is the app's own furniture rather
+   * than part of the piece, so changing it is not an edit and must never land on
+   * the undo stack.
+   */
+  setScreen(screen: AppState['screen']): void {
+    this.store.set({ screen });
   }
 
   /** The stretch of time the range tool has drawn, or null to clear it. */

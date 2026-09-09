@@ -4,6 +4,11 @@ Beat Studio puts sound to video, in a web browser. You load a clip, it reads
 the picture and says what belongs on each moment it finds, and you export a
 file that lines up when you drop it back into your editing software.
 
+There is a second screen that takes a recording apart. Drop a beat on it and it
+comes back as the drums, the bass, whatever is in front and everything else,
+each of which can be opened again — and every one of those parts goes straight
+onto the timeline as a layer of its own. See "Taking a beat apart" below.
+
 It is aimed at somebody who already knows video and has never done sound. All
 the explaining is spent on the sound, because the timeline needs none.
 
@@ -81,6 +86,18 @@ mix, and is the same placed sound the same file every time it is rendered.
 What that does not check is that two Web Audio implementations sound alike —
 it checks that we schedule and mix what we meant to. The browser suite is where
 the real thing gets driven.
+
+Taking a beat apart is here too, and it is the same shape of question: given
+this recording, what share of every moment belongs to which part. The claim
+that matters is exact and is checked at every level — the four parts add back
+up to the recording sample for sample, and so do the parts of the drums — which
+holds because the shares add to one, the transform loses nothing and the blocks
+are joined by ramps that add to one. Break any of the three and that test says
+so, and no other one would, because each part on its own would still look
+reasonable. The rest is measured against material the app made itself, where
+the right answer is known: all thirteen voices of its own kit come back as one
+hit in the right family, and a plain kick-snare-hat pattern comes apart with 97,
+92 and 93 per cent of each drum in its own file.
 
 `test/fixtures/motion-shapes.json` holds real measurements taken by the scan
 itself, off a clip built with one of each shape in it: a cut, a build, a move,
@@ -921,6 +938,156 @@ within a tenth. The ten that come out under 0.93 are listed in
 `src/export/patch.ts` with the reason for each. `tools/README.md` says how to
 measure it again.
 
+## Taking a beat apart
+
+The second screen, and the first button on the bar down the left. Drop a track
+on it and it comes back as the drums, the bass, whatever is in front, and
+everything else — each of which can be opened again, into the kick, the snare
+and the hats, or into the lines that are held.
+
+Nothing is uploaded. The browser decodes the file, the app measures it, and it
+never leaves your machine — the same as the video, and for the same reason.
+Nothing is downloaded either: there is no model to fetch, so it works offline
+and it works the first time.
+
+### What comes out
+
+Four parts.
+
+- **Drums.** Everything that arrives and stops.
+- **Bass.** The low end of what is left once the drums are out of it.
+- **Lead.** What is in front: centred in the mix, and not part of the loop.
+- **Tonal.** Everything else that is held rather than struck.
+
+**They add back up to the recording exactly.** Not nearly, and not once a fade
+at each end is allowed for. Every moment of the file is divided between the
+four by shares that add to one, so nothing is lost and nothing is counted
+twice. Play all four together and you have the track back, sample for sample.
+
+Open any of the four and it comes apart again. The drums become the kick, the
+snare, the toms, the hats and the cymbals; the other two become the lines that
+hold long enough to follow, grouped by register. Each of those levels adds up
+too, which is why there is always a part called **Rest**: what no hit and no
+line accounted for. How much is in Rest is the most honest single number about
+how well it worked on your particular file.
+
+### What to do with them
+
+Every part becomes a recording the moment it is made — the same kind of
+recording you get by dragging a file in — so all of this works without any of
+it being a special case.
+
+- **Place on the timeline** puts each part on a layer of its own, at the start,
+  ready to be balanced, drawn over and exported.
+- **Rebuild** reads a part back into the palette: every sound in it as a voice
+  and five numbers, which can then be tuned, stretched, put in another room and
+  stacked. This is the thing this app is best at and it never worked on a mix —
+  the finder hears one hit where a kick and a hat played together, and then
+  looks for a single voice that is both. On a part that is only the kick, it
+  has a chance.
+- **Hits** finds every hit in a part and puts the sound you have chosen on each
+  one. It is "Find hits" with a beat instead of a picture.
+- **Write the files** hands each part over as a WAV. All the same length and all
+  starting at zero, so they sit on separate tracks and stay in sync.
+
+They are also in the sound picker under your recordings, so any of them can be
+placed anywhere, any number of times, like any other sound.
+
+A part is kept between visits once you use it. Placing one on the timeline is
+what says you want it, and from then on it is a recording like any other:
+saved, in the picker, there tomorrow. The ones you did not use are not written
+down, which is deliberate — four parts of a three minute track come to a couple
+of hundred megabytes, and storing all of that the moment it exists, before
+anybody has said they want any of it, would be slow and mostly wasted. The
+screen itself starts empty each time.
+
+### How it works, and what it cannot do
+
+It reads the recording rather than recognising instruments. Three measurements
+over the same spectrogram, and every cell of the file is divided between the
+four parts by what they say.
+
+**Is it a hit or a note.** A held note is a horizontal line on a spectrogram —
+the same few frequencies, frame after frame. A drum is a vertical one: every
+frequency at once, for a moment. Nothing else in music looks like either, and a
+median along each axis separates them without being told anything about what is
+playing.
+
+**Where does it sit.** The lead vocal is in the middle of a mix and most other
+things have been moved off it. Two channels that agree in level and in phase
+are one source in the middle; two that disagree are not.
+
+**Does it come round again.** A beat is a loop. Some of a track is the same two
+or four bars coming back, and some of it is a line that is different every
+time. The loop's length is found without being told the tempo, and the loop
+itself is built by laying every repetition on top of the others.
+
+Now the part that matters. **This is not a trained model and it will not do
+what one does.** Demucs and its relatives learned what a snare and a violin
+sound like from thousands of hours of music, and they are better at this than
+arithmetic is — but they are tens of millions of numbers that have to be
+fetched, and everything else in this app is a promise that nothing is uploaded
+and nothing is downloaded. So this is the honest version: measurements anybody
+can read, running on your machine, on material it has never seen.
+
+What that buys is real and it is limited.
+
+The drums come out well, because a hit and a note look nothing like each other.
+Measured on a kick, snare and hat pattern this app made itself: 14 of 14 hits
+found, every one named right, and the three files hold 97, 92 and 93 per cent
+of what they should. All thirteen voices of the built-in kit come back as
+exactly one hit in the right family. A kick and a hat played on the same eighth
+come out as two hits in two files, which is the thing a finder working on the
+whole spectrum cannot do and is the commonest thing in a beat.
+
+The bass comes out well enough, because it is mostly the low end of what is
+left. It is the crudest thing here: a bass part is right about the fundamentals
+and wrong about everything a bass does above them.
+
+A kick under a bass line is the hardest case, and worth knowing about. A kick's
+body is a low tone that lasts a third of a second — longer than the window used
+to tell a held note from a hit — so everything about it says "note" except the
+way it starts. It is asked whether it fills the third of an octave around it,
+which a kick does and a bass note does not, and that is what keeps it in the
+drums: measured on a kick over a sustained bass, 74 per cent of the kick lands
+in the drums and 82 per cent of the bass lands in the bass. The eighteen per
+cent of the bass that goes with the drums is bleed at the moments the kick is
+masking it anyway, and Hits and Notes moves the trade either way.
+
+A centred lead comes out usable on a stereo mix. On a mono file there is no
+position to read, and if nothing repeats either then there is no basis at all
+for telling a lead from the rest — so the lead comes out empty and the screen
+says why. It does not divide them on something invented, which would look like
+separation and be nothing of the kind.
+
+**Two instruments in the same place and the same register do not come apart,
+and never will by this route.** A violin out from under a viola shares the same
+harmonics in the same bins; there is nothing in one spectrogram that says which
+of them a given cell belongs to. Neither will a vocal come out clean the way a
+model does. If that is what you need, this is not it, and no amount of tuning
+will make it so.
+
+The line under the parts says what the measurements actually found — whether
+there was a loop and how strongly, whether there were two channels to compare —
+because that is the evidence, and a score would not be.
+
+**Hits and Notes**, at the top right, decides which way the next separation
+leans. A heavily compressed mix has its drums smeared across time until they
+look partly like notes; an acoustic recording has a piano attack that looks
+partly like a drum. One control, honestly labelled, beats guessing.
+
+### How long it takes
+
+About a fifth of the length of the track: a thirty second beat takes six and a
+half seconds in a browser, and a three minute one takes about forty. Opening a
+part costs about the same again. Eight minutes is as much as a browser can hold
+at once — four parts at full precision is four times the size of the file in
+memory before anything else — and it says so before it starts rather than
+failing halfway through.
+
+`tools/separate-check.html` measures all of it, including on a file of your
+own, and `tools/README.md` says what each number is worth.
+
 ## What you can do
 
 ### Save your work
@@ -1036,6 +1203,7 @@ src/
                    visits, and settling which tab does the keeping
   types.ts         shared types
   sound-design-session.ts every action the interface can perform
+  separate-session.ts     taking a beat apart, and handing the parts to the piece
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
@@ -1049,6 +1217,16 @@ src/
     describe.ts    turning a sentence into settings
     listen.ts      finding the sounds in a recording, and measuring them
     rebuild.ts     making the nearest thing this app can make to one
+    separate/      taking a recording apart into the things it is made of
+      types.ts     what a separation is, and the seam a different one would fit
+      stft.ts      time and frequency, and putting a sound back together exactly
+      hpss.ts      telling a hit from a note, by two medians
+      stereo.ts    how centred each moment is, from the two channels
+      repeat.ts    what comes round again, and how long the loop is
+      blocks.ts    working a recording a piece at a time, and joining them up
+      dsp.ts       the four parts, and the one separator this app ships with
+      hits.ts      the hits in a drum part, and which drum each one is
+      refine.ts    dividing a part between the hits and lines found in it
     samples.ts     recordings somebody gave it, held by id
     sources.ts     turning a placed sound into a played sound
     vary.ts        a placement's own take of a voice, so two are not one twice
@@ -1069,6 +1247,7 @@ src/
     save.ts        handing a file to the browser
   ui/              one file per part of the interface
     help.ts        the help panel, and the small "?" that opens it at a section
+    separate/      the screen that takes a recording apart
     keep-notice.ts the line saying another tab is keeping the piece
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
