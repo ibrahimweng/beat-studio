@@ -183,6 +183,20 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: 'voiceover',
+    title: 'Making a voiceover',
+    rows: [
+      ['What it does', 'Puts a voice to a script. Pick a narrator, write what they say, and the take arrives on a layer of its own — the thing everything else gets balanced against.'],
+      ['Where the words go', 'To this deployment’s own server, and from there to Gradium. It is the one part of this app that leaves your machine, the same as searching Freesound. Nothing is stored there.'],
+      ['Who reads it', 'Four hundred catalogue voices across five languages, or one you describe. A described narrator is sampled three at a time, takes a few seconds, and has to be kept before it can read more than a line.'],
+      ['Describing one', 'Name the age, the accent, the pitch, the pace and what it is for. "A British narrator in his fifties, warm and unhurried, for a product film" beats "a good voice".'],
+      ['Keep this one', 'Turns a draft into a narrator that can read a whole script, and throws the other two away. Kept narrators come out of one pool belonging to the deployment, so this can run out.'],
+      ['Read it', 'Up to two thousand characters, which is about two minutes. Longer than that is a different job and reads better asked for in pieces.'],
+      ['Place on the timeline', 'The take goes on a layer of its own at the start of the piece, ready to be moved, trimmed and balanced. It is a recording like any other from then on: in the picker, exportable, kept.'],
+      ['If it says it is off', 'This deployment has no Gradium key set. Everything else works exactly as it did; only this screen is unavailable.'],
+    ],
+  },
+  {
     id: 'sound',
     title: 'The selected sound',
     rows: [

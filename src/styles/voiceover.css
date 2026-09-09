@@ -1,0 +1,236 @@
+/*
+ * Putting a voice to a script.
+ *
+ * A column rather than the mixer the separating screen is, because the work is
+ * a sequence and not a comparison: who reads it, what they read, what came back.
+ * Each block is as wide as it needs to be and no wider — a script is read at a
+ * paragraph's width, not at the width of a monitor.
+ */
+
+.vo {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+.vo__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.vo__working {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* A column, held to a readable measure and centred in whatever is left. A
+     script is read at a paragraph's width whatever the monitor is. */
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.vo__block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vo__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vo__busy {
+  font-size: 12px;
+  color: var(--txt-2);
+  padding-bottom: 10px;
+}
+
+/* ------------------------------------------------------------- the narrator */
+
+.vo__readers,
+.vo__language {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  color: var(--txt);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+}
+
+.vo__readers {
+  width: 100%;
+}
+
+.vo__language {
+  flex: 0 0 auto;
+}
+
+.vo__design {
+  margin-top: 4px;
+}
+
+.vo__summary {
+  font-size: 11px;
+  color: var(--txt-3);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.vo__summary:hover {
+  color: var(--txt-2);
+}
+
+.vo__designbody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 0;
+}
+
+.vo__describe {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  color: var(--txt);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+}
+
+.vo__describe:focus-visible,
+.vo__script:focus-visible,
+.vo__readers:focus-visible,
+.vo__language:focus-visible {
+  outline: none;
+  border-color: var(--ac);
+}
+
+.vo__drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vo__draft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--panel);
+}
+
+.vo__draftname {
+  font-size: 12px;
+  color: var(--txt);
+}
+
+/* --------------------------------------------------------------- the script */
+
+.vo__script {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px;
+  resize: vertical;
+  color: var(--txt);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+}
+
+.vo__counted {
+  font-variant-numeric: tabular-nums;
+}
+
+.vo__counted.is-full {
+  color: var(--ac);
+}
+
+/* ----------------------------------------------------------------- the take */
+
+.vo__take {
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  background: var(--panel);
+  padding: 8px 10px;
+}
+
+.vo__takehead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.vo__takename {
+  font-size: 12px;
+  color: var(--txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vo__wave {
+  height: 40px;
+}
+
+.vo__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.vo__path {
+  fill: var(--ac);
+  opacity: 0.75;
+}
+
+/* -------------------------------------------------------------- the nothing */
+
+.vo__nothing {
+  max-width: 560px;
+}
+
+.vo__nothing-title {
+  font-size: 14px;
+  font-weight: 600;
+  padding-bottom: 6px;
+}
+
+/* ------------------------------------------------------------------ the foot */
+
+.vo__foot {
+  border-top: 1px solid var(--line);
+  background: var(--side);
+}
+
+.vo__said {
+  padding: 6px 14px 0;
+  font-size: 12px;
+  color: var(--txt-2);
+}
+
+.vo__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+}
+
+/* The timeline's own furniture has no place here, the same as on the screen
+   that takes a beat apart. */
+.app[data-screen='voiceover'] .dock,
+.app[data-screen='voiceover'] .split--side {
+  display: none;
+}

@@ -2,7 +2,7 @@ import type { Session } from '../session.ts';
 import type { AppState, Tool } from '../store.ts';
 import { TOOLS } from '../store.ts';
 import { button, el, toggleClass } from './dom.ts';
-import { splitMark, toolIcon, waveMark } from './icons.ts';
+import { speakMark, splitMark, toolIcon, waveMark } from './icons.ts';
 import { helpButton } from './help.ts';
 import type { View } from './view.ts';
 
@@ -45,6 +45,11 @@ const SCREENS = [
     name: 'Sound design',
     job: 'Put sound to picture on the timeline',
   },
+  {
+    id: 'voiceover' as const,
+    name: 'Voiceover',
+    job: 'Put a voice to a script, and place it on the piece',
+  },
 ];
 
 export function createRail(session: Session, options: RailOptions = { onHelp: () => {} }): View {
@@ -60,7 +65,13 @@ export function createRail(session: Session, options: RailOptions = { onHelp: ()
         dataset: { screen: screen.id },
         on: { click: () => session.setScreen(screen.id) },
       },
-      [screen.id === 'separate' ? splitMark() : waveMark([5, 11, 8, 3], 2, 2, 2)],
+      [
+        screen.id === 'separate'
+          ? splitMark()
+          : screen.id === 'voiceover'
+            ? speakMark()
+            : waveMark([5, 11, 8, 3], 2, 2, 2),
+      ],
     ),
   }));
 

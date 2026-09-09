@@ -153,3 +153,27 @@ export function toolIcon(tool: string): SVGElement {
       return stroke('M4 8h8');
   }
 }
+
+/**
+ * The voiceover screen's mark: a mouth speaking, as three arcs leaving a point.
+ *
+ * Not a microphone, which is what a recording screen would use and what the
+ * record button already is. Nothing here is recorded — a voice is described and
+ * a machine reads — so the picture is sound leaving, not sound arriving.
+ */
+export function speakMark(): HTMLElement {
+  return el('span', { style: { display: 'flex', width: '16px', height: '16px' } }, [
+    svgIcon(
+      '<path d="M3 6.5h2.5L9 3.5v9L5.5 9.5H3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
+        '<path d="M11.5 5.5a4 4 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+        '<path d="M13.5 3.5a7 7 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    ),
+  ]);
+}
+
+/** One inline SVG of a fixed size, for the marks above that are drawn rather than built. */
+function svgIcon(inner: string): HTMLElement {
+  const holder = el('span', { style: { display: 'flex' } });
+  holder.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">${inner}</svg>`;
+  return holder;
+}

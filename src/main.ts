@@ -4,6 +4,7 @@ import './styles/layout.css';
 import './styles/controls.css';
 import './styles/sound-design.css';
 import './styles/separate.css';
+import './styles/voiceover.css';
 import './styles/video-window.css';
 
 import { mountApp } from './app.ts';

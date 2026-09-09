@@ -857,6 +857,11 @@ small text file describing how to make its sounds rather than the sounds
 themselves, so nothing is uploaded, nothing is downloaded while you work, and
 a pack of two hundred sounds is a few tens of kilobytes.
 
+Two things do leave, and both are opt-in and named where they happen: the words
+you type into the Freesound search, and the script you write on the voiceover
+screen. Everything else — your video, your recordings, the beats you take apart
+— is read in your browser and stays there.
+
 Anything written for `@web-kits/audio` works. The ten packs published with that
 project come to 269 sounds between them, covering interface clicks, notification
 tones, bells, chiptune, and a small drum kit. Get them with:
@@ -1282,6 +1287,7 @@ src/
   types.ts         shared types
   sound-design-session.ts every action the interface can perform
   separate-session.ts     taking a beat apart, and handing the parts to the piece
+  voiceover-session.ts    putting a voice to a script, and placing the take
   audio/
     engine.ts      the audio graph, the mixer and the meters
     chain.ts       the signal chain, shared by playback and export
@@ -1306,6 +1312,8 @@ src/
       dsp.ts       the four parts, and the one separator this app ships with
       hits.ts      the hits in a drum part, and which drum each one is
       refine.ts    dividing a part between the hits and lines found in it
+    narrate.ts     asking for a voiceover, from the browser's side
+    narrate-proxy.ts the half that runs on a server, holding the key
     samples.ts     recordings somebody gave it, held by id
     sources.ts     turning a placed sound into a played sound
     vary.ts        a placement's own take of a voice, so two are not one twice
@@ -1327,12 +1335,15 @@ src/
   ui/              one file per part of the interface
     help.ts        the help panel, and the small "?" that opens it at a section
     separate/      the screen that takes a recording apart
+    voiceover/     the screen that puts a voice to a script
+    waveform.ts    a recording drawn as one shape, for the two screens that do
     keep-notice.ts the line saying another tab is keeping the piece
     video-window.ts the clip, floating over whichever screen you are on
     sound-design/  the video, the timeline, the sound picker and the walkthrough
       moments.ts   what the video suggests, and why
       work-panel.ts the three tabs the right panel shows one at a time
   styles/          design tokens and stylesheets
+api/               the serverless functions, each a thin adapter over `src/`
 test/fixtures/     measurements taken off real clips, for the tests to read
 test/browser/      the suite that drives the built site in a real browser
 public/            files copied to the site root, which is where the icons live
@@ -1369,6 +1380,39 @@ app still works and a message appears in the status line.
 The interface follows the Toolcraft design system. Everything visual is taken
 from it directly, including the colours and the type sizes. The original design
 files are in `design/`, and `design/README.md` explains what they are.
+
+## Making a voiceover
+
+The third screen puts a voice to a script. Pick a narrator, write what they say,
+and the take arrives on a layer of its own — the thing everything else in the
+piece gets balanced against. It is a recording from the moment it exists, so
+placing it, exporting it, finding it in the picker and keeping it are all things
+the app already knew how to do.
+
+This is off until the deployment is given a key. Get one at
+<https://gradium.ai>, set it as `GRADIUM_KEY` in the deployment's environment
+variables, and the screen turns on. Without one it says so and everything else
+is untouched.
+
+The key stays on the server, for the reasons the Freesound section gives below
+and one more: Gradium authenticates with an `x-api-key` header, which is not a
+simple header, so a browser calling it directly needs a cross-origin preflight
+to pass on every request. A page calling its own origin never asks.
+
+**Who reads it.** Four hundred catalogue voices across English, French, German,
+Spanish and Portuguese, or one you describe — "a Bristolian pirate, weathered
+and gravelly, at an unhurried pace". A described narrator comes back as three
+drafts to listen to. Keeping one is what turns it into a narrator that can read
+a whole script, because a draft is capped at a hundred characters and expires
+after thirty days.
+
+**What it will not do.** A script is capped at two thousand characters here,
+about two minutes; longer reads better asked for in pieces. The same prompt
+never gives the same voice twice — that is the model, not this app — so a
+narrator you like has to be kept rather than described again. And kept narrators
+come out of one pool belonging to the deployment rather than to whoever pressed
+the button, so keeping one can fail for somebody who has kept nothing; the
+screen says so when it does.
 
 ## Searching Freesound
 
