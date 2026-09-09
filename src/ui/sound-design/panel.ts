@@ -21,7 +21,7 @@ import {
 import { CATALOGUE, search as findSounds, type Entry } from '../../audio/catalogue.ts';
 import { describe } from '../../audio/describe.ts';
 import { askText, askYesNo } from '../ask.ts';
-import { button, clear, el, setText, toggleClass } from '../dom.ts';
+import { button, clear, el, setText, toggleClass, type Child } from '../dom.ts';
 import type { Sample } from '../../audio/samples.ts';
 import {
   FreesoundError,
@@ -89,6 +89,8 @@ function noteName(midi: number): string {
 export interface SoundDesignPanelView extends View {
   /** Everything for choosing a sound. */
   soundsPage: HTMLElement;
+  /** Packs and recordings somebody brought, and taking sounds out of one. */
+  yoursPage: HTMLElement;
   /** The settings of whatever is picked on the timeline. */
   selectedPage: HTMLElement;
   /** Getting a file out. */
@@ -105,15 +107,30 @@ export interface SoundDesignPanelView extends View {
 
 export function createSoundDesignPanel(session: SoundDesignSession): SoundDesignPanelView {
   /** A section heading with a small "?" that opens the help at its part. */
-  const heading = (
-    text: string,
-    section: string,
-    style?: Record<string, string>,
-  ): HTMLElement =>
-    el('div', { class: 'section-title section-title--asks', ...(style ? { style } : {}) }, [
+  const heading = (text: string, section: string): HTMLElement =>
+    el('div', { class: 'section-title section-title--asks' }, [
       el('span', { text }),
       helpButton(section, text.toLowerCase()),
     ]);
+
+  /**
+   * One thing a panel does: a heading, and everything under it.
+   *
+   * A wrapper rather than nothing, because the space between two of these is
+   * then one rule in the stylesheet instead of a `marginTop` on whichever
+   * element happened to come first. What used to separate them was ten inline
+   * margins between 4px and 18px, each picked for the one place it was written
+   * and none of them aware of the others — which is why several sections in a
+   * column read as one long list rather than as several things.
+   *
+   * It also fixes an arrangement that changed with its contents: a group's own
+   * `.pick-group + .pick-group` margin only applied between two of them that
+   * were literally adjacent, so "Made from your words" sat flush against the
+   * sounds above it exactly when there were any. The gap belongs to the column,
+   * not to whatever is standing in it.
+   */
+  const section = (children: Child[]): HTMLElement =>
+    el('div', { class: 'panel-section' }, children);
 
   /**
    * A part of the panel that can be folded away, and stays as you left it.
@@ -150,7 +167,6 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     text: string,
     help: string,
     body: HTMLElement,
-    style?: Record<string, string>,
     /**
      * Whether this one starts folded for somebody who has never touched it.
      *
@@ -163,10 +179,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   ): HTMLElement => {
     const caret = el('i', { class: 'section-title__caret' });
     const shut = folded.has(id) || (shutFirst && !folded.has(`${id}:open`));
-    const wrap = el('div', {
-      class: shut ? 'folds folds--shut' : 'folds',
-      ...(style ? { style } : {}),
-    });
+    const wrap = el('div', { class: shut ? 'folds folds--shut' : 'folds' });
 
     const head = button(
       { class: 'section-title section-title--folds', attrs: { 'aria-expanded': shut ? 'false' : 'true' } },
@@ -1072,8 +1085,8 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
     heardClear,
   ]);
 
-  const heardBody = el('div', {}, [
-    heading('From a recording', 'extract', { marginTop: '12px' }),
+  const heardBody = el('div', { class: 'panel-section' }, [
+    heading('From a recording', 'extract'),
     heardOpen,
     heardInput,
     heardNote,
@@ -1797,7 +1810,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
    * show under whichever tab is up.
    */
   const soundsPage = el('div', { class: 'panel-page' }, [
-    el('div', {}, [
+    section([
       heading('Place', 'place'),
       search,
       // First, because a sound you made is the one you are most likely
@@ -1813,44 +1826,66 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
       // downloaded and credited.
       onlineSection,
       previewing,
-      /*
-       * The whole grouped palette behind one fold.
-       *
-       * Twelve groups were collapsed to one line each, which was still twelve
-       * lines and three hundred pixels of headings for something most people
-       * never open: the search and the library shelf above are how a sound is
-       * actually found. Browsing is the fallback, so it costs one line until
-       * it is wanted, and inside it the groups still open one at a time.
-       */
-      foldable('kinds', 'Browse', 'library', browseBody, { marginTop: '8px' }, true),
-      /*
-       * Where the sound lands, above the things that get a sound into the app.
-       *
-       * This used to be the last thing on the page, under the pack loader, the
-       * recording importer and the extractor. Those are setup: most people run
-       * them once, and plenty never run them at all. The layer is the opposite
-       * — it is the answer to "where does the next thing I click go", which
-       * matters on every single placement.
-       *
-       * On an empty session that put it at 510px rather than 333px, which is
-       * on screen either way. What makes it worth moving is that the lists it
-       * sat under start empty and grow. Six hundred pixels of loaded packs —
-       * not many — used to carry it from 510 to 1110 and off the bottom of a
-       * 900px window; from here it does not move at all. The order was getting
-       * worse the more somebody used the app, which is backwards.
-       *
-       * It goes under the ways of finding a sound rather than above them,
-       * because finding is still what the page is for and the search is what
-       * somebody reaches for first. Everything below is now setup, in one run.
-       */
-      el('div', { class: 'layer-head' }, [
-        heading('On layer', 'timeline', { marginTop: '12px' }),
-        balanceButton,
-      ]),
+    ]),
+    /*
+     * The whole grouped palette behind one fold.
+     *
+     * Twelve groups were collapsed to one line each, which was still twelve
+     * lines and three hundred pixels of headings for something most people
+     * never open: the search and the library shelf above are how a sound is
+     * actually found. Browsing is the fallback, so it costs one line until
+     * it is wanted, and inside it the groups still open one at a time.
+     *
+     * A section of its own rather than the tail of the one above, because it
+     * is the other way of answering the same question and a fold that sits
+     * flush under a list looks like part of it.
+     */
+    section([foldable('kinds', 'Browse', 'library', browseBody, true)]),
+    /*
+     * Where the sound lands, above the things that get a sound into the app.
+     *
+     * This used to be the last thing on the page, under the pack loader, the
+     * recording importer and the extractor. Those are setup: most people run
+     * them once, and plenty never run them at all. The layer is the opposite
+     * — it is the answer to "where does the next thing I click go", which
+     * matters on every single placement.
+     *
+     * On an empty session that put it at 510px rather than 333px, which is
+     * on screen either way. What makes it worth moving is that the lists it
+     * sat under start empty and grow. Six hundred pixels of loaded packs —
+     * not many — used to carry it from 510 to 1110 and off the bottom of a
+     * 900px window; from here it does not move at all. The order was getting
+     * worse the more somebody used the app, which is backwards.
+     *
+     * It goes under the ways of finding a sound rather than above them,
+     * because finding is still what the page is for and the search is what
+     * somebody reaches for first. Everything below is now setup, in one run.
+     */
+    section([
+      el('div', { class: 'layer-head' }, [heading('On layer', 'timeline'), balanceButton]),
       layerRow,
       layerJobLine,
-      packSections,
-      el('div', { style: { marginTop: '10px' } }, [loadPacks, packInput]),
+    ]),
+  ]);
+
+  /*
+   * What somebody brought, on a panel of its own.
+   *
+   * These four used to be the bottom half of the Sounds page, and being at the
+   * bottom was not the problem: they are setup, run once or never, and the page
+   * was right to put finding a sound above them. The problem was that they were
+   * there at all. Ten sections in one scrolling column read as one undifferentiated
+   * list, and the two halves are not the same job — above is choosing a sound to
+   * place, here is getting material into the app in the first place.
+   *
+   * Split rather than merely spaced, because the panels were already draggable
+   * and dockable: this costs one entry in the rail and gives both halves room,
+   * where spacing alone would have left one long scroll with better gaps in it.
+   */
+  const yoursPage = el('div', { class: 'panel-page' }, [
+    section([heading('Sound packs', 'library'), packSections, loadPacks, packInput]),
+    section([
+      heading('Recordings', 'record'),
       sampleSections,
       // One row of three. The help dot used to sit under a full-width button
       // on a line of its own, which reads as a stray character.
@@ -1862,15 +1897,17 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         credits,
         helpButton('recordings', 'your own recordings'),
       ]),
-      heardBody,
     ]),
+    // Already a `.panel-section` where it is built, because it is one wherever
+    // it is put and building it as a bare div and wrapping it here would mean
+    // two people had to agree.
+    heardBody,
   ]);
 
   // Not folded: it has a tab of its own now, and a fold inside a tab is one
   // click to reach the thing the tab was already for.
   const selectedPage = el('div', { class: 'panel-page' }, [
-    heading('Selected sound', 'sound'),
-    cueBody,
+    section([heading('Selected sound', 'sound'), cueBody]),
   ]);
 
   /*
@@ -1894,6 +1931,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
    */
   const root = el('aside', { class: 'inspector inspector--work' }, [
     soundsPage,
+    yoursPage,
     selectedPage,
     exportCard,
     sessionCard,
@@ -2043,6 +2081,7 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
   return {
     el: root,
     soundsPage,
+    yoursPage,
     selectedPage,
     exportCard,
     sessionCard,

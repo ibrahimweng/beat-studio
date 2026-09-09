@@ -449,7 +449,15 @@ export class SeparateSession {
       this.#store.set({ status: `${stem.name} could not be read back` });
       return;
     }
-    this.#store.set({ screen: 'design', panelTab: 'sounds' });
+    /*
+     * Yours, not Sounds, because that is where the answers appear.
+     *
+     * Rebuilding writes its rows into the same list that "Take sounds out of a
+     * recording" fills, and that list moved to its own panel when the Sounds
+     * page was split in two. Sending somebody back to the wrong panel would
+     * leave the work done and invisible.
+     */
+    this.#store.set({ screen: 'design', panelTab: 'yours' });
     await this.#design.extractFromBuffer(buffer, stem.name);
   }
 

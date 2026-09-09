@@ -181,7 +181,9 @@ async function namesShown(
  */
 async function recordingsShown(page: import('@playwright/test').Page): Promise<number | null> {
   await page.locator('.rail__screen[data-screen="design"]').click();
-  await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+  // Yours rather than Sounds: what somebody brought is its own panel now, so
+  // that choosing a sound is not ten sections of scrolling.
+  await page.locator('.dock__tab[data-panel="yours"]').first().click();
   const group = page.locator('.pick-group__title', { hasText: 'Recordings' });
   if (!(await group.count())) return null;
   const said = await group.first().innerText();
@@ -335,7 +337,7 @@ test.describe('naming a part', () => {
      * from stays on the end.
      */
     await page.locator('.rail__screen[data-screen="design"]').click();
-    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+    await page.locator('.dock__tab[data-panel="yours"]').first().click();
     await page.locator('.pick-find--held').fill('Second violins');
     await expect(page.locator('.pick-group__title', { hasText: 'Recordings' })).toContainText(
       '1 of 4',
@@ -415,7 +417,7 @@ test.describe('taking apart a stretch of it', () => {
      * counts all of them, and the count in the group's title is the answer.
      */
     await page.locator('.rail__screen[data-screen="design"]').click();
-    await page.locator('.dock__tab', { hasText: 'Sounds' }).first().click();
+    await page.locator('.dock__tab[data-panel="yours"]').first().click();
 
     const recordings = page.locator('.pick-group__title', { hasText: 'Recordings' });
     await page.locator('.pick-find--held').fill('0:02–0:06');

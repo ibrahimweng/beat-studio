@@ -7,7 +7,7 @@ import type { SeparationNotes } from './audio/separate/types.ts';
 import type { MotionSample, Peak } from './video/analyse.ts';
 import type { Moment } from './video/moments.ts';
 
-export type PanelTab = 'moments' | 'sounds' | 'selected';
+export type PanelTab = 'moments' | 'sounds' | 'yours' | 'selected';
 
 /**
  * Which screen the app is on.

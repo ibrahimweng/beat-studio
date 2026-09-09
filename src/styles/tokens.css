@@ -29,6 +29,19 @@
   --panel-2: color-mix(in oklab, var(--tc-fg) 10%, transparent);
   --line: color-mix(in oklab, var(--tc-border) 12%, transparent);
   --line-soft: color-mix(in oklab, var(--tc-border) 8%, transparent);
+  /*
+   * A divider meant to be seen across a black gap, which is this app's and not
+   * Toolcraft's.
+   *
+   * The two above are edges on a surface: a card border sits against --panel
+   * and reads as the seam between the card and the ground, which is all 12%
+   * needs to do. The ground here is pure black, and a screenshot puts --line on
+   * it at rgb(6,6,7) — darker than the fill of a chip sitting beside it, which
+   * measures rgb(13,13,13) with a rgb(17,17,18) border. That is not a quiet
+   * line, it is no line. 42% measures rgb(20,20,23): above the chip it has to
+   * be told apart from, and still the quietest thing on the panel.
+   */
+  --line-strong: color-mix(in oklab, var(--tc-border) 42%, transparent);
 
   /* Text */
   --txt: var(--tc-fg);
