@@ -1581,6 +1581,32 @@
   white-space: nowrap;
 }
 
+/*
+ * The help dot, kept with the button it follows.
+ *
+ * Wrapping is decided on the items' own widths and the growing happens after,
+ * so three buttons that fit a line grow to fill it and the dot — the only item
+ * that cannot grow — is what gets pushed off. That left it alone on a line of
+ * its own, which is the stray character the three-across layout existed to fix,
+ * reappearing one width up.
+ *
+ * Measured across the column's range, the fault was a band rather than
+ * everything above a threshold: at 340, 380 and 420 the row is 62px and the dot
+ * sits beside "Save credits" on the second line; at 460 it is 49px, three
+ * buttons on the first line and the dot alone on the second; at 520 and beyond
+ * it is 28px and all four share one line. Paired, the two wrap together or not
+ * at all, so there is no width at which the dot is on its own.
+ */
+.pick-actions__pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Grows and shrinks like the buttons either side of it, since it is standing
+     in for one of them. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .found__audio {
   display: none;
 }

@@ -1894,8 +1894,12 @@ export function createSoundDesignPanel(session: SoundDesignSession): SoundDesign
         sampleInput,
         loadFolder,
         folderInput,
-        credits,
-        helpButton('recordings', 'your own recordings'),
+        // The dot travels with the last button rather than after it, so the
+        // two wrap together or not at all. See `.pick-actions__pair`.
+        el('div', { class: 'pick-actions__pair' }, [
+          credits,
+          helpButton('recordings', 'your own recordings'),
+        ]),
       ]),
     ]),
     // Already a `.panel-section` where it is built, because it is one wherever
