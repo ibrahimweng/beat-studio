@@ -252,6 +252,25 @@ files are set to be cached for a year. The `index.html` file is set never to be
 cached, otherwise a visitor would keep loading an old version after you deploy a
 new one.
 
+Two of the site's paths are not files. `api/freesound.ts` and `api/narrate.ts`
+are serverless functions, and `vercel.json` names them rather than leaving them
+to be discovered, along with the two modules they import from outside their own
+directory. Vercel requires at least one property on a named function — an empty
+one fails the build with "Function must contain at least one property" — and
+`includeFiles` is the one that is true here: everything else on offer is either
+inert for a function whose runtime is declared in its own file, or a version pin
+that would freeze the builder. Point it at `src/**` and the function carries a
+hundred and thirty files it has no use for, the whole interface and every test
+among them; the two proxies are what it actually needs.
+
+If a deployed `/api/...` answers 404 rather than JSON, no key is missing and
+none will help: the functions did not deploy at all. The generated routing ends
+with a rule that 404s any `/api` path with no function behind it, so an absent
+function and an absent key look nothing alike from the outside — a missing key
+answers with a sentence, a missing function answers with the platform's own
+404 page. `npx vercel build --prod` reproduces the whole build locally and
+`.vercel/output/functions/` is where the answer is.
+
 ## Sound design
 
 This is the part for sound design over motion graphics, and it is the screen

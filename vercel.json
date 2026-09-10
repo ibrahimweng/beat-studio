@@ -4,6 +4,11 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "src/audio/*-proxy.ts"
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
