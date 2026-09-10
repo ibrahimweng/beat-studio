@@ -202,6 +202,54 @@ test.describe('the panel columns', () => {
     if (seen.chip) expect(lit(seen.rule)).toBeGreaterThan(lit(seen.chip));
   });
 
+  /*
+   * The help dot is never the only thing on a line.
+   *
+   * The three import buttons grow to fill whatever line they land on, and the
+   * dot is the one item that cannot grow — so at a column width where all three
+   * happen to fit, they took the line and pushed the dot onto one of its own.
+   * That is the stray character the three-across row was built to get rid of,
+   * back again one width up.
+   *
+   * It only happened in a band, which is why it survived being looked at: at
+   * 340, 380 and 420 the row is two lines with the dot beside "Save credits",
+   * and at 520 and wider all four share one line. Only around 460 was the dot
+   * alone, on a 49px row between the 62px and 28px ones. So this sweeps the
+   * width rather than checking a value, and the assertion is the property that
+   * has to hold everywhere: whatever else it does, the dot is beside a button.
+   */
+  test('the help dot never ends up on a line of its own', async ({ page }) => {
+    await page.locator('.dock__tab[data-panel="yours"]').click();
+    const row = page.locator('.pick-actions--three');
+    await expect(row).toBeVisible();
+
+    for (const width of [300, 340, 380, 420, 440, 460, 480, 520, 600, 760]) {
+      await page.evaluate((w) => {
+        (document.querySelector('.dock--right') as HTMLElement).style.setProperty(
+          '--panel-width',
+          `${w}px`,
+        );
+      }, width);
+
+      const beside = await row.evaluate((node) => {
+        const middle = (one: Element): number => {
+          const box = one.getBoundingClientRect();
+          return box.top + box.height / 2;
+        };
+        const dot = node.querySelector('.help-dot');
+        if (!dot) return null;
+        // Sharing a line means sharing a centre, since the dot is shorter than
+        // the buttons and sits centred against them.
+        return [...node.querySelectorAll('.chip')]
+          .filter((one) => Math.abs(middle(one) - middle(dot)) < 10)
+          .map((one) => (one.textContent ?? '').trim());
+      });
+
+      expect(beside, `at a ${width}px column the dot is beside a button`).not.toEqual([]);
+      expect(beside, `at a ${width}px column the dot is on screen`).not.toBeNull();
+    }
+  });
+
   test('everything starts in one column, on the right', async ({ page }) => {
     await expect(page.locator('.dock--right .dock__tab')).toHaveCount(7);
     await expect(page.locator('.dock--left .dock__tab')).toHaveCount(0);
