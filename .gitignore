@@ -8,6 +8,21 @@ dist/
 .vercel
 tools/.wk/
 
+# Keys, which belong in a deployment's environment and never in here.
+#
+# Nothing in this repository reads a .env file — the README passes a key inline
+# for a local run, and on Vercel it is a setting — so this covers a file that
+# should not exist rather than one that does. It is here because `vercel env
+# pull` writes one without being asked, and because the whole point of
+# `api/freesound.ts` and `api/narrate.ts` is that the key never leaves the
+# server: one `git add -A` would undo that permanently and publicly.
+#
+# `*.local` above already catches `.env.local`; this catches the rest. An
+# example file is let through, since it carries names and not values.
+.env
+.env.*
+!.env.example
+
 # The assembled design canvas, which bundles the whole editor into one 2.5 MB
 # file. Generated from the .dc.html sources beside it, so it is not kept.
 design/**/beat-studio-*.html
